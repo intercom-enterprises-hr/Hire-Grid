@@ -115,11 +115,10 @@
   <main id="authorizedArea" style="display:none;">
     <div class="section-title">Add a teammate</div>
     <div class="card">
-      <p class="hint">Creates their login and profile in one step — no Supabase dashboard needed. Give them the email and temporary password so they can sign in (they can't reset it themselves yet, so share it directly). Department/coverage assignment for TA Leaders and BU Heads happens afterward, in Admin Settings.</p>
+      <p class="hint">Creates their login and profile in one step — no Supabase dashboard needed. They'll get an invite email to set their own password, so there's nothing to share with them yourself. Department/coverage assignment for TA Leaders and BU Heads happens afterward, in Admin Settings.</p>
       <div class="form-grid">
         <div class="form-field"><label>Full name *</label><input type="text" id="newName"></div>
         <div class="form-field"><label>Email *</label><input type="text" id="newEmail"></div>
-        <div class="form-field"><label>Temporary password *</label><input type="text" id="newPassword" placeholder="At least 8 characters"></div>
         <div class="form-field"><label>Role *</label>
           <select id="newRole">
             <option value="">— Choose a role —</option>
@@ -133,9 +132,19 @@
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" id="createTeammateBtn">Create login</button>
+        <button class="btn btn-primary" id="createTeammateBtn">Create login &amp; send invite</button>
         <span class="status-msg" id="createStatus"></span>
       </div>
+    </div>
+
+    <div class="section-title">Set-up needed for invites to work</div>
+    <div class="card">
+      <p class="hint" style="margin:0;">
+        Invite emails are sent by Supabase automatically, but the link inside them needs to know where your app is hosted.
+        In the Supabase dashboard: Edge Functions → Secrets, add <code>SITE_URL</code> = the address where these HTML pages live
+        (e.g. <code>https://intercom-enterprises-hr.github.io/Hire-Grid</code>, no trailing slash). Then in
+        Authentication → URL Configuration → Redirect URLs, add <code>SITE_URL/set-password.html</code>. This is a one-time setup step.
+      </p>
     </div>
 
     <div class="section-title">Edit teammate</div>
@@ -144,7 +153,7 @@
       <div class="form-grid">
         <div class="form-field"><label>Full name</label><input type="text" id="editName"></div>
         <div class="form-field"><label>Email</label><input type="text" id="editEmail"></div>
-        <div class="form-field"><label>New password</label><input type="text" id="editPassword" placeholder="Leave blank to keep current"></div>
+        <div class="form-field"><label>Reset password</label><input type="text" id="editPassword" placeholder="Leave blank — they set their own"></div>
         <div class="form-field"><label>Role</label>
           <select id="editRole">
             <option value="head_of_hr">Head of HR</option>
@@ -166,7 +175,7 @@
     <div class="section-title">Current team</div>
     <div class="team-card">
       <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th><th></th></tr></thead>
         <tbody id="teamTableBody"></tbody>
       </table>
     </div>
@@ -247,21 +256,46 @@ async function loadTeam(){
       <td>${p.email}</td>
       <td><span class="role-pill">${ROLE_LABELS[p.role]||p.role}</span></td>
       <td><button class="btn btn-secondary btn-small" data-edit-id="${p.id}">Edit</button></td>
+      <td>${p.id === currentUser.id ? '' : `<button class="btn btn-secondary btn-small" data-delete-id="${p.id}" data-delete-name="${p.full_name}">Delete</button>`}</td>
     </tr>`).join('');
   tbody.querySelectorAll('[data-edit-id]').forEach(btn=>{
     btn.addEventListener('click', ()=> openEdit(btn.dataset.editId));
   });
+  tbody.querySelectorAll('[data-delete-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteTeammate(btn.dataset.deleteId, btn.dataset.deleteName));
+  });
+}
+
+async function deleteTeammate(userId, name){
+  if(!window.confirm(`Delete ${name}'s login? This can't be undone — they'll lose access immediately.`)) return;
+  try{
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-teammate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SESSION.access_token}`
+      },
+      body: JSON.stringify({ user_id: userId })
+    });
+    const body = await res.json();
+    if(!res.ok || body.error){
+      alert('Could not delete: ' + (body.error || res.statusText));
+      return;
+    }
+    await loadTeam();
+  }catch(err){
+    alert('Could not reach the server: ' + err.message);
+  }
 }
 
 document.getElementById('createTeammateBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('createStatus');
   const full_name = document.getElementById('newName').value.trim();
   const email = document.getElementById('newEmail').value.trim();
-  const temporary_password = document.getElementById('newPassword').value;
   const role = document.getElementById('newRole').value;
 
-  if(!full_name || !email || !temporary_password || !role){
-    statusEl.textContent = 'Fill in name, email, password and role.'; statusEl.className = 'status-msg err'; return;
+  if(!full_name || !email || !role){
+    statusEl.textContent = 'Fill in name, email and role.'; statusEl.className = 'status-msg err'; return;
   }
   statusEl.textContent = 'Creating…'; statusEl.className = 'status-msg';
 
@@ -272,7 +306,7 @@ document.getElementById('createTeammateBtn').addEventListener('click', async ()=
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${SESSION.access_token}`
       },
-      body: JSON.stringify({ full_name, email, temporary_password, role })
+      body: JSON.stringify({ full_name, email, role })
     });
     const body = await res.json();
     if(!res.ok || body.error){
@@ -280,11 +314,10 @@ document.getElementById('createTeammateBtn').addEventListener('click', async ()=
       statusEl.className = 'status-msg err';
       return;
     }
-    statusEl.textContent = 'Created! Share the email and temporary password with them.';
+    statusEl.textContent = 'Created! An invite email was sent to set their password.';
     statusEl.className = 'status-msg ok';
     document.getElementById('newName').value = '';
     document.getElementById('newEmail').value = '';
-    document.getElementById('newPassword').value = '';
     document.getElementById('newRole').value = '';
     await loadTeam();
   }catch(err){
