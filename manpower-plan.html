@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Manpower Plan</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+  .kpi-card, .chart-card, .module-card, .risk-card, .card{animation:fadeInUp .45s ease both;}
+  .kpi-grid .kpi-card:nth-child(1), .module-grid .module-card:nth-child(1){animation-delay:.02s;}
+  .kpi-grid .kpi-card:nth-child(2), .module-grid .module-card:nth-child(2){animation-delay:.08s;}
+  .kpi-grid .kpi-card:nth-child(3), .module-grid .module-card:nth-child(3){animation-delay:.14s;}
+  .kpi-grid .kpi-card:nth-child(4), .module-grid .module-card:nth-child(4){animation-delay:.2s;}
+  .module-grid .module-card:nth-child(5){animation-delay:.26s;}
+  .module-grid .module-card:nth-child(6){animation-delay:.32s;}
+  .kpi-card, .chart-card, .module-card:not(.disabled){transition:box-shadow .2s ease, transform .2s ease;}
+  .kpi-card:hover, .chart-card:hover{box-shadow:0 6px 16px rgba(0,0,0,0.06);transform:translateY(-1px);}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  header h1 .hg-divider{color:var(--gold);font-weight:400;margin:0 2px;}
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who b{color:#fff;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-primary:hover{opacity:0.92;}
+  .btn-secondary{background:#eee;color:var(--charcoal);}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-small{padding:6px 11px;font-size:12px;}
+  .btn:disabled{background:#e4e4e7;color:#a8a8ac;cursor:not-allowed;}
+
+  main{max-width:1280px;margin:0 auto;padding:24px;}
+
+  #loginScreen{
+    max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:32px 30px;
+  }
+  #loginScreen h2{margin:0 0 6px;font-size:19px;}
+  #loginScreen p{margin:0 0 20px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
+  #loginScreen .btn{width:100%;padding:11px;font-size:14px;}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;}
+  .toolbar input[type=text], .toolbar select{
+    font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:#fff;
+  }
+  .toolbar .spacer{flex:1;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.02em;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  td{padding:10px 12px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:#fafafa;}
+  .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;}
+  .status-Requested{background:#eef2ff;color:#4338ca;}
+  .status-Approved{background:#ecfeff;color:#0e7490;}
+  .status-Open{background:#fff7ed;color:#c2410c;}
+  .status-Interviewing{background:#fefce8;color:#a16207;}
+  .status-Offer{background:#f0fdf4;color:#15803d;}
+  .status-Closed{background:#f0fdf4;color:#166534;font-weight:700;}
+  .status-On.Hold{background:#f4f4f5;color:#52525b;}
+  .status-Rejected{background:#fef2f2;color:#b91c1c;}
+  .status-Cancelled{background:#fef2f2;color:#7f1d1d;}
+  .status-Sent.Back.for.Changes{background:#fdf2f8;color:#9d174d;font-weight:700;}
+  .approval-note-banner{grid-column:1/-1;background:#fdf2f8;border:1px solid #fbcfe8;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#9d174d;margin-bottom:4px;}
+  .empty-state{padding:50px;text-align:center;color:var(--text-mute);font-size:13.5px;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(38,38,42,0.55);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:88vh;overflow-y:auto;padding:26px 28px;}
+  .modal h2{margin:0 0 4px;font-size:17px;}
+  .modal p.sub{margin:0 0 18px;font-size:12.5px;color:var(--text-mute);}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  .form-grid .full{grid-column:1/-1;}
+  .form-field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--charcoal-soft);}
+  .form-field input, .form-field select, .form-field textarea{
+    width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;
+  }
+  .form-field input:disabled, .form-field select:disabled, .form-field textarea:disabled{background:#f4f4f5;color:#8b8b8f;}
+  .form-field textarea{resize:vertical;min-height:56px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;}
+  .section-label{grid-column:1/-1;font-size:11.5px;font-weight:700;text-transform:uppercase;color:var(--text-mute);letter-spacing:0.03em;margin-top:6px;border-top:1px solid var(--border);padding-top:14px;}
+  .section-label:first-child{border-top:none;margin-top:0;padding-top:0;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--charcoal);color:#fff;padding:11px 20px;border-radius:8px;font-size:13px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.2);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s ease;
+  }
+  .toast.show{opacity:1;}
+  .status-msg{font-size:12.5px;margin-top:8px;}
+  .status-msg.ok{color:var(--blue);}
+  .status-msg.err{color:var(--red);}
+  #appScreen{display:none;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+  <h2>Manpower Plan</h2>
+  <p>Sign in with your Intercom Enterprises account.</p>
+  <label for="loginEmail">Email</label>
+  <input type="text" id="loginEmail" autocomplete="username">
+  <label for="loginPassword">Password</label>
+  <input type="password" id="loginPassword" autocomplete="current-password">
+  <button class="btn btn-primary" id="loginBtn">Sign in</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid <span class="hg-divider">·</span> Manpower Plan<span>Intercom Enterprises — Talent Acquisition</span></h1>
+    </div>
+    <div class="header-actions">
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
+      <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
+      <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <input type="text" id="searchBox" placeholder="Search position, code, employee…" style="min-width:220px;">
+      <select id="filterDivision"><option value="">All divisions</option></select>
+      <select id="filterDepartment"><option value="">All departments</option></select>
+      <select id="filterStatus">
+        <option value="">All statuses</option>
+        <option>Requested</option><option>Approved</option><option>Open</option>
+        <option>Interviewing</option><option>Offer</option><option>Closed</option>
+        <option>On Hold</option><option>Rejected</option><option>Cancelled</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" id="uploadOpenBtn">Upload Excel</button>
+      <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Position Code</th><th>Position</th><th>Division</th><th>Department</th>
+            <th>Status</th><th>Requested By</th><th>TA Owner</th><th>Opening Date</th><th>Expected Joining</th><th>Employee</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">No positions match your filters yet.</div>
+    </div>
+  </main>
+</div>
+
+<!-- Add / Edit modal -->
+<div class="modal-overlay" id="positionModal">
+  <div class="modal">
+    <h2 id="modalTitle">Add position</h2>
+    <p class="sub" id="modalSub">Fields you can't edit are greyed out based on your role.</p>
+    <div class="form-grid" id="formGrid"></div>
+    <div class="status-msg" id="formStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelFormBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveFormBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk upload modal -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal" style="max-width:480px;">
+    <h2>Upload Excel</h2>
+    <p class="sub">Column headers should match the Manpower Plan fields (e.g. "Position Code", "Position", "Division", "Job Opening Date"…). Unrecognized columns are ignored. Every row is added as a new position.</p>
+    <input type="file" id="uploadFileInput" accept=".xlsx,.xls">
+    <div class="status-msg" id="uploadStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelUploadBtn">Cancel</button>
+      <button class="btn btn-primary" id="doUploadBtn">Upload</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ====================== CONFIG ====================== */
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ====================== FIELD DEFINITIONS ======================
+   Drives both the add/edit form and the bulk-upload column matching.
+   editableBy: which roles can change this field on an EXISTING row.
+   creatableBy: which roles can set this field on a BRAND-NEW row —
+   falls back to editableBy when omitted. BU Heads only get
+   the business-case fields on create; everything else (cost center,
+   TA Owner, status, dates) stays with Head of HR / TA Leaders. */
+const STATUS_OPTIONS = ['Requested','Sent Back for Changes','Approved','Open','Interviewing','Offer','Closed','On Hold','Rejected','Cancelled'];
+const HM_CREATABLE = ['head_of_hr','ta_leader','bu_head'];
+const FIELDS = [
+  {key:'position_code', label:'Position Code', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'position_title', label:'Position', section:'Position', type:'text', required:true, editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
+  {key:'branch', label:'Branch', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'division', label:'Division', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'department', label:'Department', section:'Position', type:'department_select', required:true, editableBy:['head_of_hr','ta_leader'], creatableBy:HM_CREATABLE},
+  {key:'sub_department', label:'Sub Department', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'cost_center_name', label:'Cost Center Name', section:'Cost & project', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'cost_center_number', label:'Cost Center Number', section:'Cost & project', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'project_name', label:'Project Name', section:'Cost & project', type:'text', editableBy:['head_of_hr','ta_leader']},
+  {key:'business_need', label:'Business Need', section:'Why this position', type:'text', editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
+  {key:'detailed_business_need', label:'Detailed Business Need', section:'Why this position', type:'textarea', full:true, editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
+  {key:'job_opening_date', label:'Job Opening Date', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader']},
+  {key:'expected_candidate_joining_date', label:'Expected Candidate Joining Date', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
+  {key:'job_issuance_date', label:'Job Issuance Date (offer issued)', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader','recruiter']},
+  {key:'hiring_date', label:'Hiring Date', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader','recruiter']},
+  {key:'ta_owner', label:'TA Owner', section:'Ownership & status', type:'ta_owner_select', editableBy:['head_of_hr','ta_leader']},
+  {key:'position_status', label:'Position Status', section:'Ownership & status', type:'status_select', required:true, editableBy:['head_of_hr','ta_leader','recruiter'], creatableBy:['head_of_hr','ta_leader']},
+  {key:'approval_note', label:'Approval Note (visible to requester — required when sending back)', section:'Ownership & status', type:'textarea', full:true, editableBy:['head_of_hr','ta_leader']},
+  {key:'offer_outcome', label:'Offer Outcome', section:'Ownership & status', type:'select', options:['','Accepted','Declined'], editableBy:['head_of_hr','ta_leader','recruiter']},
+  {key:'employee_code', label:'Employee Code', section:'Once hired', type:'text', editableBy:['head_of_hr','ta_leader','recruiter']},
+  {key:'employee_name', label:'Employee Name', section:'Once hired', type:'text', editableBy:['head_of_hr','ta_leader','recruiter']},
+  {key:'employee_title', label:'Employee Title', section:'Once hired', type:'text', editableBy:['head_of_hr','ta_leader','recruiter']},
+  {key:'retention_status', label:'Still employed at 1 year?', section:'Once hired', type:'select', options:['','Not yet due','Yes','No'], editableBy:['head_of_hr','ta_leader','recruiter']},
+];
+
+/* ====================== STATE ====================== */
+let currentUser = null;   // { id, full_name, role }
+let ALL_PROFILES = [];    // for TA Owner dropdown + name lookups
+let ALL_DEPARTMENTS = []; // fixed department list + TA Leader coverage
+let ALL_ROWS = [];        // current manpower_plan rows
+let editingRowId = null;  // null = adding a new row
+
+/* ====================== AUTH ====================== */
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found for this account — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  currentUser = profile;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = currentUser.full_name;
+  document.getElementById('whoRole').textContent = roleLabel(currentUser.role);
+  if(currentUser.role === 'admin'){
+    document.getElementById('adminLink').style.display = '';
+    document.getElementById('teamLink').style.display = '';
+  }
+  document.getElementById('addOpenBtn').style.display = canCreate() ? '' : 'none';
+  document.getElementById('uploadOpenBtn').style.display = canBulkUpload() ? '' : 'none';
+  await loadProfiles();
+  await loadDepartments();
+  await loadMyBuDepartments();
+  await loadRows();
+}
+let MY_BU_DEPARTMENTS = []; // department names this BU Head can submit requests for
+async function loadMyBuDepartments(){
+  if(currentUser.role !== 'bu_head'){ MY_BU_DEPARTMENTS = []; return; }
+  const { data } = await sb.from('bu_head_departments').select('department_id').eq('bu_head_id', currentUser.id);
+  const ids = (data || []).map(r=>r.department_id);
+  MY_BU_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id)).map(d=>d.name);
+}
+function roleLabel(role){
+  return {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[role] || role;
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  currentUser = null;
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  showLogin();
+});
+
+/* ====================== DATA LOADING ====================== */
+async function loadProfiles(){
+  const { data, error } = await sb.from('profiles').select('*').order('full_name');
+  if(!error) ALL_PROFILES = data || [];
+}
+async function loadDepartments(){
+  const { data, error } = await sb.from('departments').select('*').order('name');
+  if(!error) ALL_DEPARTMENTS = data || [];
+}
+async function loadRows(){
+  const { data, error } = await sb.from('manpower_plan').select('*').order('created_at', { ascending:false });
+  if(error){ showToast('Could not load positions: ' + error.message); return; }
+  ALL_ROWS = data || [];
+  populateFilterOptions();
+  renderTable();
+}
+function populateFilterOptions(){
+  const divisions = uniqueSorted(ALL_ROWS.map(r=>r.division));
+  const departments = uniqueSorted(ALL_ROWS.map(r=>r.department));
+  fillSelect('filterDivision', divisions);
+  fillSelect('filterDepartment', departments);
+}
+function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
+function fillSelect(id, values){
+  const el = document.getElementById(id);
+  const current = el.value;
+  const placeholder = el.options[0];
+  el.innerHTML = '';
+  el.appendChild(placeholder);
+  values.forEach(v=>{ const o = document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
+  if(values.includes(current)) el.value = current;
+}
+
+/* ====================== TABLE ====================== */
+function profileName(id){
+  const p = ALL_PROFILES.find(p=>p.id===id);
+  return p ? p.full_name : '—';
+}
+function canEditRow(row){
+  if(currentUser.role === 'head_of_hr' || currentUser.role === 'ta_leader') return true;
+  if(currentUser.role === 'recruiter') return row.ta_owner === currentUser.id;
+  if(currentUser.role === 'bu_head') return row.requested_by === currentUser.id && row.position_status === 'Sent Back for Changes';
+  return false;
+}
+function canCreate(){ return ['head_of_hr','ta_leader','bu_head'].includes(currentUser.role); }
+function canBulkUpload(){ return currentUser.role === 'head_of_hr' || currentUser.role === 'ta_leader'; }
+function renderTable(){
+  const search = document.getElementById('searchBox').value.trim().toLowerCase();
+  const fDiv = document.getElementById('filterDivision').value;
+  const fDept = document.getElementById('filterDepartment').value;
+  const fStatus = document.getElementById('filterStatus').value;
+
+  const rows = ALL_ROWS.filter(r=>{
+    if(fDiv && r.division !== fDiv) return false;
+    if(fDept && r.department !== fDept) return false;
+    if(fStatus && r.position_status !== fStatus) return false;
+    if(search){
+      const hay = [r.position_code, r.position_title, r.employee_name, r.employee_code].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
+
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const statusClass = 'status-' + r.position_status.replace(/\s+/g,'.');
+    tr.innerHTML =
+      '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
+      '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
+      '<td>'+escapeHtml(r.division||'—')+'</td>'+
+      '<td>'+escapeHtml(r.department||'—')+'</td>'+
+      '<td><span class="status-pill '+statusClass+'">'+escapeHtml(r.position_status)+'</span></td>'+
+      '<td>'+escapeHtml(profileName(r.requested_by))+'</td>'+
+      '<td>'+escapeHtml(profileName(r.ta_owner))+'</td>'+
+      '<td>'+escapeHtml(r.job_opening_date||'—')+'</td>'+
+      '<td>'+escapeHtml(r.expected_candidate_joining_date||'—')+'</td>'+
+      '<td>'+escapeHtml(r.employee_name||'—')+'</td>'+
+      '<td></td>';
+    const actionCell = tr.lastElementChild;
+    if(canEditRow(r)){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-small';
+      btn.textContent = 'Edit';
+      btn.addEventListener('click', ()=> openForm(r));
+      actionCell.appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  });
+}
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+['searchBox','filterDivision','filterDepartment','filterStatus'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTable);
+  document.getElementById(id).addEventListener('change', renderTable);
+});
+
+/* ====================== ADD / EDIT FORM ====================== */
+document.getElementById('addOpenBtn').addEventListener('click', ()=> openForm(null));
+document.getElementById('cancelFormBtn').addEventListener('click', ()=> closeForm());
+document.getElementById('positionModal').addEventListener('click', (e)=>{ if(e.target.id==='positionModal') closeForm(); });
+
+function openForm(row){
+  editingRowId = row ? row.id : null;
+  document.getElementById('modalTitle').textContent = row ? 'Edit position' : 'Add position';
+  document.getElementById('formStatus').textContent = '';
+  const grid = document.getElementById('formGrid');
+  grid.innerHTML = '';
+  let lastSection = null;
+
+  FIELDS.forEach(f=>{
+    if(f.section !== lastSection){
+      const label = document.createElement('div');
+      label.className = 'section-label';
+      label.textContent = f.section;
+      grid.appendChild(label);
+      lastSection = f.section;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'form-field' + (f.full ? ' full' : '');
+    const lbl = document.createElement('label');
+    lbl.textContent = f.label + (f.required ? ' *' : '');
+    wrap.appendChild(lbl);
+
+    const isNew = !row;
+    let editable = isNew
+      ? (f.creatableBy || f.editableBy).includes(currentUser.role)
+      : (canEditRow(row) && f.editableBy.includes(currentUser.role));
+    let input;
+    if(f.type === 'textarea'){
+      input = document.createElement('textarea');
+      input.value = row ? (row[f.key] || '') : '';
+    } else if(f.type === 'status_select'){
+      input = document.createElement('select');
+      STATUS_OPTIONS.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; input.appendChild(o); });
+      input.value = row ? row.position_status : 'Requested';
+    } else if(f.type === 'department_select'){
+      input = document.createElement('select');
+      if(currentUser.role === 'bu_head'){
+        // Only the department(s) this BU Head is assigned in Admin
+        // Settings — never a free choice, never someone else's dept.
+        if(!MY_BU_DEPARTMENTS.length){
+          const blank = document.createElement('option'); blank.value=''; blank.textContent='— No department assigned —'; input.appendChild(blank);
+        } else {
+          MY_BU_DEPARTMENTS.forEach(name=>{ const o=document.createElement('option'); o.value=name; o.textContent=name; input.appendChild(o); });
+          if(row && row.department && !MY_BU_DEPARTMENTS.includes(row.department)){
+            const o=document.createElement('option'); o.value=row.department; o.textContent=row.department; input.appendChild(o);
+          }
+        }
+        input.value = row ? (row.department || '') : (MY_BU_DEPARTMENTS[0] || '');
+        // Only worth letting them pick when they cover more than one —
+        // with just one (or zero) department there's nothing to choose.
+        editable = editable && MY_BU_DEPARTMENTS.length > 1;
+      } else {
+        const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose a department —'; input.appendChild(blank);
+        ALL_DEPARTMENTS.forEach(d=>{ const o=document.createElement('option'); o.value=d.name; o.textContent=d.name; input.appendChild(o); });
+        input.value = row ? (row.department || '') : '';
+      }
+    } else if(f.type === 'select'){
+      input = document.createElement('select');
+      f.options.forEach(opt=>{ const o=document.createElement('option'); o.value=opt; o.textContent = opt || '— Not set —'; input.appendChild(o); });
+      input.value = row ? (row[f.key] || '') : '';
+    } else if(f.type === 'ta_owner_select'){
+      input = document.createElement('select');
+      const blank = document.createElement('option'); blank.value=''; blank.textContent='— Unassigned —'; input.appendChild(blank);
+      ALL_PROFILES.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.full_name+' ('+roleLabel(p.role)+')'; input.appendChild(o); });
+      input.value = row ? (row.ta_owner || '') : '';
+    } else {
+      input = document.createElement('input');
+      input.type = f.type;
+      input.value = row ? (row[f.key] || '') : '';
+    }
+    input.id = 'field_' + f.key;
+    input.disabled = !editable;
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+  });
+
+  document.getElementById('positionModal').classList.add('show');
+}
+function closeForm(){
+  document.getElementById('positionModal').classList.remove('show');
+  editingRowId = null;
+}
+document.getElementById('saveFormBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('formStatus');
+  statusEl.className = 'status-msg'; statusEl.textContent = '';
+
+  const isNew = !editingRowId;
+  if(isNew && !canCreate()){
+    statusEl.textContent = "Only Head of HR, TA Leaders and BU Heads can add new positions.";
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  if(isNew && currentUser.role === 'bu_head' && !MY_BU_DEPARTMENTS.length){
+    statusEl.textContent = "You don't have a department assigned yet — ask an Admin to set that up in Admin Settings before submitting a request.";
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  const existingRow = isNew ? null : ALL_ROWS.find(r=>r.id===editingRowId);
+  const payload = {};
+
+  for(const f of FIELDS){
+    const el = document.getElementById('field_'+f.key);
+    if(!el || el.disabled) continue; // never send fields the user couldn't edit
+    let val = el.value;
+    if(f.key === 'ta_owner') val = val || null;
+    if((f.type==='date' || f.type==='select') && val === '') val = null;
+    payload[f.key] = val;
+  }
+  if(!payload.position_title && isNew){
+    statusEl.textContent = 'Position title is required.'; statusEl.className = 'status-msg err'; return;
+  }
+  if(payload.position_status === 'Sent Back for Changes' && !payload.approval_note){
+    statusEl.textContent = 'Add an approval note explaining what needs to change before sending this back.';
+    statusEl.className = 'status-msg err';
+    return;
+  }
+
+  let result;
+  if(isNew){
+    payload.created_by = currentUser.id;
+    payload.updated_by = currentUser.id;
+    payload.requested_by = currentUser.id;
+    if(currentUser.role === 'bu_head'){
+      payload.position_status = 'Requested';
+      // The department select is read directly (not via the skip-if-disabled
+      // loop above) since it's disabled whenever there's only one choice.
+      const deptEl = document.getElementById('field_department');
+      payload.department = deptEl ? deptEl.value : (MY_BU_DEPARTMENTS[0] || null);
+    }
+    result = await sb.from('manpower_plan').insert(payload);
+  } else {
+    payload.updated_by = currentUser.id;
+    // A BU Head resubmitting after "Sent Back for Changes" moves it back to Requested.
+    if(currentUser.role === 'bu_head') payload.position_status = 'Requested';
+    result = await sb.from('manpower_plan').update(payload).eq('id', editingRowId);
+  }
+  if(result.error){
+    statusEl.textContent = 'Could not save: ' + result.error.message;
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  closeForm();
+  showToast(isNew ? 'Position added.' : 'Position updated.');
+  await loadRows();
+});
+
+/* ====================== BULK UPLOAD ====================== */
+const UPLOAD_HEADER_MAP = {
+  'branch':'branch', 'position code':'position_code', 'position':'position_title',
+  'division':'division', 'department':'department', 'sub department':'sub_department',
+  'cost center name':'cost_center_name', 'cost center number':'cost_center_number',
+  'project name':'project_name', 'business need':'business_need',
+  'detailed business need':'detailed_business_need', 'job opening date':'job_opening_date',
+  'expected candidate joining date':'expected_candidate_joining_date',
+  'position status':'position_status', 'employee code':'employee_code',
+  'employee name':'employee_name', 'employee title':'employee_title',
+  'job issuance date':'job_issuance_date', 'hiring date':'hiring_date'
+};
+document.getElementById('uploadOpenBtn').addEventListener('click', ()=>{
+  document.getElementById('uploadModal').classList.add('show');
+  document.getElementById('uploadStatus').textContent = '';
+  document.getElementById('uploadFileInput').value = '';
+});
+document.getElementById('cancelUploadBtn').addEventListener('click', ()=> document.getElementById('uploadModal').classList.remove('show'));
+document.getElementById('uploadModal').addEventListener('click', (e)=>{ if(e.target.id==='uploadModal') document.getElementById('uploadModal').classList.remove('show'); });
+
+document.getElementById('doUploadBtn').addEventListener('click', async ()=>{
+  const fileInput = document.getElementById('uploadFileInput');
+  const statusEl = document.getElementById('uploadStatus');
+  if(!canBulkUpload()){ statusEl.textContent = 'Only Head of HR and TA Leaders can bulk-upload.'; statusEl.className='status-msg err'; return; }
+  if(!fileInput.files.length){ statusEl.textContent = 'Choose a file first.'; statusEl.className='status-msg err'; return; }
+  statusEl.textContent = 'Reading file…'; statusEl.className = 'status-msg';
+
+  const file = fileInput.files[0];
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type:'array', cellDates:true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(sheet, { defval:'' });
+
+  if(!json.length){ statusEl.textContent = 'No rows found in that sheet.'; statusEl.className='status-msg err'; return; }
+
+  const rows = json.map(rawRow=>{
+    const row = {};
+    Object.keys(rawRow).forEach(header=>{
+      const key = UPLOAD_HEADER_MAP[header.trim().toLowerCase()];
+      if(!key) return;
+      let val = rawRow[header];
+      if(val instanceof Date) val = val.toISOString().slice(0,10);
+      if(val === '') val = null;
+      row[key] = val;
+    });
+    if(!row.position_status) row.position_status = 'Requested';
+    row.created_by = currentUser.id;
+    row.updated_by = currentUser.id;
+    return row;
+  }).filter(r=>r.position_title);
+
+  if(!rows.length){ statusEl.textContent = 'No usable rows — check that a "Position" column exists.'; statusEl.className='status-msg err'; return; }
+
+  // Departments are now a fixed list (Admin Settings → Departments). Match
+  // sheet values against it case-insensitively and normalize to the exact
+  // stored name, so free-text spelling from the spreadsheet can't create
+  // stray department values that bypass the dropdown elsewhere in the app.
+  const deptByLower = {};
+  ALL_DEPARTMENTS.forEach(d=> deptByLower[d.name.toLowerCase()] = d.name);
+  const badDeptRows = [];
+  rows.forEach((r, i)=>{
+    if(r.department){
+      const match = deptByLower[String(r.department).trim().toLowerCase()];
+      if(match){ r.department = match; }
+      else { badDeptRows.push({ row: i+2, value: r.department }); }
+    }
+  });
+  if(badDeptRows.length){
+    const list = badDeptRows.slice(0,5).map(b=>`row ${b.row}: "${b.value}"`).join(', ');
+    const more = badDeptRows.length > 5 ? ` (+${badDeptRows.length-5} more)` : '';
+    statusEl.textContent = `Unrecognized department(s) — ${list}${more}. Add them in Admin Settings → Departments first, or fix the spelling, then re-upload.`;
+    statusEl.className = 'status-msg err';
+    return;
+  }
+
+  statusEl.textContent = 'Uploading ' + rows.length + ' rows…';
+  const { error } = await sb.from('manpower_plan').insert(rows);
+  if(error){ statusEl.textContent = 'Upload failed: ' + error.message; statusEl.className='status-msg err'; return; }
+
+  statusEl.textContent = 'Uploaded ' + rows.length + ' positions.'; statusEl.className='status-msg ok';
+  await loadRows();
+  setTimeout(()=> document.getElementById('uploadModal').classList.remove('show'), 1200);
+});
+
+/* ====================== TOAST ====================== */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2600);
+}
+
+init();
+</script>
+</body>
+</html>

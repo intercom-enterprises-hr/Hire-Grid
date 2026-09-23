@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Celebrate Achievements</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  @keyframes floaty{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  header h1 .hg-divider{color:var(--gold);font-weight:400;margin:0 2px;}
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-primary:hover{opacity:0.92;}
+  select.btn-ghost{cursor:pointer;}
+  select.btn-ghost option{color:#1a1a1a;}
+
+  main{max-width:840px;margin:0 auto;padding:24px;position:relative;}
+  #confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:5;}
+
+  .hero{
+    background:linear-gradient(135deg, var(--blue), #044a8a);color:#fff;border-radius:var(--radius);
+    padding:26px 28px;margin-bottom:20px;position:relative;overflow:hidden;animation:fadeInUp .5s ease both;
+  }
+  .hero::before{content:'🎉';position:absolute;right:20px;top:14px;font-size:52px;opacity:.25;animation:floaty 3s ease-in-out infinite;}
+  .hero h2{margin:0 0 6px;font-size:20px;}
+  .hero p{margin:0;font-size:13.5px;color:rgba(255,255,255,0.9);}
+
+  .top-performer{
+    background:linear-gradient(135deg, var(--gold), #e69a00);color:#fff;border-radius:var(--radius);
+    padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;gap:16px;animation:fadeInUp .5s ease .1s both;
+  }
+  .top-performer .medal{font-size:34px;animation:floaty 2.4s ease-in-out infinite;}
+  .top-performer h3{margin:0 0 4px;font-size:15.5px;}
+  .top-performer p{margin:0;font-size:12.5px;opacity:.95;}
+
+  .filter-row{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+  .period-btn{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;color:var(--text-mute);cursor:pointer;}
+  .period-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+
+  .shoutout-form{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:20px;}
+  .shoutout-form textarea{width:100%;font-family:inherit;font-size:13.5px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;resize:vertical;min-height:56px;margin-bottom:10px;}
+  .shoutout-form .row{display:flex;justify-content:flex-end;gap:10px;align-items:center;}
+  .status-msg{font-size:12.5px;}
+  .status-msg.ok{color:var(--blue);}
+  .status-msg.err{color:var(--red);}
+
+  .feed{display:flex;flex-direction:column;gap:12px;}
+  .feed-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;
+    display:flex;gap:14px;align-items:flex-start;animation:fadeInUp .4s ease both;
+  }
+  .feed-card .icon{font-size:24px;line-height:1;}
+  .feed-card .body{flex:1;}
+  .feed-card .headline{font-size:13.5px;font-weight:600;color:var(--charcoal);margin-bottom:3px;}
+  .feed-card .meta{font-size:11.5px;color:var(--text-mute);}
+  .feed-card.hire{border-left:4px solid var(--gold);}
+  .feed-card.shoutout{border-left:4px solid var(--blue);}
+  .empty-state{padding:50px;text-align:center;color:var(--text-mute);font-size:13.5px;}
+
+  footer{text-align:center;font-size:11.5px;color:var(--text-mute);padding:30px 20px 10px;}
+  #loginScreen{
+    max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:32px 30px;
+  }
+  #loginScreen h2{margin:0 0 6px;font-size:19px;}
+  #loginScreen p{margin:0 0 20px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
+  #loginScreen .btn{width:100%;padding:11px;font-size:14px;background:var(--blue);color:#fff;}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+  <h2>Celebrate Achievements</h2>
+  <p>Sign in with your Intercom Enterprises account.</p>
+  <label for="loginEmail">Email</label>
+  <input type="text" id="loginEmail" autocomplete="username">
+  <label for="loginPassword">Password</label>
+  <input type="password" id="loginPassword" autocomplete="current-password">
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid <span class="hg-divider">·</span> Celebrate Achievements<span>Intercom Enterprises — Talent Acquisition wins</span></h1>
+    </div>
+    <div class="header-actions">
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
+      <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
+      <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
+      <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="confettiCanvas"></canvas>
+
+    <div class="hero">
+      <h2 id="heroHeadline">Great work, team!</h2>
+      <p id="heroSub">Here's what the Talent Acquisition team has closed out recently.</p>
+    </div>
+
+    <div class="top-performer" id="topPerformerCard" style="display:none;">
+      <span class="medal">🏆</span>
+      <div>
+        <h3 id="topPerformerName">—</h3>
+        <p id="topPerformerDetail">—</p>
+      </div>
+    </div>
+
+    <div class="filter-row" id="periodRow">
+      <button class="period-btn" data-period="month">This month</button>
+      <button class="period-btn active" data-period="quarter">This quarter</button>
+      <button class="period-btn" data-period="year">This year</button>
+      <button class="period-btn" data-period="all">All time</button>
+    </div>
+
+    <div class="shoutout-form" id="shoutoutForm" style="display:none;">
+      <textarea id="shoutoutText" placeholder="Post a shoutout — congratulate a recruiter, celebrate a milestone…"></textarea>
+      <div class="row">
+        <span class="status-msg" id="shoutoutStatus"></span>
+        <button class="btn btn-primary" id="postShoutoutBtn">Post shoutout</button>
+      </div>
+    </div>
+
+    <div class="feed" id="feed"></div>
+  </main>
+  <footer>HireGrid — Intercom Enterprises — internal use only.</footer>
+</div>
+
+<script>
+/* ====================== CONFIG ====================== */
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const MOTIVATIONAL = [
+  "Great work, team!", "Momentum like this doesn't happen by accident.",
+  "Every close here is someone's new chapter starting.", "Look at this hustle. 🔥",
+  "Talent Acquisition, doing what it does best.", "This is what winning looks like."
+];
+
+let currentUser = null;
+let ALL_ROWS = [];
+let PROFILES_BY_ID = {};
+let SHOUTOUTS = [];
+let activePeriod = 'quarter';
+
+/* ====================== AUTH ====================== */
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  currentUser = profile;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = currentUser.full_name;
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[currentUser.role] || currentUser.role;
+  document.getElementById('heroHeadline').textContent = MOTIVATIONAL[Math.floor(Math.random()*MOTIVATIONAL.length)];
+  if(currentUser.role === 'head_of_hr' || currentUser.role === 'ta_leader'){
+    document.getElementById('shoutoutForm').style.display = 'block';
+  }
+  if(currentUser.role === 'admin'){
+    document.getElementById('adminLink').style.display = '';
+    document.getElementById('teamLink').style.display = '';
+  }
+  await loadData();
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+/* ====================== DATA ====================== */
+async function loadData(){
+  const [{ data: rows }, { data: profiles }, { data: shoutouts }] = await Promise.all([
+    sb.from('manpower_plan').select('*'),
+    sb.from('profiles').select('*'),
+    sb.from('shoutouts').select('*')
+  ]);
+  ALL_ROWS = rows || [];
+  PROFILES_BY_ID = {};
+  (profiles || []).forEach(p=>{ PROFILES_BY_ID[p.id] = p.full_name; });
+  SHOUTOUTS = shoutouts || [];
+  render();
+}
+
+document.querySelectorAll('.period-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activePeriod = btn.dataset.period;
+    render();
+  });
+});
+
+document.getElementById('postShoutoutBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('shoutoutStatus');
+  const textEl = document.getElementById('shoutoutText');
+  const message = textEl.value.trim();
+  if(!message){ statusEl.textContent = 'Write something first.'; statusEl.className = 'status-msg err'; return; }
+  statusEl.textContent = 'Posting…'; statusEl.className = 'status-msg';
+  const { error } = await sb.from('shoutouts').insert({ message, posted_by: currentUser.id });
+  if(error){ statusEl.textContent = 'Could not post: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  statusEl.textContent = 'Posted!'; statusEl.className = 'status-msg ok';
+  textEl.value = '';
+  await loadData();
+  burstConfetti();
+});
+
+/* ====================== PERIOD ====================== */
+function periodRange(period){
+  const now = new Date();
+  if(period === 'all') return { from: new Date(2000,0,1), to: now };
+  if(period === 'year') return { from: new Date(now.getFullYear(),0,1), to: now };
+  if(period === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
+  const q = Math.floor(now.getMonth()/3);
+  return { from: new Date(now.getFullYear(), q*3, 1), to: now };
+}
+
+/* ====================== RENDER ====================== */
+function render(){
+  const { from, to } = periodRange(activePeriod);
+  const closedInPeriod = ALL_ROWS.filter(r=>{
+    if(r.position_status !== 'Closed' || !r.hiring_date) return false;
+    const d = new Date(r.hiring_date);
+    return d >= from && d <= to;
+  }).sort((a,b)=> new Date(b.hiring_date) - new Date(a.hiring_date));
+
+  renderTopPerformer(closedInPeriod);
+  renderFeed(closedInPeriod);
+
+  if(closedInPeriod.length){ burstConfetti(); }
+}
+
+function renderTopPerformer(closedInPeriod){
+  const counts = {};
+  closedInPeriod.forEach(r=>{ if(r.ta_owner) counts[r.ta_owner] = (counts[r.ta_owner]||0)+1; });
+  const ids = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  const card = document.getElementById('topPerformerCard');
+  if(!ids.length){ card.style.display = 'none'; return; }
+  card.style.display = 'flex';
+  const topId = ids[0];
+  document.getElementById('topPerformerName').textContent = `${PROFILES_BY_ID[topId] || 'Someone'} is leading the pack`;
+  document.getElementById('topPerformerDetail').textContent = `${counts[topId]} position${counts[topId]>1?'s':''} closed this period — nice work!`;
+}
+
+function renderFeed(closedInPeriod){
+  const feed = document.getElementById('feed');
+  const { from, to } = periodRange(activePeriod);
+  const shoutoutsInPeriod = SHOUTOUTS.filter(s=>{
+    const d = new Date(s.created_at);
+    return d >= from && d <= to;
+  });
+
+  const items = [];
+  closedInPeriod.forEach(r=>{
+    const owner = PROFILES_BY_ID[r.ta_owner] || 'The team';
+    let ttf = '';
+    if(r.job_opening_date && r.hiring_date){
+      const days = Math.floor((new Date(r.hiring_date) - new Date(r.job_opening_date))/(1000*60*60*24));
+      ttf = ` in ${days} day${days===1?'':'s'}`;
+    }
+    items.push({
+      type:'hire',
+      date: new Date(r.hiring_date),
+      icon: '🎉',
+      headline: `${owner} closed "${r.position_title || 'a position'}"${ttf ? ttf : ''}`,
+      meta: [r.department, r.employee_name ? `Welcome, ${r.employee_name}!` : null].filter(Boolean).join(' • ')
+    });
+  });
+  shoutoutsInPeriod.forEach(s=>{
+    items.push({
+      type:'shoutout',
+      date: new Date(s.created_at),
+      icon: '📣',
+      headline: s.message,
+      meta: `${PROFILES_BY_ID[s.posted_by] || 'Someone'} • ${new Date(s.created_at).toLocaleDateString()}`
+    });
+  });
+  items.sort((a,b)=>b.date-a.date);
+
+  if(!items.length){
+    feed.innerHTML = '<div class="empty-state">Nothing to celebrate in this period yet — close a position or post a shoutout!</div>';
+    return;
+  }
+  feed.innerHTML = items.map((it,i)=>`
+    <div class="feed-card ${it.type}" style="animation-delay:${Math.min(i*0.04,0.4)}s">
+      <span class="icon">${it.icon}</span>
+      <div class="body">
+        <div class="headline">${it.headline}</div>
+        <div class="meta">${it.meta || ''}</div>
+      </div>
+    </div>`).join('');
+}
+
+/* ====================== CONFETTI ====================== */
+let confettiRunning = false;
+function burstConfetti(){
+  if(confettiRunning) return;
+  confettiRunning = true;
+  const canvas = document.getElementById('confettiCanvas');
+  const ctx = canvas.getContext('2d');
+  function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  const colors = ['#065BAB','#ED1C24','#FCAF17','#383839'];
+  const pieces = Array.from({length:80}, () => ({
+    x: Math.random()*canvas.width,
+    y: -20 - Math.random()*canvas.height*0.3,
+    r: 4 + Math.random()*4,
+    color: colors[Math.floor(Math.random()*colors.length)],
+    vy: 2 + Math.random()*3,
+    vx: -1.5 + Math.random()*3,
+    rot: Math.random()*360,
+    vr: -6 + Math.random()*12
+  }));
+  let frame = 0;
+  const maxFrames = 130;
+  function tick(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI/180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.r/2, -p.r/2, p.r, p.r*1.6);
+      ctx.restore();
+    });
+    frame++;
+    if(frame < maxFrames){ requestAnimationFrame(tick); }
+    else { ctx.clearRect(0,0,canvas.width,canvas.height); confettiRunning = false; }
+  }
+  tick();
+}
+
+init();
+</script>
+</body>
+</html>

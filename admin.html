@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Admin Settings</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+  .kpi-card, .chart-card, .module-card, .risk-card, .card{animation:fadeInUp .45s ease both;}
+  .kpi-grid .kpi-card:nth-child(1), .module-grid .module-card:nth-child(1){animation-delay:.02s;}
+  .kpi-grid .kpi-card:nth-child(2), .module-grid .module-card:nth-child(2){animation-delay:.08s;}
+  .kpi-grid .kpi-card:nth-child(3), .module-grid .module-card:nth-child(3){animation-delay:.14s;}
+  .kpi-grid .kpi-card:nth-child(4), .module-grid .module-card:nth-child(4){animation-delay:.2s;}
+  .module-grid .module-card:nth-child(5){animation-delay:.26s;}
+  .module-grid .module-card:nth-child(6){animation-delay:.32s;}
+  .kpi-card, .chart-card, .module-card:not(.disabled){transition:box-shadow .2s ease, transform .2s ease;}
+  .kpi-card:hover, .chart-card:hover{box-shadow:0 6px 16px rgba(0,0,0,0.06);transform:translateY(-1px);}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  header h1 .hg-divider{color:var(--gold);font-weight:400;margin:0 2px;}
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-primary:hover{opacity:0.92;}
+  .btn:disabled{background:#e4e4e7;color:#a8a8ac;cursor:not-allowed;}
+
+  main{max-width:820px;margin:0 auto;padding:28px 24px;}
+  .section-title{font-size:15px;font-weight:700;color:var(--charcoal);margin:26px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .section-title:first-child{margin-top:0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:6px;}
+  .card + .card{margin-top:14px;}
+  .card p.hint{margin:0 0 18px;font-size:12.5px;color:var(--text-mute);line-height:1.5;}
+
+  .threshold-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid #f0f0f2;}
+  .threshold-row:last-child{border-bottom:none;}
+  .threshold-row .status-name{font-size:13.5px;font-weight:600;color:var(--charcoal);}
+  .threshold-row .status-desc{font-size:11.5px;color:var(--text-mute);margin-top:2px;}
+  .threshold-row .days-input{display:flex;align-items:center;gap:8px;}
+  .threshold-row input{width:70px;font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;text-align:center;}
+  .threshold-row .unit{font-size:12.5px;color:var(--text-mute);}
+  .btn-secondary{background:#eee;color:var(--charcoal);}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-small{padding:6px 11px;font-size:12px;}
+
+  .dept-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #f0f0f2;flex-wrap:wrap;}
+  .dept-row:last-child{border-bottom:none;}
+  .dept-row .dept-name{font-size:13.5px;font-weight:600;color:var(--charcoal);}
+
+  .coverage-block{padding:16px 0;border-bottom:1px solid #f0f0f2;}
+  .coverage-block:last-child{border-bottom:none;}
+  .coverage-block .person-name{font-size:14px;font-weight:700;color:var(--charcoal);margin-bottom:2px;}
+  .coverage-block .person-role{font-size:11px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.03em;margin-bottom:12px;}
+  .coverage-group{margin-bottom:10px;}
+  .coverage-group:last-child{margin-bottom:0;}
+  .coverage-group .group-label{font-size:11.5px;font-weight:600;color:var(--text-mute);margin-bottom:6px;}
+  .chip-row{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip-toggle{
+    font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:20px;
+    border:1px solid var(--border);background:#fff;color:var(--text-mute);cursor:pointer;transition:all .12s ease;
+  }
+  .chip-toggle:hover{border-color:var(--blue);}
+  .chip-toggle.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .chip-toggle.active.recruiter-chip{background:var(--gold);border-color:var(--gold);color:#3a2a00;}
+  .chip-empty{font-size:12px;color:var(--text-mute);font-style:italic;}
+
+  .save-row{display:flex;align-items:center;gap:14px;margin-top:20px;}
+  .status-msg{font-size:12.5px;}
+  .status-msg.ok{color:var(--blue);}
+  .status-msg.err{color:var(--red);}
+
+  #loginScreen{
+    max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:32px 30px;
+  }
+  #loginScreen h2{margin:0 0 6px;font-size:19px;}
+  #loginScreen p{margin:0 0 20px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
+  #loginScreen .btn{width:100%;padding:11px;font-size:14px;background:var(--blue);color:#fff;}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+  #notAuthorized{max-width:480px;margin:80px auto;text-align:center;color:var(--text-mute);font-size:14px;}
+  footer{text-align:center;font-size:11.5px;color:var(--text-mute);padding:20px 20px 30px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+  <h2>Admin Settings</h2>
+  <p>Sign in with your Intercom Enterprises account.</p>
+  <label for="loginEmail">Email</label>
+  <input type="text" id="loginEmail" autocomplete="username">
+  <label for="loginPassword">Password</label>
+  <input type="password" id="loginPassword" autocomplete="current-password">
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid <span class="hg-divider">·</span> Admin Settings<span>Intercom Enterprises — Talent Acquisition</span></h1>
+    </div>
+    <div class="header-actions">
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
+      <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="teammates.html" class="btn btn-ghost" style="text-decoration:none;">Team</a>
+      <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main id="authorizedArea" style="display:none;">
+    <div class="section-title">Stalled-position alerts</div>
+    <div class="card">
+      <p class="hint">
+        The Dashboard flags a position as "at risk" once it's spent more days than this in its
+        current status. Set the threshold for each active stage below — these apply to every
+        department and every recruiter.
+      </p>
+      <div id="thresholdRows"></div>
+      <div class="save-row">
+        <button class="btn btn-primary" id="saveSettingsBtn">Save thresholds</button>
+        <span class="status-msg" id="settingsStatus"></span>
+      </div>
+    </div>
+
+    <div class="section-title">Departments</div>
+    <div class="card">
+      <p class="hint">
+        The fixed department list used everywhere in the system — Manpower Plan, BU Head requests,
+        and the coverage assignments below. Add or remove departments here; assign who covers each
+        one underneath.
+      </p>
+      <div id="deptRows"></div>
+      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
+        <input type="text" id="newDeptName" placeholder="New department name" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <button class="btn btn-secondary" id="addDeptBtn">Add department</button>
+      </div>
+      <div class="status-msg" id="deptStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">TA Leader coverage</div>
+    <div class="card">
+      <p class="hint">
+        For each TA Leader: which departments they cover (a BU Head's request in one of these
+        departments emails them) and which Recruiters report to them. A department can be covered
+        by more than one TA Leader; a Recruiter reports to at most one.
+      </p>
+      <div id="taLeaderCoverage"></div>
+      <div class="status-msg" id="taCoverageStatus" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="section-title">BU Head coverage</div>
+    <div class="card">
+      <p class="hint">
+        For each BU Head: which department(s) they can submit Manpower Plan requests for. A BU
+        Head can be assigned more than one department.
+      </p>
+      <div id="buHeadCoverage"></div>
+      <div class="status-msg" id="buCoverageStatus" style="margin-top:6px;"></div>
+    </div>
+  </main>
+
+  <div id="notAuthorized" style="display:none;">
+    Only Admins can change these settings.
+  </div>
+
+  <footer>HireGrid — Intercom Enterprises — internal use only.</footer>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
+
+const STATUS_META = {
+  Requested:    { desc: 'Waiting on Head of HR / TA Leader approval' },
+  Approved:     { desc: 'Approved, not yet opened for sourcing' },
+  Open:         { desc: 'Open and being sourced' },
+  Interviewing: { desc: 'Candidates in the interview process' },
+  Offer:        { desc: 'Offer extended, awaiting acceptance / start' }
+};
+const STATUS_ORDER = ['Requested','Approved','Open','Interviewing','Offer'];
+
+let currentUser = null;
+let settingsRows = [];
+
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  currentUser = profile;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = currentUser.full_name;
+  document.getElementById('whoRole').textContent = ROLE_LABELS[currentUser.role] || currentUser.role;
+
+  const canManage = currentUser.role === 'admin';
+  document.getElementById('authorizedArea').style.display = canManage ? 'block' : 'none';
+  document.getElementById('notAuthorized').style.display = canManage ? 'none' : 'block';
+  if(canManage){
+    await loadSettings();
+    await loadPeopleAndDepartments();
+  }
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+async function loadSettings(){
+  const { data, error } = await sb.from('dashboard_settings').select('*');
+  const statusEl = document.getElementById('settingsStatus');
+  if(error){
+    statusEl.textContent = 'Could not load settings: ' + error.message;
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  settingsRows = data || [];
+  renderThresholdRows();
+}
+function renderThresholdRows(){
+  const container = document.getElementById('thresholdRows');
+  container.innerHTML = '';
+  STATUS_ORDER.forEach(status=>{
+    const row = settingsRows.find(r=>r.status===status);
+    const days = row ? row.stall_days : '';
+    const div = document.createElement('div');
+    div.className = 'threshold-row';
+    div.innerHTML = `
+      <div>
+        <div class="status-name">${status}</div>
+        <div class="status-desc">${STATUS_META[status].desc}</div>
+      </div>
+      <div class="days-input">
+        <input type="number" min="1" step="1" data-status="${status}" value="${days}">
+        <span class="unit">days</span>
+      </div>`;
+    container.appendChild(div);
+  });
+}
+document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('settingsStatus');
+  statusEl.textContent = 'Saving…';
+  statusEl.className = 'status-msg';
+  const inputs = document.querySelectorAll('#thresholdRows input');
+  const updates = [];
+  for(const input of inputs){
+    const status = input.dataset.status;
+    const val = parseInt(input.value, 10);
+    if(!val || val < 1){
+      statusEl.textContent = `Enter a valid number of days for ${status}.`;
+      statusEl.className = 'status-msg err';
+      return;
+    }
+    updates.push({ status, stall_days: val, updated_by: currentUser.id });
+  }
+  const { error } = await sb.from('dashboard_settings').upsert(updates, { onConflict: 'status' });
+  if(error){
+    statusEl.textContent = 'Could not save: ' + error.message;
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  statusEl.textContent = 'Saved — the Dashboard will use these thresholds immediately.';
+  statusEl.className = 'status-msg ok';
+  await loadSettings();
+});
+
+/* ====================== DEPARTMENTS & COVERAGE ====================== */
+let DEPARTMENTS = [];
+let TA_LEADERS = [];
+let BU_HEADS = [];
+let RECRUITERS = [];
+let ALL_PROFILES = [];
+let TA_DEPT_LINKS = [];   // [{ta_leader_id, department_id}]
+let BU_DEPT_LINKS = [];   // [{bu_head_id, department_id}]
+
+async function loadPeopleAndDepartments(){
+  const [
+    { data: depts, error: deptErr },
+    { data: profiles },
+    { data: taLinks },
+    { data: buLinks }
+  ] = await Promise.all([
+    sb.from('departments').select('*').order('name'),
+    sb.from('profiles').select('*').order('full_name'),
+    sb.from('ta_leader_departments').select('*'),
+    sb.from('bu_head_departments').select('*')
+  ]);
+  const statusEl = document.getElementById('deptStatus');
+  if(deptErr){ statusEl.textContent = 'Could not load departments: ' + deptErr.message; statusEl.className='status-msg err'; return; }
+  DEPARTMENTS = depts || [];
+  ALL_PROFILES = profiles || [];
+  TA_LEADERS = ALL_PROFILES.filter(p=>p.role==='ta_leader');
+  BU_HEADS = ALL_PROFILES.filter(p=>p.role==='bu_head');
+  RECRUITERS = ALL_PROFILES.filter(p=>p.role==='recruiter');
+  TA_DEPT_LINKS = taLinks || [];
+  BU_DEPT_LINKS = buLinks || [];
+  renderDeptRows();
+  renderTaLeaderCoverage();
+  renderBuHeadCoverage();
+}
+
+function renderDeptRows(){
+  const container = document.getElementById('deptRows');
+  if(!DEPARTMENTS.length){
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-mute);font-size:12.5px;">No departments yet — add one below.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  DEPARTMENTS.forEach(d=>{
+    const row = document.createElement('div');
+    row.className = 'dept-row';
+    row.innerHTML = `
+      <div class="dept-name">${d.name}</div>
+      <button class="btn btn-danger btn-small" data-delete-id="${d.id}">Remove</button>`;
+    container.appendChild(row);
+  });
+  container.querySelectorAll('[data-delete-id]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const statusEl = document.getElementById('deptStatus');
+      const { error } = await sb.from('departments').delete().eq('id', btn.dataset.deleteId);
+      statusEl.textContent = error ? ('Could not remove: ' + error.message) : 'Department removed.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadPeopleAndDepartments();
+    });
+  });
+}
+document.getElementById('addDeptBtn').addEventListener('click', async ()=>{
+  const input = document.getElementById('newDeptName');
+  const statusEl = document.getElementById('deptStatus');
+  const name = input.value.trim();
+  if(!name){ statusEl.textContent = 'Enter a department name first.'; statusEl.className = 'status-msg err'; return; }
+  const { error } = await sb.from('departments').insert({ name });
+  if(error){ statusEl.textContent = 'Could not add: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  input.value = '';
+  statusEl.textContent = 'Department added.';
+  statusEl.className = 'status-msg ok';
+  await loadPeopleAndDepartments();
+});
+
+function renderTaLeaderCoverage(){
+  const container = document.getElementById('taLeaderCoverage');
+  if(!TA_LEADERS.length){
+    container.innerHTML = '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No TA Leaders yet — add one from the Team page.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  TA_LEADERS.forEach(leader=>{
+    const myDeptIds = new Set(TA_DEPT_LINKS.filter(l=>l.ta_leader_id===leader.id).map(l=>l.department_id));
+    const myRecruiterIds = new Set(RECRUITERS.filter(r=>r.ta_leader_id===leader.id).map(r=>r.id));
+    const block = document.createElement('div');
+    block.className = 'coverage-block';
+    const deptChips = DEPARTMENTS.length
+      ? DEPARTMENTS.map(d=>`<button type="button" class="chip-toggle dept-chip ${myDeptIds.has(d.id)?'active':''}" data-leader-id="${leader.id}" data-dept-id="${d.id}">${d.name}</button>`).join('')
+      : '<span class="chip-empty">No departments yet</span>';
+    const recruiterChips = RECRUITERS.length
+      ? RECRUITERS.map(r=>{
+          const takenByOther = r.ta_leader_id && r.ta_leader_id !== leader.id;
+          const label = takenByOther ? `${r.full_name} (with another leader)` : r.full_name;
+          return `<button type="button" class="chip-toggle recruiter-chip ${myRecruiterIds.has(r.id)?'active':''}" data-leader-id="${leader.id}" data-recruiter-id="${r.id}" title="${takenByOther ? 'Currently reports to another TA Leader — click to move them here' : ''}">${label}</button>`;
+        }).join('')
+      : '<span class="chip-empty">No recruiters yet</span>';
+    block.innerHTML = `
+      <div class="person-name">${leader.full_name}</div>
+      <div class="person-role">TA Leader</div>
+      <div class="coverage-group">
+        <div class="group-label">Departments covered</div>
+        <div class="chip-row">${deptChips}</div>
+      </div>
+      <div class="coverage-group">
+        <div class="group-label">Recruiters reporting to them</div>
+        <div class="chip-row">${recruiterChips}</div>
+      </div>`;
+    container.appendChild(block);
+  });
+
+  container.querySelectorAll('.dept-chip').forEach(chip=>{
+    chip.addEventListener('click', async ()=>{
+      const statusEl = document.getElementById('taCoverageStatus');
+      const leaderId = chip.dataset.leaderId, deptId = Number(chip.dataset.deptId);
+      const isActive = chip.classList.contains('active');
+      const { error } = isActive
+        ? await sb.from('ta_leader_departments').delete().eq('ta_leader_id', leaderId).eq('department_id', deptId)
+        : await sb.from('ta_leader_departments').insert({ ta_leader_id: leaderId, department_id: deptId });
+      statusEl.textContent = error ? ('Could not update: ' + error.message) : 'Coverage updated.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadPeopleAndDepartments();
+    });
+  });
+  container.querySelectorAll('.recruiter-chip').forEach(chip=>{
+    chip.addEventListener('click', async ()=>{
+      const statusEl = document.getElementById('taCoverageStatus');
+      const leaderId = chip.dataset.leaderId, recruiterId = chip.dataset.recruiterId;
+      const isActive = chip.classList.contains('active');
+      const { error } = await sb.from('profiles').update({ ta_leader_id: isActive ? null : leaderId }).eq('id', recruiterId);
+      statusEl.textContent = error ? ('Could not update: ' + error.message) : 'Reporting line updated.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadPeopleAndDepartments();
+    });
+  });
+}
+
+function renderBuHeadCoverage(){
+  const container = document.getElementById('buHeadCoverage');
+  if(!BU_HEADS.length){
+    container.innerHTML = '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No BU Heads yet — add one from the Team page.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  BU_HEADS.forEach(head=>{
+    const myDeptIds = new Set(BU_DEPT_LINKS.filter(l=>l.bu_head_id===head.id).map(l=>l.department_id));
+    const block = document.createElement('div');
+    block.className = 'coverage-block';
+    const deptChips = DEPARTMENTS.length
+      ? DEPARTMENTS.map(d=>`<button type="button" class="chip-toggle bu-dept-chip ${myDeptIds.has(d.id)?'active':''}" data-head-id="${head.id}" data-dept-id="${d.id}">${d.name}</button>`).join('')
+      : '<span class="chip-empty">No departments yet</span>';
+    block.innerHTML = `
+      <div class="person-name">${head.full_name}</div>
+      <div class="person-role">BU Head</div>
+      <div class="coverage-group">
+        <div class="group-label">Departments they can submit requests for</div>
+        <div class="chip-row">${deptChips}</div>
+      </div>`;
+    container.appendChild(block);
+  });
+  container.querySelectorAll('.bu-dept-chip').forEach(chip=>{
+    chip.addEventListener('click', async ()=>{
+      const statusEl = document.getElementById('buCoverageStatus');
+      const headId = chip.dataset.headId, deptId = Number(chip.dataset.deptId);
+      const isActive = chip.classList.contains('active');
+      const { error } = isActive
+        ? await sb.from('bu_head_departments').delete().eq('bu_head_id', headId).eq('department_id', deptId)
+        : await sb.from('bu_head_departments').insert({ bu_head_id: headId, department_id: deptId });
+      statusEl.textContent = error ? ('Could not update: ' + error.message) : 'Coverage updated.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadPeopleAndDepartments();
+    });
+  });
+}
+
+init();
+</script>
+</body>
+</html>

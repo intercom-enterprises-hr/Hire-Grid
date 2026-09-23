@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Team</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+  .card{animation:fadeInUp .45s ease both;}
+
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  header h1 .hg-divider{color:var(--gold);font-weight:400;margin:0 2px;}
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-primary:hover{opacity:0.92;}
+  .btn-secondary{background:#eee;color:var(--charcoal);}
+  .btn-small{padding:5px 11px;font-size:12px;}
+  .btn:disabled{background:#e4e4e7;color:#a8a8ac;cursor:not-allowed;}
+
+  main{max-width:820px;margin:0 auto;padding:28px 24px;}
+  .section-title{font-size:15px;font-weight:700;color:var(--charcoal);margin:26px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .section-title:first-child{margin-top:0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;}
+  .card p.hint{margin:0 0 16px;font-size:12.5px;color:var(--text-mute);line-height:1.5;}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  .form-grid .full{grid-column:1/-1;}
+  .form-field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--charcoal-soft);}
+  .form-field input, .form-field select{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;}
+  .form-actions{display:flex;align-items:center;gap:14px;margin-top:16px;}
+  .status-msg{font-size:12.5px;}
+  .status-msg.ok{color:var(--blue);}
+  .status-msg.err{color:var(--red);}
+
+  .team-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .team-card table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .team-card th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.02em;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .team-card td{padding:10px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  .team-card tr:last-child td{border-bottom:none;}
+  .role-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;background:#eef2ff;color:#4338ca;}
+
+  #editCard{display:none;margin-bottom:16px;border-left:4px solid var(--blue);}
+
+  #loginScreen{
+    max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:32px 30px;
+  }
+  #loginScreen h2{margin:0 0 6px;font-size:19px;}
+  #loginScreen p{margin:0 0 20px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
+  #loginScreen .btn{width:100%;padding:11px;font-size:14px;background:var(--blue);color:#fff;}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+  #notAuthorized{max-width:480px;margin:80px auto;text-align:center;color:var(--text-mute);font-size:14px;}
+  footer{text-align:center;font-size:11.5px;color:var(--text-mute);padding:20px 20px 30px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+  <h2>Team</h2>
+  <p>Sign in with your Intercom Enterprises account.</p>
+  <label for="loginEmail">Email</label>
+  <input type="text" id="loginEmail" autocomplete="username">
+  <label for="loginPassword">Password</label>
+  <input type="password" id="loginPassword" autocomplete="current-password">
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid <span class="hg-divider">·</span> Team<span>Intercom Enterprises — Talent Acquisition</span></h1>
+    </div>
+    <div class="header-actions">
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
+      <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="admin.html" class="btn btn-ghost" style="text-decoration:none;">Admin Settings</a>
+      <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main id="authorizedArea" style="display:none;">
+    <div class="section-title">Add a teammate</div>
+    <div class="card">
+      <p class="hint">Creates their login and profile in one step — no Supabase dashboard needed. Give them the email and temporary password so they can sign in (they can't reset it themselves yet, so share it directly). Department/coverage assignment for TA Leaders and BU Heads happens afterward, in Admin Settings.</p>
+      <div class="form-grid">
+        <div class="form-field"><label>Full name *</label><input type="text" id="newName"></div>
+        <div class="form-field"><label>Email *</label><input type="text" id="newEmail"></div>
+        <div class="form-field"><label>Temporary password *</label><input type="text" id="newPassword" placeholder="At least 8 characters"></div>
+        <div class="form-field"><label>Role *</label>
+          <select id="newRole">
+            <option value="">— Choose a role —</option>
+            <option value="head_of_hr">Head of HR</option>
+            <option value="ta_leader">TA Leader</option>
+            <option value="recruiter">Recruiter</option>
+            <option value="bu_head">BU Head</option>
+            <option value="top_management">Top Management</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="createTeammateBtn">Create login</button>
+        <span class="status-msg" id="createStatus"></span>
+      </div>
+    </div>
+
+    <div class="section-title">Edit teammate</div>
+    <div class="card" id="editCard">
+      <p class="hint">Editing <b id="editingName">—</b>. Leave a field blank to leave it unchanged. Changing email or password updates their login too.</p>
+      <div class="form-grid">
+        <div class="form-field"><label>Full name</label><input type="text" id="editName"></div>
+        <div class="form-field"><label>Email</label><input type="text" id="editEmail"></div>
+        <div class="form-field"><label>New password</label><input type="text" id="editPassword" placeholder="Leave blank to keep current"></div>
+        <div class="form-field"><label>Role</label>
+          <select id="editRole">
+            <option value="head_of_hr">Head of HR</option>
+            <option value="ta_leader">TA Leader</option>
+            <option value="recruiter">Recruiter</option>
+            <option value="bu_head">BU Head</option>
+            <option value="top_management">Top Management</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="saveEditBtn">Save changes</button>
+        <button class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
+        <span class="status-msg" id="editStatus"></span>
+      </div>
+    </div>
+
+    <div class="section-title">Current team</div>
+    <div class="team-card">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
+        <tbody id="teamTableBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div id="notAuthorized" style="display:none;">
+    Only Admins can manage the team.
+  </div>
+
+  <footer>HireGrid — Intercom Enterprises — internal use only.</footer>
+</div>
+
+<script>
+/* ====================== CONFIG ====================== */
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
+
+let currentUser = null;
+let SESSION = null;
+let TEAM = [];
+
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ SESSION = session; await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  currentUser = profile;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = currentUser.full_name;
+  document.getElementById('whoRole').textContent = ROLE_LABELS[currentUser.role] || currentUser.role;
+
+  const canManage = currentUser.role === 'admin';
+  document.getElementById('authorizedArea').style.display = canManage ? 'block' : 'none';
+  document.getElementById('notAuthorized').style.display = canManage ? 'none' : 'block';
+  if(canManage){ await loadTeam(); }
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  SESSION = data.session;
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+async function loadTeam(){
+  const { data } = await sb.from('profiles').select('*').order('full_name');
+  TEAM = data || [];
+  const tbody = document.getElementById('teamTableBody');
+  tbody.innerHTML = TEAM.map(p=>`
+    <tr>
+      <td>${p.full_name}</td>
+      <td>${p.email}</td>
+      <td><span class="role-pill">${ROLE_LABELS[p.role]||p.role}</span></td>
+      <td><button class="btn btn-secondary btn-small" data-edit-id="${p.id}">Edit</button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('[data-edit-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEdit(btn.dataset.editId));
+  });
+}
+
+document.getElementById('createTeammateBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('createStatus');
+  const full_name = document.getElementById('newName').value.trim();
+  const email = document.getElementById('newEmail').value.trim();
+  const temporary_password = document.getElementById('newPassword').value;
+  const role = document.getElementById('newRole').value;
+
+  if(!full_name || !email || !temporary_password || !role){
+    statusEl.textContent = 'Fill in name, email, password and role.'; statusEl.className = 'status-msg err'; return;
+  }
+  statusEl.textContent = 'Creating…'; statusEl.className = 'status-msg';
+
+  try{
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-teammate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SESSION.access_token}`
+      },
+      body: JSON.stringify({ full_name, email, temporary_password, role })
+    });
+    const body = await res.json();
+    if(!res.ok || body.error){
+      statusEl.textContent = 'Could not create: ' + (body.error || res.statusText);
+      statusEl.className = 'status-msg err';
+      return;
+    }
+    statusEl.textContent = 'Created! Share the email and temporary password with them.';
+    statusEl.className = 'status-msg ok';
+    document.getElementById('newName').value = '';
+    document.getElementById('newEmail').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('newRole').value = '';
+    await loadTeam();
+  }catch(err){
+    statusEl.textContent = 'Could not reach the server: ' + err.message;
+    statusEl.className = 'status-msg err';
+  }
+});
+
+/* ====================== EDIT TEAMMATE ====================== */
+let editingUserId = null;
+function openEdit(userId){
+  const person = TEAM.find(p=>p.id===userId);
+  if(!person) return;
+  editingUserId = userId;
+  document.getElementById('editingName').textContent = person.full_name;
+  document.getElementById('editName').value = '';
+  document.getElementById('editEmail').value = '';
+  document.getElementById('editPassword').value = '';
+  document.getElementById('editRole').value = person.role;
+  document.getElementById('editStatus').textContent = '';
+  document.getElementById('editCard').style.display = 'block';
+  document.getElementById('editCard').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+document.getElementById('cancelEditBtn').addEventListener('click', ()=>{
+  editingUserId = null;
+  document.getElementById('editCard').style.display = 'none';
+});
+document.getElementById('saveEditBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('editStatus');
+  if(!editingUserId) return;
+  const full_name = document.getElementById('editName').value.trim();
+  const email = document.getElementById('editEmail').value.trim();
+  const new_password = document.getElementById('editPassword').value;
+  const role = document.getElementById('editRole').value;
+
+  if(new_password && new_password.length < 8){
+    statusEl.textContent = 'New password must be at least 8 characters.'; statusEl.className = 'status-msg err'; return;
+  }
+  const payload = { user_id: editingUserId };
+  if(full_name) payload.full_name = full_name;
+  if(email) payload.email = email;
+  if(new_password) payload.new_password = new_password;
+  if(role) payload.role = role;
+
+  statusEl.textContent = 'Saving…'; statusEl.className = 'status-msg';
+  try{
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/update-teammate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SESSION.access_token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json();
+    if(!res.ok || body.error){
+      statusEl.textContent = 'Could not save: ' + (body.error || res.statusText);
+      statusEl.className = 'status-msg err';
+      return;
+    }
+    statusEl.textContent = 'Saved.';
+    statusEl.className = 'status-msg ok';
+    editingUserId = null;
+    document.getElementById('editCard').style.display = 'none';
+    await loadTeam();
+  }catch(err){
+    statusEl.textContent = 'Could not reach the server: ' + err.message;
+    statusEl.className = 'status-msg err';
+  }
+});
+
+init();
+</script>
+</body>
+</html>

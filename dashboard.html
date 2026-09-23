@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Top Management Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+  .kpi-card, .chart-card, .module-card, .risk-card, .card{animation:fadeInUp .45s ease both;}
+  .kpi-grid .kpi-card:nth-child(1), .module-grid .module-card:nth-child(1){animation-delay:.02s;}
+  .kpi-grid .kpi-card:nth-child(2), .module-grid .module-card:nth-child(2){animation-delay:.08s;}
+  .kpi-grid .kpi-card:nth-child(3), .module-grid .module-card:nth-child(3){animation-delay:.14s;}
+  .kpi-grid .kpi-card:nth-child(4), .module-grid .module-card:nth-child(4){animation-delay:.2s;}
+  .module-grid .module-card:nth-child(5){animation-delay:.26s;}
+  .module-grid .module-card:nth-child(6){animation-delay:.32s;}
+  .kpi-card, .chart-card, .module-card:not(.disabled){transition:box-shadow .2s ease, transform .2s ease;}
+  .kpi-card:hover, .chart-card:hover{box-shadow:0 6px 16px rgba(0,0,0,0.06);transform:translateY(-1px);}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  header h1 .hg-divider{color:var(--gold);font-weight:400;margin:0 2px;}
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  select.btn-ghost{cursor:pointer;}
+  select.btn-ghost option{color:#1a1a1a;}
+
+  main{max-width:1320px;margin:0 auto;padding:24px;}
+  .section-title{font-size:15px;font-weight:700;color:var(--charcoal);margin:26px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+  .section-title:first-child{margin-top:0;}
+  .chip{width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block;}
+  .section-title.red .chip{background:var(--red);}
+
+  .filter-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;}
+  .filter-group{display:flex;flex-direction:column;gap:5px;min-width:150px;}
+  .filter-group label{font-size:11.5px;font-weight:600;color:var(--text-mute);}
+  .filter-group select{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;}
+  .period-row{display:flex;gap:6px;}
+  .period-btn{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;color:var(--text-mute);cursor:pointer;}
+  .period-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+  #resetFilters{font-size:12.5px;color:var(--blue);cursor:pointer;text-decoration:underline;background:none;border:none;font-family:inherit;}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .kpi-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:var(--radius);padding:16px 20px;}
+  .kpi-card.gold{border-left-color:var(--gold);}
+  .kpi-card.charcoal{border-left-color:var(--charcoal);}
+  .kpi-card.red{border-left-color:var(--red);}
+  .kpi-label{font-size:12.5px;color:var(--text-mute);margin-bottom:6px;}
+  .kpi-value{font-size:30px;font-weight:700;color:var(--charcoal);line-height:1;}
+  .kpi-foot{font-size:11.5px;color:var(--text-mute);margin-top:6px;}
+
+  .chart-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;}
+  .chart-grid.secondary{grid-template-columns:1fr 1fr;}
+  .chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;}
+  .chart-card h3{margin:0 0 2px;font-size:14.5px;}
+  .chart-card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--text-mute);}
+  .chart-holder{position:relative;height:230px;}
+  .chart-holder canvas{width:100% !important;height:100% !important;}
+  .card-unavailable{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-mute);font-size:12.5px;text-align:center;padding:20px;}
+
+  .risk-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .risk-card table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .risk-card th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.02em;padding:9px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .risk-card td{padding:9px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  .risk-card tr:last-child td{border-bottom:none;}
+  .risk-pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+  .risk-pill.high{background:#fef2f2;color:#b91c1c;}
+  .risk-pill.medium{background:#fff7ed;color:#c2410c;}
+  .risk-empty{padding:30px;text-align:center;color:var(--text-mute);font-size:12.5px;}
+
+  @media (max-width:1000px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .chart-grid, .chart-grid.secondary{grid-template-columns:1fr;}
+  }
+  footer{text-align:center;font-size:11.5px;color:var(--text-mute);padding:30px 20px 10px;}
+  #loginScreen{
+    max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:32px 30px;
+  }
+  #loginScreen h2{margin:0 0 6px;font-size:19px;}
+  #loginScreen p{margin:0 0 20px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
+  #loginScreen .btn{width:100%;padding:11px;font-size:14px;background:var(--blue);color:#fff;}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+
+  @media print{
+    @page{ size: A4 portrait; margin: 8mm; }
+    header .header-actions, .toast{display:none !important;}
+    body{background:#fff;}
+    .chart-grid, .chart-grid.secondary{grid-template-columns:1fr 1fr !important;}
+    .chart-holder canvas{display:none !important;}
+    .chart-holder .print-chart-img{display:block !important;width:100%;height:100%;object-fit:contain;}
+    .chart-card, .kpi-card, .risk-card{break-inside:avoid;}
+  }
+  .print-chart-img{display:none;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+  <h2>Top Management Dashboard</h2>
+  <p>Sign in with your Intercom Enterprises account.</p>
+  <label for="loginEmail">Email</label>
+  <input type="text" id="loginEmail" autocomplete="username">
+  <label for="loginPassword">Password</label>
+  <input type="password" id="loginPassword" autocomplete="current-password">
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid <span class="hg-divider">·</span> Top Management Dashboard<span>Intercom Enterprises — Talent Acquisition, live from Manpower Plan</span></h1>
+    </div>
+    <div class="header-actions">
+      <select id="yearSelect" class="btn-ghost"></select>
+      <button class="btn btn-ghost" id="printBtn">Print / Save as PDF</button>
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
+      <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
+      <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main id="printFit">
+    <div class="section-title"><span class="chip"></span>Filters</div>
+    <div class="filter-card">
+      <div class="filter-group">
+        <label>Department</label>
+        <select id="f-department"><option value="">All departments</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Business Need</label>
+        <select id="f-need"><option value="">All reasons</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Reporting period (for hires)</label>
+        <div class="period-row" id="periodRow">
+          <button class="period-btn active" data-period="allyear">All year</button>
+          <button class="period-btn" data-period="q1">Q1</button>
+          <button class="period-btn" data-period="q2">Q2</button>
+          <button class="period-btn" data-period="q3">Q3</button>
+          <button class="period-btn" data-period="q4">Q4</button>
+        </div>
+      </div>
+      <button id="resetFilters">Clear filters</button>
+    </div>
+
+    <div class="section-title"><span class="chip"></span>Overview</div>
+    <div class="kpi-grid">
+      <div class="kpi-card charcoal">
+        <div class="kpi-label">Open pipeline now</div>
+        <div class="kpi-value" id="kpiOpen">—</div>
+        <div class="kpi-foot">Approved, Open, Interviewing or Offer stage</div>
+      </div>
+      <div class="kpi-card gold">
+        <div class="kpi-label">Hires in selected period</div>
+        <div class="kpi-value" id="kpiHires">—</div>
+        <div class="kpi-foot" id="kpiHiresFoot">Matches period above</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Closed year-to-date</div>
+        <div class="kpi-value" id="kpiClosedYTD">—</div>
+        <div class="kpi-foot" id="kpiYTDFoot">Since Jan 1</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Requested, not yet approved</div>
+        <div class="kpi-value" id="kpiRequested">—</div>
+        <div class="kpi-foot">Awaiting Head of HR / TA Leader approval</div>
+      </div>
+    </div>
+
+    <div class="section-title red"><span class="chip"></span>Strategic view</div>
+    <div class="kpi-grid">
+      <div class="kpi-card red">
+        <div class="kpi-label">At-risk positions</div>
+        <div class="kpi-value" id="kpiAtRisk">—</div>
+        <div class="kpi-foot">Sitting longer than the threshold for their stage — set in Admin Settings</div>
+      </div>
+      <div class="kpi-card gold">
+        <div class="kpi-label">Avg. time-to-fill (YTD)</div>
+        <div class="kpi-value" id="kpiTTF">—</div>
+        <div class="kpi-foot">Days from Job Opening Date to Hiring Date, closed positions this year</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Fulfillment rate (YTD)</div>
+        <div class="kpi-value" id="kpiFulfillment">—</div>
+        <div class="kpi-foot">Closed vs. requested so far this year</div>
+      </div>
+    </div>
+    <div class="risk-card" style="margin-top:14px;">
+      <table>
+        <thead>
+          <tr><th>Position</th><th>Department</th><th>Status</th><th>Days in status</th><th>TA Owner</th></tr>
+        </thead>
+        <tbody id="riskTableBody"></tbody>
+      </table>
+      <div class="risk-empty" id="riskEmpty" style="display:none;">No stalled positions right now — nice.</div>
+    </div>
+
+    <div class="section-title red"><span class="chip"></span>Positions &amp; hiring trends</div>
+    <div class="chart-grid secondary">
+      <div class="chart-card" id="card-dept">
+        <h3>Open pipeline by department</h3>
+        <p class="hint">Approved / Open / Interviewing / Offer positions, with counts</p>
+        <div class="chart-holder"><canvas id="chartByDept"></canvas><img class="print-chart-img" id="printImgByDept" alt=""></div>
+      </div>
+      <div class="chart-card" id="card-need">
+        <h3>Open HC Business Need</h3>
+        <p class="hint">Why each open position exists, with counts</p>
+        <div class="chart-holder"><canvas id="chartNeed"></canvas><img class="print-chart-img" id="printImgNeed" alt=""></div>
+      </div>
+    </div>
+    <div class="chart-grid secondary" style="margin-top:14px;">
+      <div class="chart-card" id="card-hiresbydept">
+        <h3>Hires by department</h3>
+        <p class="hint">Closed positions in the selected period, with counts</p>
+        <div class="chart-holder"><canvas id="chartHiresByDept"></canvas><img class="print-chart-img" id="printImgHiresByDept" alt=""></div>
+      </div>
+      <div class="chart-card" id="card-hiredneed">
+        <h3>Hired HC Business Need</h3>
+        <p class="hint">Why each filled position was needed, with counts</p>
+        <div class="chart-holder"><canvas id="chartHiredNeed"></canvas><img class="print-chart-img" id="printImgHiredNeed" alt=""></div>
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-top:14px;">
+      <div class="chart-card" id="card-trend">
+        <h3>Hires &amp; closures by month</h3>
+        <p class="hint">Positions closed with a hire, over time</p>
+        <div class="chart-holder"><canvas id="chartTrend"></canvas><img class="print-chart-img" id="printImgTrend" alt=""></div>
+      </div>
+      <div class="chart-card" id="card-quartercompare">
+        <h3>Requested vs. closed by quarter</h3>
+        <p class="hint" id="quarterCompareHint">Real Job Opening Date vs. real Hiring Date — no placeholder needed anymore</p>
+        <div class="chart-holder"><canvas id="chartQuarterCompare"></canvas><img class="print-chart-img" id="printImgQuarterCompare" alt=""></div>
+      </div>
+    </div>
+  </main>
+  <footer>HireGrid — Intercom Enterprises — internal use only. Data reflects live Manpower Plan entries.</footer>
+</div>
+
+<div class="toast" id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--charcoal);color:#fff;padding:11px 20px;border-radius:8px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,0.2);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s ease;"></div>
+
+<script>
+/* ====================== CONFIG ====================== */
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const OPEN_PIPELINE_STATUSES = ['Approved','Open','Interviewing','Offer'];
+const CHART_COLORS = ['#065BAB','#ED1C24','#FCAF17','#383839','#7FA8D9','#F2A6A9','#FCD98B','#9a9a9c'];
+const QUARTER_MONTHS = { q1:0, q2:3, q3:6, q4:9 };
+
+/* ====================== STATE ====================== */
+let currentUser = null;
+let ALL_ROWS = [];
+let PROFILES_BY_ID = {};
+let STALL_THRESHOLDS = { Requested:7, Approved:7, Open:30, Interviewing:21, Offer:14 };
+let selectedYear = new Date().getFullYear();
+let activePeriod = 'allyear';
+let charts = {};
+const ACTIVE_STATUSES = ['Requested','Approved','Open','Interviewing','Offer'];
+
+/* ====================== AUTH ====================== */
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  currentUser = profile;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = currentUser.full_name;
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[currentUser.role] || currentUser.role;
+  if(currentUser.role === 'admin'){
+    document.getElementById('adminLink').style.display = '';
+    document.getElementById('teamLink').style.display = '';
+  }
+  await loadSettingsAndProfiles();
+  await loadRows();
+}
+async function loadSettingsAndProfiles(){
+  const { data: settingsData } = await sb.from('dashboard_settings').select('*');
+  if(settingsData && settingsData.length){
+    settingsData.forEach(r=>{ STALL_THRESHOLDS[r.status] = r.stall_days; });
+  }
+  const { data: profilesData } = await sb.from('profiles').select('*');
+  (profilesData || []).forEach(p=>{ PROFILES_BY_ID[p.id] = p.full_name; });
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+/* ====================== DATA ====================== */
+async function loadRows(){
+  const { data, error } = await sb.from('manpower_plan').select('*');
+  if(error){ showToast('Could not load data: ' + error.message); return; }
+  ALL_ROWS = data || [];
+  populateYearSelect();
+  populateFilterOptions();
+  render();
+}
+function populateYearSelect(){
+  const years = uniqueSorted(ALL_ROWS.flatMap(r=>[r.job_opening_date, r.hiring_date]).filter(Boolean).map(d=>new Date(d).getFullYear()));
+  if(!years.length) years.push(new Date().getFullYear());
+  years.sort((a,b)=>b-a);
+  const sel = document.getElementById('yearSelect');
+  const prev = selectedYear;
+  sel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  selectedYear = years.includes(prev) ? prev : years[0];
+  sel.value = String(selectedYear);
+}
+function populateFilterOptions(){
+  fillSelect('f-department', uniqueSorted(ALL_ROWS.map(r=>r.department)));
+  fillSelect('f-need', uniqueSorted(ALL_ROWS.map(r=>r.business_need)));
+}
+function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
+const _countUpFrom = {};
+function animateCountUp(elId, target){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  const from = _countUpFrom[elId] || 0;
+  _countUpFrom[elId] = target;
+  if(from === target){ el.textContent = target; return; }
+  const duration = 500;
+  const start = performance.now();
+  function step(now){
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const val = Math.round(from + (target - from) * eased);
+    el.textContent = val;
+    if(t < 1) requestAnimationFrame(step);
+    else el.textContent = target;
+  }
+  requestAnimationFrame(step);
+}
+function fillSelect(id, values){
+  const el = document.getElementById(id);
+  const current = el.value;
+  const placeholder = el.options[0];
+  el.innerHTML = '';
+  el.appendChild(placeholder);
+  values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
+  if(values.includes(current)) el.value = current;
+}
+function getFilters(){
+  return { department: document.getElementById('f-department').value, businessNeed: document.getElementById('f-need').value };
+}
+function matchesFilters(r, f){
+  return (!f.department || r.department===f.department) && (!f.businessNeed || r.business_need===f.businessNeed);
+}
+function periodRange(period){
+  const y = selectedYear;
+  if(period==='allyear') return { from:new Date(y,0,1), to:new Date(y,11,31,23,59,59) };
+  const m = QUARTER_MONTHS[period];
+  return { from:new Date(y,m,1), to:new Date(y,m+3,0,23,59,59) };
+}
+function inRange(dateStr, from, to){
+  if(!dateStr) return false;
+  const d = new Date(dateStr);
+  return d >= from && d <= to;
+}
+
+/* ====================== RENDER ====================== */
+document.getElementById('yearSelect').addEventListener('change', function(){ selectedYear = parseInt(this.value); render(); });
+document.getElementById('f-department').addEventListener('change', render);
+document.getElementById('f-need').addEventListener('change', render);
+document.getElementById('resetFilters').addEventListener('click', ()=>{
+  document.getElementById('f-department').value = '';
+  document.getElementById('f-need').value = '';
+  render();
+});
+document.querySelectorAll('.period-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activePeriod = btn.dataset.period;
+    render();
+  });
+});
+
+function render(){
+  const f = getFilters();
+  const filtered = ALL_ROWS.filter(r=>matchesFilters(r,f));
+  const { from, to } = periodRange(activePeriod);
+
+  const openPipeline = filtered.filter(r=>OPEN_PIPELINE_STATUSES.includes(r.position_status));
+  const requestedOnly = filtered.filter(r=>r.position_status === 'Requested');
+  const hiresInPeriod = filtered.filter(r=>r.position_status==='Closed' && inRange(r.hiring_date, from, to));
+  const closedYTD = filtered.filter(r=>r.position_status==='Closed' && r.hiring_date && new Date(r.hiring_date) >= new Date(selectedYear,0,1) && new Date(r.hiring_date) < new Date(selectedYear+1,0,1));
+
+  animateCountUp('kpiOpen', openPipeline.length);
+  animateCountUp('kpiHires', hiresInPeriod.length);
+  document.getElementById('kpiHiresFoot').textContent = activePeriod==='allyear' ? `All of ${selectedYear}` : `${activePeriod.toUpperCase()} ${selectedYear}`;
+  animateCountUp('kpiClosedYTD', closedYTD.length);
+  document.getElementById('kpiYTDFoot').textContent = `Since Jan 1, ${selectedYear}`;
+  animateCountUp('kpiRequested', requestedOnly.length);
+
+  renderStrategicView(filtered, closedYTD);
+
+  renderBarChart('dept', 'chartByDept', 'card-dept', groupCount(openPipeline,'department'), '#FCAF17', 'open');
+  renderPieChart('need', 'chartNeed', 'card-need', groupCount(openPipeline,'business_need'));
+  renderPieChart('hiresByDept', 'chartHiresByDept', 'card-hiresbydept', groupCount(hiresInPeriod,'department'));
+  renderPieChart('hiredNeed', 'chartHiredNeed', 'card-hiredneed', groupCount(hiresInPeriod,'business_need'));
+  renderTrendChart(filtered);
+  renderQuarterChart(filtered);
+}
+function daysBetween(a, b){ return Math.floor((a - b) / (1000*60*60*24)); }
+function riskLevel(days, threshold){
+  const ratio = days / threshold;
+  if(ratio >= 2) return 'high';
+  return 'medium';
+}
+function renderStrategicView(filtered, closedYTD){
+  const now = new Date();
+
+  // At-risk positions: active-stage rows past their stage's threshold.
+  const atRisk = filtered
+    .filter(r => ACTIVE_STATUSES.includes(r.position_status) && r.status_since)
+    .map(r => ({ row:r, days: daysBetween(now, new Date(r.status_since)) }))
+    .filter(x => x.days > (STALL_THRESHOLDS[x.row.position_status] || 9999))
+    .sort((a,b) => b.days - a.days);
+
+  animateCountUp('kpiAtRisk', atRisk.length);
+
+  const tbody = document.getElementById('riskTableBody');
+  const emptyEl = document.getElementById('riskEmpty');
+  if(!atRisk.length){
+    tbody.innerHTML = '';
+    emptyEl.style.display = 'block';
+  } else {
+    emptyEl.style.display = 'none';
+    tbody.innerHTML = atRisk.map(x => {
+      const level = riskLevel(x.days, STALL_THRESHOLDS[x.row.position_status] || 1);
+      const owner = PROFILES_BY_ID[x.row.ta_owner] || '—';
+      return `<tr>
+        <td>${x.row.position_title || '—'}</td>
+        <td>${x.row.department || '—'}</td>
+        <td><span class="risk-pill ${level}">${x.row.position_status}</span></td>
+        <td>${x.days} days</td>
+        <td>${owner}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Avg time-to-fill (YTD): Closed rows this year with both dates.
+  const withDates = closedYTD.filter(r => r.job_opening_date && r.hiring_date);
+  const ttfDays = withDates.map(r => daysBetween(new Date(r.hiring_date), new Date(r.job_opening_date)));
+  const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0) / ttfDays.length) : null;
+  document.getElementById('kpiTTF').textContent = avgTTF===null ? '—' : `${avgTTF}d`;
+
+  // Fulfillment rate (YTD): closed this year / requested this year (by job_opening_date).
+  const requestedThisYear = filtered.filter(r => r.job_opening_date && new Date(r.job_opening_date).getFullYear() === selectedYear);
+  const fulfillment = requestedThisYear.length ? Math.round((closedYTD.length / requestedThisYear.length) * 100) : null;
+  document.getElementById('kpiFulfillment').textContent = fulfillment===null ? '—' : `${fulfillment}%`;
+}
+function groupCount(rows, key){
+  const map = {};
+  rows.forEach(r=>{ const k = r[key] || 'Not specified'; map[k] = (map[k]||0)+1; });
+  return map;
+}
+function setCardAvailable(cardId, available, message){
+  const card = document.getElementById(cardId);
+  let overlay = card.querySelector('.card-unavailable');
+  const holder = card.querySelector('.chart-holder');
+  if(available){ if(overlay) overlay.remove(); holder.style.display=''; }
+  else{
+    holder.style.display='none';
+    if(!overlay){ overlay = document.createElement('div'); overlay.className='card-unavailable'; card.appendChild(overlay); }
+    overlay.textContent = message || 'No data for this selection.';
+  }
+}
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+function renderBarChart(key, canvasId, cardId, map, color){
+  const names = Object.keys(map).sort((a,b)=>map[b]-map[a]);
+  if(!names.length){ setCardAvailable(cardId,false); destroyChart(key); return; }
+  setCardAvailable(cardId,true);
+  destroyChart(key);
+  charts[key] = new Chart(document.getElementById(canvasId), {
+    type:'bar',
+    data:{ labels:names.map(n=>`${n} (${map[n]})`), datasets:[{ data:names.map(n=>map[n]), backgroundColor:color, borderRadius:5, maxBarThickness:26 }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true, ticks:{precision:0}} } }
+  });
+}
+function renderPieChart(key, canvasId, cardId, map){
+  const names = Object.keys(map).sort((a,b)=>map[b]-map[a]);
+  if(!names.length){ setCardAvailable(cardId,false); destroyChart(key); return; }
+  setCardAvailable(cardId,true);
+  destroyChart(key);
+  charts[key] = new Chart(document.getElementById(canvasId), {
+    type:'pie',
+    data:{ labels:names.map(n=>`${n} (${map[n]})`), datasets:[{ data:names.map(n=>map[n]), backgroundColor:names.map((_,i)=>CHART_COLORS[i%CHART_COLORS.length]), borderColor:'#fff', borderWidth:2 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{boxWidth:10, font:{size:11}}}} }
+  });
+}
+function renderTrendChart(filtered){
+  const byMonth = {};
+  filtered.forEach(r=>{ if(r.position_status==='Closed' && r.hiring_date){ const d=new Date(r.hiring_date); const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); byMonth[k]=(byMonth[k]||0)+1; } });
+  const keys = Object.keys(byMonth).sort();
+  if(!keys.length){ setCardAvailable('card-trend',false); destroyChart('trend'); return; }
+  setCardAvailable('card-trend',true);
+  destroyChart('trend');
+  charts.trend = new Chart(document.getElementById('chartTrend'), {
+    type:'line',
+    data:{ labels:keys.map(k=>{ const [y,m]=k.split('-'); return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'short',year:'2-digit'}); }),
+      datasets:[{ data:keys.map(k=>byMonth[k]), borderColor:'#FCAF17', backgroundColor:'rgba(252,175,23,0.15)', fill:true, tension:0.3, pointBackgroundColor:'#FCAF17', pointRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+  });
+}
+function renderQuarterChart(filtered){
+  const requestedByQuarter=[0,0,0,0], closedByQuarter=[0,0,0,0];
+  filtered.forEach(r=>{
+    if(r.job_opening_date){ const d=new Date(r.job_opening_date); if(d.getFullYear()===selectedYear) requestedByQuarter[Math.floor(d.getMonth()/3)]++; }
+    if(r.position_status==='Closed' && r.hiring_date){ const d=new Date(r.hiring_date); if(d.getFullYear()===selectedYear) closedByQuarter[Math.floor(d.getMonth()/3)]++; }
+  });
+  setCardAvailable('card-quartercompare', true);
+  destroyChart('quarterCompare');
+  charts.quarterCompare = new Chart(document.getElementById('chartQuarterCompare'), {
+    type:'bar',
+    data:{ labels:['Q1','Q2','Q3','Q4'], datasets:[
+      { label:'Requested', data:requestedByQuarter, backgroundColor:'#7FA8D9', borderRadius:4, maxBarThickness:34 },
+      { label:'Closed', data:closedByQuarter, backgroundColor:'#065BAB', borderRadius:4, maxBarThickness:34 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{boxWidth:10, font:{size:11}}}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+  });
+  document.getElementById('quarterCompareHint').textContent = `Both counts are real for ${selectedYear} — requested from Job Opening Date, closed from Hiring Date.`;
+}
+
+/* ====================== PRINT ====================== */
+const PRINT_IMG_ID = { dept:'printImgByDept', need:'printImgNeed', trend:'printImgTrend', hiresByDept:'printImgHiresByDept', hiredNeed:'printImgHiredNeed', quarterCompare:'printImgQuarterCompare' };
+async function prepareChartSnapshotsForPrint(){
+  const jobs = Object.entries(charts).map(async ([key, c]) => {
+    if(!c) return;
+    const img = document.getElementById(PRINT_IMG_ID[key]);
+    if(!img) return;
+    try{ img.src = c.toBase64Image('image/png', 1); if(img.decode) await img.decode(); }catch(e){}
+  });
+  await Promise.all(jobs);
+}
+document.getElementById('printBtn').addEventListener('click', async ()=>{
+  await prepareChartSnapshotsForPrint();
+  window.print();
+});
+
+/* ====================== TOAST ====================== */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2600);
+}
+
+init();
+</script>
+</body>
+</html>

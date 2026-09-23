@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Recruiter KPIs</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+  .kpi-card, .chart-card, .risk-card{animation:fadeInUp .45s ease both;transition:box-shadow .2s ease, transform .2s ease;}
+  .kpi-grid .kpi-card:nth-child(1){animation-delay:.02s;}
+  .kpi-grid .kpi-card:nth-child(2){animation-delay:.08s;}
+  .kpi-grid .kpi-card:nth-child(3){animation-delay:.14s;}
+  .kpi-grid .kpi-card:nth-child(4){animation-delay:.2s;}
+  .kpi-grid .kpi-card:nth-child(5){animation-delay:.26s;}
+  .kpi-card:hover, .chart-card:hover{box-shadow:0 6px 16px rgba(0,0,0,0.06);transform:translateY(-1px);}
+
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  header h1 .hg-divider{color:var(--gold);font-weight:400;margin:0 2px;}
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  select.btn-ghost{cursor:pointer;}
+  select.btn-ghost option{color:#1a1a1a;}
+
+  main{max-width:1320px;margin:0 auto;padding:24px;}
+  .section-title{font-size:15px;font-weight:700;color:var(--charcoal);margin:26px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+  .section-title:first-child{margin-top:0;}
+  .chip{width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block;}
+  .section-title.red .chip{background:var(--red);}
+
+  .filter-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;}
+  .filter-group{display:flex;flex-direction:column;gap:5px;min-width:170px;}
+  .filter-group label{font-size:11.5px;font-weight:600;color:var(--text-mute);}
+  .filter-group select{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+  .kpi-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:var(--radius);padding:16px 18px;}
+  .kpi-card.gold{border-left-color:var(--gold);}
+  .kpi-card.charcoal{border-left-color:var(--charcoal);}
+  .kpi-card.red{border-left-color:var(--red);}
+  .kpi-label{font-size:12px;color:var(--text-mute);margin-bottom:6px;}
+  .kpi-value{font-size:26px;font-weight:700;color:var(--charcoal);line-height:1;}
+  .kpi-foot{font-size:11px;color:var(--text-mute);margin-top:6px;}
+
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;}
+  .chart-card h3{margin:0 0 2px;font-size:14.5px;}
+  .chart-card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--text-mute);}
+  .chart-holder{position:relative;height:230px;}
+  .chart-holder canvas{width:100% !important;height:100% !important;}
+  .card-unavailable{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-mute);font-size:12.5px;text-align:center;padding:20px;}
+
+  .leader-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .leader-card table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .leader-card th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.02em;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .leader-card td{padding:10px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  .leader-card tr:last-child td{border-bottom:none;}
+  .leader-card tr:hover td{background:#fafafa;}
+  .rank-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f4f4f5;color:var(--text-mute);font-size:11px;font-weight:700;}
+  .rank-badge.top{background:var(--gold);color:#fff;}
+
+  @media (max-width:1050px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .chart-grid{grid-template-columns:1fr;}
+  }
+  footer{text-align:center;font-size:11.5px;color:var(--text-mute);padding:30px 20px 10px;}
+  #loginScreen{
+    max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);padding:32px 30px;
+  }
+  #loginScreen h2{margin:0 0 6px;font-size:19px;}
+  #loginScreen p{margin:0 0 20px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
+  #loginScreen .btn{width:100%;padding:11px;font-size:14px;background:var(--blue);color:#fff;}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+  <h2>Recruiter KPIs</h2>
+  <p>Sign in with your Intercom Enterprises account.</p>
+  <label for="loginEmail">Email</label>
+  <input type="text" id="loginEmail" autocomplete="username">
+  <label for="loginPassword">Password</label>
+  <input type="password" id="loginPassword" autocomplete="current-password">
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid <span class="hg-divider">·</span> Recruiter KPIs<span>Intercom Enterprises — Talent Acquisition performance</span></h1>
+    </div>
+    <div class="header-actions">
+      <select id="yearSelect" class="btn-ghost"></select>
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
+      <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
+      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
+      <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
+      <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="section-title"><span class="chip"></span>Filter</div>
+    <div class="filter-card">
+      <div class="filter-group">
+        <label>Recruiter / TA Owner</label>
+        <select id="f-owner"><option value="">Everyone</option></select>
+      </div>
+    </div>
+
+    <div class="section-title"><span class="chip"></span>Overview</div>
+    <div class="kpi-grid">
+      <div class="kpi-card charcoal">
+        <div class="kpi-label">Total requisitions (YTD)</div>
+        <div class="kpi-value" id="kpiTotal">—</div>
+        <div class="kpi-foot">Positions opened this year</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Open requisitions now</div>
+        <div class="kpi-value" id="kpiOpenNow">—</div>
+        <div class="kpi-foot">Approved / Open / Interviewing / Offer</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg. requisition age</div>
+        <div class="kpi-value" id="kpiAge">—</div>
+        <div class="kpi-foot">Days open, currently-open positions</div>
+      </div>
+      <div class="kpi-card gold">
+        <div class="kpi-label">Avg. time-to-fill (YTD)</div>
+        <div class="kpi-value" id="kpiTTF">—</div>
+        <div class="kpi-foot">Job Opening → Hiring Date, closed this year</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Offer acceptance rate</div>
+        <div class="kpi-value" id="kpiOfferRate">—</div>
+        <div class="kpi-foot" id="kpiOfferFoot">Of offers with a recorded outcome</div>
+      </div>
+    </div>
+
+    <div class="section-title red"><span class="chip"></span>Leaderboard</div>
+    <div class="leader-card">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Recruiter</th><th>Open reqs</th><th>Closed YTD</th><th>Avg time-to-fill</th><th>Offer accept %</th><th>1-yr retention %</th></tr>
+        </thead>
+        <tbody id="leaderTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title"><span class="chip"></span>Where the work is</div>
+    <div class="chart-grid">
+      <div class="chart-card" id="card-openByOwner">
+        <h3>Open requisitions per recruiter</h3>
+        <p class="hint">Current pipeline load, by TA Owner</p>
+        <div class="chart-holder"><canvas id="chartOpenByOwner"></canvas></div>
+      </div>
+      <div class="chart-card" id="card-ageDist">
+        <h3>Requisition age distribution</h3>
+        <p class="hint">How long currently-open positions have been open, bucketed</p>
+        <div class="chart-holder"><canvas id="chartAgeDist"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-top:14px;">
+      <div class="chart-card" id="card-offerByOwner">
+        <h3>Offer acceptance rate by recruiter</h3>
+        <p class="hint">% of recorded offer outcomes that were Accepted</p>
+        <div class="chart-holder"><canvas id="chartOfferByOwner"></canvas></div>
+      </div>
+      <div class="chart-card" id="card-retentionByOwner">
+        <h3>1-year retention by recruiter</h3>
+        <p class="hint">% of hires (due for review) still employed at 1 year</p>
+        <div class="chart-holder"><canvas id="chartRetentionByOwner"></canvas></div>
+      </div>
+    </div>
+  </main>
+  <footer>HireGrid — Intercom Enterprises — internal use only. Data reflects live Manpower Plan entries.</footer>
+</div>
+
+<script>
+/* ====================== CONFIG ====================== */
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const OPEN_PIPELINE_STATUSES = ['Approved','Open','Interviewing','Offer'];
+const CHART_COLORS = ['#065BAB','#ED1C24','#FCAF17','#383839','#7FA8D9','#F2A6A9','#FCD98B','#9a9a9c'];
+
+/* ====================== STATE ====================== */
+let currentUser = null;
+let ALL_ROWS = [];
+let PROFILES = [];
+let PROFILES_BY_ID = {};
+let selectedYear = new Date().getFullYear();
+let charts = {};
+
+/* ====================== AUTH ====================== */
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  currentUser = profile;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = currentUser.full_name;
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[currentUser.role] || currentUser.role;
+  if(currentUser.role === 'admin'){
+    document.getElementById('adminLink').style.display = '';
+    document.getElementById('teamLink').style.display = '';
+  }
+  await loadData();
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+/* ====================== DATA ====================== */
+async function loadData(){
+  const [{ data: rows, error: rowsErr }, { data: profiles, error: profErr }] = await Promise.all([
+    sb.from('manpower_plan').select('*'),
+    sb.from('profiles').select('*')
+  ]);
+  if(rowsErr){ showToast('Could not load positions: ' + rowsErr.message); return; }
+  ALL_ROWS = rows || [];
+  PROFILES = profiles || [];
+  PROFILES_BY_ID = {};
+  PROFILES.forEach(p=>{ PROFILES_BY_ID[p.id] = p.full_name; });
+  populateYearSelect();
+  populateOwnerSelect();
+  render();
+}
+function populateYearSelect(){
+  const years = uniqueSorted(ALL_ROWS.flatMap(r=>[r.job_opening_date, r.hiring_date]).filter(Boolean).map(d=>new Date(d).getFullYear()));
+  if(!years.length) years.push(new Date().getFullYear());
+  years.sort((a,b)=>b-a);
+  const sel = document.getElementById('yearSelect');
+  const prev = selectedYear;
+  sel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  selectedYear = years.includes(prev) ? prev : years[0];
+  sel.value = String(selectedYear);
+}
+function populateOwnerSelect(){
+  const sel = document.getElementById('f-owner');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Everyone</option>' + PROFILES
+    .filter(p=>ALL_ROWS.some(r=>r.ta_owner===p.id))
+    .map(p=>`<option value="${p.id}">${p.full_name}</option>`).join('');
+  if(PROFILES.some(p=>p.id===current)) sel.value = current;
+}
+function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
+function daysBetween(a,b){ return Math.floor((a-b)/(1000*60*60*24)); }
+
+document.getElementById('yearSelect').addEventListener('change', function(){ selectedYear = parseInt(this.value); render(); });
+document.getElementById('f-owner').addEventListener('change', render);
+
+/* ====================== RENDER ====================== */
+function render(){
+  const ownerFilter = document.getElementById('f-owner').value;
+  const scoped = ownerFilter ? ALL_ROWS.filter(r=>r.ta_owner===ownerFilter) : ALL_ROWS;
+  const now = new Date();
+
+  const requestedThisYear = scoped.filter(r=>r.job_opening_date && new Date(r.job_opening_date).getFullYear()===selectedYear);
+  const openNow = scoped.filter(r=>OPEN_PIPELINE_STATUSES.includes(r.position_status));
+  const closedYTD = scoped.filter(r=>r.position_status==='Closed' && r.hiring_date && new Date(r.hiring_date).getFullYear()===selectedYear);
+
+  animateCountUp('kpiTotal', requestedThisYear.length);
+  animateCountUp('kpiOpenNow', openNow.length);
+
+  const ages = openNow.filter(r=>r.job_opening_date).map(r=>daysBetween(now, new Date(r.job_opening_date)));
+  const avgAge = ages.length ? Math.round(ages.reduce((a,b)=>a+b,0)/ages.length) : null;
+  document.getElementById('kpiAge').textContent = avgAge===null ? '—' : `${avgAge}d`;
+
+  const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.hiring_date);
+  const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.hiring_date), new Date(r.job_opening_date)));
+  const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0)/ttfDays.length) : null;
+  document.getElementById('kpiTTF').textContent = avgTTF===null ? '—' : `${avgTTF}d`;
+
+  const offersWithOutcome = scoped.filter(r=>r.offer_outcome === 'Accepted' || r.offer_outcome === 'Declined');
+  const accepted = offersWithOutcome.filter(r=>r.offer_outcome==='Accepted');
+  const offerRate = offersWithOutcome.length ? Math.round((accepted.length/offersWithOutcome.length)*100) : null;
+  document.getElementById('kpiOfferRate').textContent = offerRate===null ? '—' : `${offerRate}%`;
+  document.getElementById('kpiOfferFoot').textContent = offersWithOutcome.length ? `${offersWithOutcome.length} offers recorded` : 'No offer outcomes recorded yet';
+
+  renderLeaderboard();
+  renderOpenByOwnerChart();
+  renderAgeDistChart(openNow);
+  renderOfferByOwnerChart();
+  renderRetentionByOwnerChart();
+}
+
+function ownersInUse(){
+  return PROFILES.filter(p=>ALL_ROWS.some(r=>r.ta_owner===p.id));
+}
+
+function renderLeaderboard(){
+  const owners = ownersInUse();
+  const rows = owners.map(p=>{
+    const mine = ALL_ROWS.filter(r=>r.ta_owner===p.id);
+    const openReqs = mine.filter(r=>OPEN_PIPELINE_STATUSES.includes(r.position_status)).length;
+    const closedYTD = mine.filter(r=>r.position_status==='Closed' && r.hiring_date && new Date(r.hiring_date).getFullYear()===selectedYear);
+    const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.hiring_date);
+    const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.hiring_date), new Date(r.job_opening_date)));
+    const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0)/ttfDays.length) : null;
+    const offers = mine.filter(r=>r.offer_outcome==='Accepted'||r.offer_outcome==='Declined');
+    const offerRate = offers.length ? Math.round((offers.filter(r=>r.offer_outcome==='Accepted').length/offers.length)*100) : null;
+    const retentionRows = mine.filter(r=>r.retention_status==='Yes'||r.retention_status==='No');
+    const retentionRate = retentionRows.length ? Math.round((retentionRows.filter(r=>r.retention_status==='Yes').length/retentionRows.length)*100) : null;
+    return { name: p.full_name, openReqs, closedCount: closedYTD.length, avgTTF, offerRate, retentionRate };
+  }).sort((a,b)=>b.closedCount - a.closedCount);
+
+  const tbody = document.getElementById('leaderTableBody');
+  tbody.innerHTML = rows.map((r,i)=>`
+    <tr>
+      <td><span class="rank-badge ${i===0 && r.closedCount>0 ? 'top':''}">${i+1}</span></td>
+      <td>${r.name}</td>
+      <td>${r.openReqs}</td>
+      <td>${r.closedCount}</td>
+      <td>${r.avgTTF===null?'—':r.avgTTF+'d'}</td>
+      <td>${r.offerRate===null?'—':r.offerRate+'%'}</td>
+      <td>${r.retentionRate===null?'—':r.retentionRate+'%'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-mute);padding:24px;">No recruiters assigned to positions yet.</td></tr>';
+}
+
+function setCardAvailable(cardId, available, message){
+  const card = document.getElementById(cardId);
+  let overlay = card.querySelector('.card-unavailable');
+  const holder = card.querySelector('.chart-holder');
+  if(available){ if(overlay) overlay.remove(); holder.style.display=''; }
+  else{
+    holder.style.display='none';
+    if(!overlay){ overlay = document.createElement('div'); overlay.className='card-unavailable'; card.appendChild(overlay); }
+    overlay.textContent = message || 'No data for this selection.';
+  }
+}
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+function renderOpenByOwnerChart(){
+  const owners = ownersInUse();
+  const map = {};
+  owners.forEach(p=>{ map[p.full_name] = ALL_ROWS.filter(r=>r.ta_owner===p.id && OPEN_PIPELINE_STATUSES.includes(r.position_status)).length; });
+  const names = Object.keys(map).sort((a,b)=>map[b]-map[a]);
+  if(!names.length){ setCardAvailable('card-openByOwner', false); destroyChart('openByOwner'); return; }
+  setCardAvailable('card-openByOwner', true);
+  destroyChart('openByOwner');
+  charts.openByOwner = new Chart(document.getElementById('chartOpenByOwner'), {
+    type:'bar',
+    data:{ labels:names.map(n=>`${n} (${map[n]})`), datasets:[{ data:names.map(n=>map[n]), backgroundColor:'#065BAB', borderRadius:5, maxBarThickness:26 }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true, ticks:{precision:0}} } }
+  });
+}
+function renderAgeDistChart(openNow){
+  const now = new Date();
+  const buckets = { '0-7d':0, '8-14d':0, '15-30d':0, '31-60d':0, '60+ d':0 };
+  openNow.forEach(r=>{
+    if(!r.job_opening_date) return;
+    const age = daysBetween(now, new Date(r.job_opening_date));
+    if(age<=7) buckets['0-7d']++;
+    else if(age<=14) buckets['8-14d']++;
+    else if(age<=30) buckets['15-30d']++;
+    else if(age<=60) buckets['31-60d']++;
+    else buckets['60+ d']++;
+  });
+  const names = Object.keys(buckets);
+  const total = names.reduce((a,n)=>a+buckets[n],0);
+  if(!total){ setCardAvailable('card-ageDist', false); destroyChart('ageDist'); return; }
+  setCardAvailable('card-ageDist', true);
+  destroyChart('ageDist');
+  charts.ageDist = new Chart(document.getElementById('chartAgeDist'), {
+    type:'bar',
+    data:{ labels:names, datasets:[{ data:names.map(n=>buckets[n]), backgroundColor:'#FCAF17', borderRadius:5, maxBarThickness:34 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+  });
+}
+function renderOfferByOwnerChart(){
+  const owners = ownersInUse();
+  const names = [], values = [];
+  owners.forEach(p=>{
+    const offers = ALL_ROWS.filter(r=>r.ta_owner===p.id && (r.offer_outcome==='Accepted'||r.offer_outcome==='Declined'));
+    if(!offers.length) return;
+    names.push(p.full_name);
+    values.push(Math.round((offers.filter(r=>r.offer_outcome==='Accepted').length/offers.length)*100));
+  });
+  if(!names.length){ setCardAvailable('card-offerByOwner', false); destroyChart('offerByOwner'); return; }
+  setCardAvailable('card-offerByOwner', true);
+  destroyChart('offerByOwner');
+  charts.offerByOwner = new Chart(document.getElementById('chartOfferByOwner'), {
+    type:'bar',
+    data:{ labels:names, datasets:[{ data:values, backgroundColor:'#ED1C24', borderRadius:5, maxBarThickness:34 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, max:100, ticks:{callback:v=>v+'%'}} } }
+  });
+}
+function renderRetentionByOwnerChart(){
+  const owners = ownersInUse();
+  const names = [], values = [];
+  owners.forEach(p=>{
+    const rows = ALL_ROWS.filter(r=>r.ta_owner===p.id && (r.retention_status==='Yes'||r.retention_status==='No'));
+    if(!rows.length) return;
+    names.push(p.full_name);
+    values.push(Math.round((rows.filter(r=>r.retention_status==='Yes').length/rows.length)*100));
+  });
+  if(!names.length){ setCardAvailable('card-retentionByOwner', false); destroyChart('retentionByOwner'); return; }
+  setCardAvailable('card-retentionByOwner', true);
+  destroyChart('retentionByOwner');
+  charts.retentionByOwner = new Chart(document.getElementById('chartRetentionByOwner'), {
+    type:'bar',
+    data:{ labels:names, datasets:[{ data:values, backgroundColor:'#383839', borderRadius:5, maxBarThickness:34 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, max:100, ticks:{callback:v=>v+'%'}} } }
+  });
+}
+
+const _countUpFrom = {};
+function animateCountUp(elId, target){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  const from = _countUpFrom[elId] || 0;
+  _countUpFrom[elId] = target;
+  if(from === target){ el.textContent = target; return; }
+  const duration = 500;
+  const start = performance.now();
+  function step(now){
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = Math.round(from + (target - from) * eased);
+    if(t < 1) requestAnimationFrame(step); else el.textContent = target;
+  }
+  requestAnimationFrame(step);
+}
+
+/* ====================== TOAST ====================== */
+function showToast(msg){
+  console.warn(msg);
+}
+
+init();
+</script>
+</body>
+</html>
