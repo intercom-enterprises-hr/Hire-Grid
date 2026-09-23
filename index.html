@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HireGrid — Intercom Enterprises</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
+    --blue:#0056AA; --border:#e4e4e7; --card:#fff; --bg:#f7f7f8; --text:#26262a; --text-mute:#6b6b70;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
+  @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+  @keyframes floaty{0%,100%{transform:translateY(0) translateX(0);}50%{transform:translateY(-14px) translateX(6px);}}
+  @keyframes floaty2{0%,100%{transform:translateY(0) translateX(0) rotate(0deg);}50%{transform:translateY(12px) translateX(-8px) rotate(6deg);}}
+  @keyframes gradientShift{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+  @keyframes slideInLeft{from{opacity:0;transform:translateX(-18px);}to{opacity:1;transform:translateX(0);}}
+  @keyframes slideInRight{from{opacity:0;transform:translateX(18px);}to{opacity:1;transform:translateX(0);}}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
+  .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
+  .brand-logo{height:22px;width:auto;display:block;}
+  .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
+  .kpi-card, .chart-card, .module-card, .risk-card, .card{animation:fadeInUp .45s ease both;}
+  .kpi-grid .kpi-card:nth-child(1), .module-grid .module-card:nth-child(1){animation-delay:.02s;}
+  .kpi-grid .kpi-card:nth-child(2), .module-grid .module-card:nth-child(2){animation-delay:.08s;}
+  .kpi-grid .kpi-card:nth-child(3), .module-grid .module-card:nth-child(3){animation-delay:.14s;}
+  .kpi-grid .kpi-card:nth-child(4), .module-grid .module-card:nth-child(4){animation-delay:.2s;}
+  .module-grid .module-card:nth-child(5){animation-delay:.26s;}
+  .module-grid .module-card:nth-child(6){animation-delay:.32s;}
+  .kpi-card, .chart-card, .module-card:not(.disabled){transition:box-shadow .2s ease, transform .2s ease;}
+  .kpi-card:hover, .chart-card:hover{box-shadow:0 6px 16px rgba(0,0,0,0.06);transform:translateY(-1px);}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{
+    background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 2px 0 var(--gold);flex-wrap:wrap;gap:10px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header h1 span{display:block;font-size:11.5px;font-weight:400;color:#c9c9cb;margin-top:2px;}
+  .who{display:flex;align-items:center;gap:14px;font-size:13px;}
+  .who .role-badge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:3px 11px;font-size:11.5px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:9px 15px;cursor:pointer;border:none;}
+  .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.18);}
+  .btn-primary{background:var(--blue);color:#fff;}
+
+  main{max-width:1000px;margin:0 auto;padding:40px 24px;}
+  .intro{margin:0 0 28px;position:relative;}
+  .intro .tagline-pill{
+    display:inline-flex;align-items:center;gap:6px;background:linear-gradient(90deg,var(--red),var(--gold),var(--blue));
+    -webkit-background-clip:text;background-clip:text;color:transparent;font-weight:700;font-size:12.5px;
+    letter-spacing:.02em;margin-bottom:8px;background-size:200% auto;animation:gradientShift 6s ease infinite;
+  }
+  .intro h2{margin:0 0 6px;font-size:21px;color:var(--charcoal);}
+  .intro p{margin:0;font-size:13.5px;color:var(--text-mute);}
+
+  .module-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
+  .module-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:22px 24px;text-decoration:none;color:inherit;display:block;border-left:4px solid var(--blue);
+    transition:box-shadow .15s ease, transform .15s ease;
+  }
+  .module-card:not(.disabled):hover{box-shadow:0 6px 18px rgba(0,0,0,0.08);transform:translateY(-1px);}
+  .module-card.gold{border-left-color:var(--gold);}
+  .module-card.disabled{opacity:0.55;cursor:not-allowed;border-left-color:#c7c7ca;}
+  .module-icon{font-size:22px;margin-bottom:10px;display:block;}
+  .module-card h3{margin:0 0 6px;font-size:15.5px;color:var(--charcoal);}
+  .module-card p{margin:0;font-size:12.5px;color:var(--text-mute);line-height:1.5;}
+  .module-badge{
+    display:inline-block;margin-top:12px;font-size:11px;font-weight:700;text-transform:uppercase;
+    letter-spacing:0.03em;color:#a8a8ac;
+  }
+
+  @media (max-width:700px){ .module-grid{grid-template-columns:1fr;} }
+
+  /* ====================== LANDING / LOGIN ====================== */
+  #loginScreen{
+    min-height:100vh;display:grid;grid-template-columns:1.15fr 1fr;overflow:hidden;
+  }
+  .hero-panel{
+    position:relative;overflow:hidden;color:#fff;padding:56px 52px;display:flex;flex-direction:column;
+    justify-content:center;
+    background:linear-gradient(120deg, var(--charcoal) 0%, #2b2b2c 38%, var(--blue) 100%);
+    background-size:180% 180%;animation:gradientShift 14s ease infinite;
+  }
+  .hero-blob{position:absolute;border-radius:50%;filter:blur(2px);opacity:0.55;pointer-events:none;}
+  .hero-blob.b1{width:260px;height:260px;background:radial-gradient(circle at 30% 30%, var(--gold), transparent 70%);top:-60px;right:-40px;animation:floaty 9s ease-in-out infinite;}
+  .hero-blob.b2{width:200px;height:200px;background:radial-gradient(circle at 30% 30%, var(--red), transparent 70%);bottom:-40px;left:-30px;animation:floaty2 11s ease-in-out infinite;}
+  .hero-blob.b3{width:140px;height:140px;background:radial-gradient(circle at 30% 30%, var(--blue), transparent 70%);bottom:20%;right:8%;animation:floaty 7.5s ease-in-out infinite;}
+  .hero-content{position:relative;z-index:2;animation:slideInLeft .7s ease both;}
+  .hero-logo-chip{
+    background:#fff;border-radius:10px;padding:8px 14px;display:inline-flex;align-items:center;
+    margin-bottom:28px;animation:popIn .6s ease both;box-shadow:0 8px 24px rgba(0,0,0,0.25);
+  }
+  .hero-logo-chip img{height:26px;display:block;}
+  .hero-name{
+    font-size:44px;font-weight:800;margin:0 0 10px;letter-spacing:-.01em;line-height:1.05;
+    background:linear-gradient(90deg,#fff 0%, #fff 55%, var(--gold) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% auto;
+    animation:gradientShift 5s ease infinite;
+  }
+  .hero-slogan{font-size:16.5px;font-weight:600;color:#f0f0f2;margin:0 0 22px;max-width:420px;line-height:1.5;}
+  .hero-slogan .dot{color:var(--gold);margin:0 6px;}
+  .hero-sub{font-size:12.5px;color:#c9c9cb;margin:0;letter-spacing:.02em;text-transform:uppercase;font-weight:600;}
+  .hero-features{list-style:none;margin:30px 0 0;padding:0;display:flex;flex-direction:column;gap:10px;}
+  .hero-features li{display:flex;align-items:center;gap:10px;font-size:13px;color:#e4e4e7;animation:fadeInUp .5s ease both;}
+  .hero-features li:nth-child(1){animation-delay:.15s;}
+  .hero-features li:nth-child(2){animation-delay:.25s;}
+  .hero-features li:nth-child(3){animation-delay:.35s;}
+  .hero-features .dot-ico{width:7px;height:7px;border-radius:50%;background:var(--gold);flex:none;box-shadow:0 0 0 4px rgba(252,175,23,0.18);}
+
+  .login-panel{
+    background:var(--card);display:flex;align-items:center;justify-content:center;padding:40px 32px;
+  }
+  .login-card{max-width:360px;width:100%;animation:slideInRight .7s ease both;}
+  .login-card .login-logo{display:none;} /* logo already shown in hero panel on wide screens */
+  #loginScreen h2{margin:0 0 6px;font-size:20px;color:var(--charcoal);}
+  #loginScreen p{margin:0 0 22px;font-size:13px;color:var(--text-mute);}
+  #loginScreen label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--charcoal-soft);}
+  #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:11px 13px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;transition:border-color .15s ease, box-shadow .15s ease;}
+  #loginScreen input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(6,91,171,0.12);}
+  #loginScreen .btn{width:100%;padding:12px;font-size:14px;background:var(--blue);color:#fff;background-image:linear-gradient(90deg,var(--blue),#0a72d1);transition:transform .12s ease, box-shadow .12s ease;}
+  #loginScreen .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(6,91,171,0.3);}
+  #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+  footer{text-align:center;font-size:11.5px;color:var(--text-mute);padding:10px 20px 30px;}
+
+  @media (max-width:860px){
+    #loginScreen{grid-template-columns:1fr;}
+    .hero-panel{padding:40px 28px 32px;}
+    .hero-name{font-size:32px;}
+    .hero-features{display:none;}
+    .login-card .login-logo{display:block;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="hero-panel">
+    <div class="hero-blob b1"></div>
+    <div class="hero-blob b2"></div>
+    <div class="hero-blob b3"></div>
+    <div class="hero-content">
+      <div class="hero-logo-chip"><img src="logo.png" alt="Intercom Enterprises"></div>
+      <p class="hero-sub">Intercom Enterprises — Talent Acquisition</p>
+      <h1 class="hero-name">HireGrid</h1>
+      <p class="hero-slogan">Plan together.<span class="dot">·</span>Hire together.<span class="dot">·</span>Win together.</p>
+      <ul class="hero-features">
+        <li><span class="dot-ico"></span>One place to plan, request and approve every hire</li>
+        <li><span class="dot-ico"></span>Live dashboards and recruiter KPIs, always up to date</li>
+        <li><span class="dot-ico"></span>Built for HR, TA Leaders, Recruiters, BU Heads and Top Management together</li>
+      </ul>
+    </div>
+  </div>
+  <div class="login-panel">
+    <div class="login-card">
+      <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
+      <h2>Welcome to HireGrid</h2>
+      <p>Sign in with your Intercom Enterprises account.</p>
+      <label for="loginEmail">Email</label>
+      <input type="text" id="loginEmail" autocomplete="username">
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password">
+      <button class="btn" id="loginBtn">Sign in</button>
+      <div id="loginError"></div>
+    </div>
+  </div>
+</div>
+
+<div id="appScreen">
+  <header>
+    <div class="brand">
+      <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
+      <h1>HireGrid<span>Intercom Enterprises — Talent Acquisition</span></h1>
+    </div>
+    <div class="who">
+      <span><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
+      <button class="btn btn-ghost" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="intro">
+      <div class="tagline-pill">Plan together. Hire together. Win together.</div>
+      <h2>Welcome back, <span id="whoFirstName">—</span></h2>
+      <p>Pick where you want to go.</p>
+    </div>
+
+    <div class="module-grid">
+      <a href="manpower-plan.html" class="module-card" id="mpCard">
+        <span class="module-icon">📋</span>
+        <h3>Manpower Plan</h3>
+        <p>Create and track position requests through the full workflow — Requested to Closed — with bulk Excel upload.</p>
+      </a>
+
+      <a href="dashboard.html" class="module-card gold" id="dashCard">
+        <span class="module-icon">📊</span>
+        <h3>Top Management Dashboard</h3>
+        <p>Live pipeline, hires and closures by department and business need, with print/PDF export.</p>
+      </a>
+
+      <a href="recruiter-kpis.html" class="module-card" id="kpiCard">
+        <span class="module-icon">🎯</span>
+        <h3>Recruiter KPIs</h3>
+        <p>Per-recruiter performance — open load, requisition age, time-to-fill, offer acceptance, 1-year retention.</p>
+      </a>
+
+      <a href="achievements.html" class="module-card gold" id="achieveCard">
+        <span class="module-icon">🎉</span>
+        <h3>Celebrate Achievements</h3>
+        <p>Highlight closed hires and milestones across the team, plus shoutouts from leadership.</p>
+      </a>
+
+      <a href="admin.html" class="module-card" id="adminCard" style="display:none;border-left-color:var(--charcoal-soft);">
+        <span class="module-icon">⚙️</span>
+        <h3>Admin Settings</h3>
+        <p>Manage stalled-position alert thresholds, departments, and TA Leader / BU Head coverage.</p>
+      </a>
+
+      <a href="teammates.html" class="module-card" id="teamCard" style="display:none;border-left-color:var(--charcoal-soft);">
+        <span class="module-icon">👥</span>
+        <h3>Team</h3>
+        <p>Add new teammates and see who has access, right from the app.</p>
+      </a>
+    </div>
+  </main>
+  <footer>HireGrid — Intercom Enterprises — internal use only.</footer>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await loadCurrentUserAndApp(); } else { showLogin(); }
+}
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'grid';
+  document.getElementById('appScreen').style.display = 'none';
+}
+async function loadCurrentUserAndApp(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if(!user){ showLogin(); return; }
+  const { data:profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if(error || !profile){
+    document.getElementById('loginError').textContent = 'Signed in, but no profile row found — ask an admin to add one.';
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = profile.full_name;
+  document.getElementById('whoFirstName').textContent = (profile.full_name || '').split(' ')[0];
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[profile.role] || profile.role;
+
+  if(profile.role === 'admin'){
+    // Admins manage accounts & settings — recruitment modules aren't
+    // their job, so keep the hub focused on the two pages they need.
+    document.getElementById('adminCard').style.display = 'block';
+    document.getElementById('teamCard').style.display = 'block';
+    document.getElementById('mpCard').style.display = 'none';
+    document.getElementById('dashCard').style.display = 'none';
+    document.getElementById('kpiCard').style.display = 'none';
+    document.getElementById('achieveCard').style.display = 'none';
+  } else if(profile.role === 'top_management'){
+    // Top Management: Dashboard + final approval on Manpower Plan only.
+    document.getElementById('kpiCard').style.display = 'none';
+    document.getElementById('achieveCard').style.display = 'none';
+  }
+}
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await loadCurrentUserAndApp();
+});
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  showLogin();
+});
+
+init();
+</script>
+</body>
+</html>
