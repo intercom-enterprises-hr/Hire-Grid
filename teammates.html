@@ -127,6 +127,7 @@
             <option value="recruiter">Recruiter</option>
             <option value="bu_head">BU Head</option>
             <option value="top_management">Top Management</option>
+            <option value="company_vp">Company VP</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -161,6 +162,7 @@
             <option value="recruiter">Recruiter</option>
             <option value="bu_head">BU Head</option>
             <option value="top_management">Top Management</option>
+            <option value="company_vp">Company VP</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -194,7 +196,7 @@ const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
 
 let currentUser = null;
 let SESSION = null;

@@ -69,6 +69,16 @@
   .dept-row:last-child{border-bottom:none;}
   .dept-row .dept-name{font-size:13.5px;font-weight:600;color:var(--charcoal);}
 
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  .form-grid .full{grid-column:1/-1;}
+  .form-field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--charcoal-soft);}
+  .form-field input, .form-field select, .form-field textarea{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;}
+  .exception-row, .position-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #f0f0f2;flex-wrap:wrap;}
+  .exception-row:last-child, .position-row:last-child{border-bottom:none;}
+  .policy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;width:100%;}
+  .policy-grid label{font-size:11px;color:var(--text-mute);display:block;margin-bottom:2px;}
+  .policy-grid input{width:100%;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;}
+
   .coverage-block{padding:16px 0;border-bottom:1px solid #f0f0f2;}
   .coverage-block:last-child{border-bottom:none;}
   .coverage-block .person-name{font-size:14px;font-weight:700;color:var(--charcoal);margin-bottom:2px;}
@@ -188,6 +198,108 @@
       <div id="buHeadCoverage"></div>
       <div class="status-msg" id="buCoverageStatus" style="margin-top:6px;"></div>
     </div>
+
+    <div class="section-title">Divisions</div>
+    <div class="card">
+      <p class="hint">Top of the org hierarchy (Division &gt; Department &gt; Section / Cost Center). The abbreviation drives the Position ID format (MP_{Year}_{Abbrev}_{Serial}).</p>
+      <div id="divisionRows"></div>
+      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
+        <input type="text" id="newDivisionName" placeholder="Division name" style="flex:1;min-width:150px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <input type="text" id="newDivisionAbbrev" placeholder="Abbreviation (e.g. ES)" style="width:140px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <button class="btn btn-secondary" id="addDivisionBtn">Add division</button>
+      </div>
+      <div class="status-msg" id="divisionStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Department &rarr; Division assignment</div>
+    <div class="card">
+      <p class="hint">Every Department must belong to a Division for the Manpower Plan cascading dropdowns and Position ID generation to work.</p>
+      <div id="deptDivisionRows"></div>
+      <div class="status-msg" id="deptDivisionStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Sections &amp; Cost Centers</div>
+    <div class="card">
+      <p class="hint">Each Section and Cost Center belongs to one Department, and is offered in the Manpower Plan form once that Department is chosen.</p>
+      <div id="sectionCcRows"></div>
+      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
+        <select id="newSecCcDept" style="min-width:160px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"></select>
+        <input type="text" id="newSectionName" placeholder="New section name" style="flex:1;min-width:140px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <button class="btn btn-secondary" id="addSectionBtn">Add section</button>
+        <input type="text" id="newCcName" placeholder="New cost center name" style="flex:1;min-width:140px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <button class="btn btn-secondary" id="addCcBtn">Add cost center</button>
+      </div>
+      <div class="status-msg" id="sectionCcStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Branches / Locations</div>
+    <div class="card">
+      <p class="hint">Every branch has a country, which drives the salary calc's currency (EG&rarr;EGP, UAE&rarr;AED, KSA&rarr;SAR). Branch has no "Not in list" escape hatch (BR-18) — add it here first.</p>
+      <div id="branchRows"></div>
+      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
+        <input type="text" id="newBranchName" placeholder="Branch name" style="flex:1;min-width:150px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <select id="newBranchCountry" style="font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+          <option value="EG">EG</option><option value="UAE">UAE</option><option value="KSA">KSA</option>
+        </select>
+        <button class="btn btn-secondary" id="addBranchBtn">Add branch</button>
+      </div>
+      <div class="status-msg" id="branchStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Positions &amp; salary policy (§5.1.5)</div>
+    <div class="card">
+      <p class="hint">The master Position list, plus every per-position cost policy value the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs). Click a position to edit its policy values.</p>
+      <div id="positionRows"></div>
+      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
+        <input type="text" id="newPositionTitle" placeholder="New position title" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <button class="btn btn-secondary" id="addPositionBtn">Add position</button>
+      </div>
+      <div class="status-msg" id="positionStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Master Data Exceptions queue (BR-18)</div>
+    <div class="card">
+      <p class="hint">Every "Not in list?" free-text value submitters typed instead of picking from a dropdown. Add the real value to the matching master table above, then mark it resolved.</p>
+      <div id="exceptionRows"></div>
+      <div class="status-msg" id="exceptionStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Statutory Parameters (§5.1.5 Steps 1-2)</div>
+    <div class="card">
+      <p class="hint">Egypt gross-up constants (SIS min/max, SI rates, personal exemption, the full progressive tax bracket table), versioned by year. Edit the JSON directly — this feeds the live salary calc engine on the Manpower Plan page.</p>
+      <select id="statutoryRowSelect" style="margin-bottom:10px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"></select>
+      <textarea id="statutoryParamsJson" style="width:100%;min-height:220px;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
+      <div class="save-row">
+        <button class="btn btn-primary" id="saveStatutoryBtn">Save parameters</button>
+        <span class="status-msg" id="statutoryStatus"></span>
+      </div>
+    </div>
+
+    <div class="section-title">Cost Visibility Settings (BR-16)</div>
+    <div class="card">
+      <p class="hint">Who sees the full cost breakdown vs. just the Total Current Year Cost number. Head of HR can reassign this for any stakeholder at any time.</p>
+      <div id="costVisRows"></div>
+      <div class="save-row">
+        <button class="btn btn-primary" id="saveCostVisBtn">Save cost visibility</button>
+        <span class="status-msg" id="costVisStatus"></span>
+      </div>
+    </div>
+
+    <div class="section-title">Delegation (Head of HR / Admin only)</div>
+    <div class="card">
+      <p class="hint">Date-ranged delegation of approval authority. Once active, the delegate can act on every pending Manpower Plan line that would otherwise require the delegator, and every such action is logged as "Approved by [Delegate] on behalf of [Delegator]".</p>
+      <div id="delegationRows"></div>
+      <div class="form-grid" style="margin-top:14px;">
+        <div class="form-field"><label>Delegator</label><select id="newDelegatorId"></select></div>
+        <div class="form-field"><label>Delegate</label><select id="newDelegateId"></select></div>
+        <div class="form-field"><label>Starts on</label><input type="date" id="newDelegationStart"></div>
+        <div class="form-field"><label>Ends on</label><input type="date" id="newDelegationEnd"></div>
+      </div>
+      <div class="save-row">
+        <button class="btn btn-primary" id="addDelegationBtn">Add delegation</button>
+        <span class="status-msg" id="delegationStatus"></span>
+      </div>
+    </div>
   </main>
 
   <div id="notAuthorized" style="display:none;">
@@ -202,7 +314,7 @@ const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
 
 const STATUS_META = {
   Requested:    { desc: 'Waiting on Head of HR / TA Leader approval' },
@@ -246,6 +358,11 @@ async function loadCurrentUserAndApp(){
   if(canManage){
     await loadSettings();
     await loadPeopleAndDepartments();
+    await loadOrgHierarchy();
+    await loadExceptions();
+    await loadStatutory();
+    await loadCostVisibility();
+    await loadDelegations();
   }
 }
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
@@ -494,6 +611,325 @@ function renderBuHeadCoverage(){
     });
   });
 }
+
+/* ====================== ORG HIERARCHY: Divisions / Departments / Sections / Cost Centers / Branches / Positions ====================== */
+let DIVISIONS = [], SECTIONS = [], COST_CENTERS = [], BRANCHES = [], POSITIONS = [];
+const POLICY_FIELDS = [
+  'variable_salary_ratio','transportation_allowance','mobile_allowance','has_mobile_line_instead','mobile_line_company_cost',
+  'has_support_allowance','medical_insurance_monthly','life_insurance_annual','laptop_cost_annual','overhead_capex_annual','training_annual',
+  'housing_allowance','gosi_saudization_flat','flight_tickets_biannual','iqama_fees_annual','evisa_cost_3yr','medical_exam_cost_3yr',
+  'change_of_status_cost_3yr','contract_fees_3yr','employment_letter_cost_3yr','bank_account_opening_cost_3yr','other_current_year_cost_yearly','onboarding_one_time_cost'
+];
+
+async function loadOrgHierarchy(){
+  const [{data:divs},{data:secs},{data:ccs},{data:brs},{data:poss}] = await Promise.all([
+    sb.from('divisions').select('*').order('name'),
+    sb.from('sections').select('*').order('name'),
+    sb.from('cost_centers').select('*').order('name'),
+    sb.from('branches').select('*').order('name'),
+    sb.from('positions').select('*').order('title')
+  ]);
+  DIVISIONS = divs || []; SECTIONS = secs || []; COST_CENTERS = ccs || []; BRANCHES = brs || []; POSITIONS = poss || [];
+  renderDivisions();
+  renderDeptDivisionAssignment();
+  renderSectionsAndCostCenters();
+  renderBranches();
+  renderPositions();
+}
+
+function renderDivisions(){
+  const el = document.getElementById('divisionRows');
+  el.innerHTML = DIVISIONS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No divisions yet.</div>';
+  DIVISIONS.forEach(d=>{
+    const row = document.createElement('div'); row.className = 'dept-row';
+    row.innerHTML = `<div class="dept-name">${d.name} <span style="color:var(--text-mute);font-weight:400;">(${d.abbreviation||'—'})</span></div>
+      <button class="btn btn-danger btn-small" data-div-del="${d.id}">Remove</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-div-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    await sb.from('divisions').delete().eq('id', btn.dataset.divDel);
+    await loadOrgHierarchy();
+  }));
+}
+document.getElementById('addDivisionBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('newDivisionName').value.trim();
+  const abbreviation = document.getElementById('newDivisionAbbrev').value.trim();
+  const statusEl = document.getElementById('divisionStatus');
+  if(!name){ statusEl.textContent='Enter a division name.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('divisions').insert({ name, abbreviation: abbreviation || null });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Division added.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error){ document.getElementById('newDivisionName').value=''; document.getElementById('newDivisionAbbrev').value=''; await loadOrgHierarchy(); }
+});
+
+function renderDeptDivisionAssignment(){
+  const el = document.getElementById('deptDivisionRows');
+  el.innerHTML = DEPARTMENTS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No departments yet.</div>';
+  DEPARTMENTS.forEach(d=>{
+    const row = document.createElement('div'); row.className='dept-row';
+    const sel = document.createElement('select'); sel.dataset.deptId = d.id; sel.style.minWidth='180px';
+    sel.innerHTML = '<option value="">— No division —</option>' + DIVISIONS.map(dv=>`<option value="${dv.id}" ${dv.id===d.division_id?'selected':''}>${dv.name}</option>`).join('');
+    sel.addEventListener('change', async ()=>{
+      const statusEl = document.getElementById('deptDivisionStatus');
+      const { error } = await sb.from('departments').update({ division_id: sel.value || null }).eq('id', d.id);
+      statusEl.textContent = error ? ('Could not update: '+error.message) : 'Updated.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadOrgHierarchy();
+    });
+    row.innerHTML = `<div class="dept-name">${d.name}</div>`;
+    row.appendChild(sel);
+    el.appendChild(row);
+  });
+}
+
+function renderSectionsAndCostCenters(){
+  const deptSel = document.getElementById('newSecCcDept');
+  deptSel.innerHTML = DEPARTMENTS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  const el = document.getElementById('sectionCcRows');
+  el.innerHTML = '';
+  DEPARTMENTS.forEach(d=>{
+    const secs = SECTIONS.filter(s=>s.department_id===d.id);
+    const ccs = COST_CENTERS.filter(c=>c.department_id===d.id);
+    if(!secs.length && !ccs.length) return;
+    const block = document.createElement('div'); block.style.padding='10px 0'; block.style.borderBottom='1px solid #f0f0f2';
+    block.innerHTML = `<div class="dept-name" style="margin-bottom:6px;">${d.name}</div>
+      <div style="font-size:12px;color:var(--text-mute);">Sections: ${secs.map(s=>s.name).join(', ') || '—'}</div>
+      <div style="font-size:12px;color:var(--text-mute);">Cost Centers: ${ccs.map(c=>c.name).join(', ') || '—'}</div>`;
+    el.appendChild(block);
+  });
+}
+document.getElementById('addSectionBtn').addEventListener('click', async ()=>{
+  const department_id = Number(document.getElementById('newSecCcDept').value);
+  const name = document.getElementById('newSectionName').value.trim();
+  const statusEl = document.getElementById('sectionCcStatus');
+  if(!name || !department_id){ statusEl.textContent='Choose a department and enter a section name.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('sections').insert({ name, department_id });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Section added.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error){ document.getElementById('newSectionName').value=''; await loadOrgHierarchy(); }
+});
+document.getElementById('addCcBtn').addEventListener('click', async ()=>{
+  const department_id = Number(document.getElementById('newSecCcDept').value);
+  const name = document.getElementById('newCcName').value.trim();
+  const statusEl = document.getElementById('sectionCcStatus');
+  if(!name || !department_id){ statusEl.textContent='Choose a department and enter a cost center name.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('cost_centers').insert({ name, department_id });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Cost center added.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error){ document.getElementById('newCcName').value=''; await loadOrgHierarchy(); }
+});
+
+function renderBranches(){
+  const el = document.getElementById('branchRows');
+  el.innerHTML = BRANCHES.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No branches yet.</div>';
+  BRANCHES.forEach(b=>{
+    const row = document.createElement('div'); row.className='dept-row';
+    row.innerHTML = `<div class="dept-name">${b.name} <span style="color:var(--text-mute);font-weight:400;">(${b.country})</span></div>
+      <button class="btn btn-danger btn-small" data-branch-del="${b.id}">Remove</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-branch-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    await sb.from('branches').delete().eq('id', btn.dataset.branchDel);
+    await loadOrgHierarchy();
+  }));
+}
+document.getElementById('addBranchBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('newBranchName').value.trim();
+  const country = document.getElementById('newBranchCountry').value;
+  const statusEl = document.getElementById('branchStatus');
+  if(!name){ statusEl.textContent='Enter a branch name.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('branches').insert({ name, country });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Branch added.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error){ document.getElementById('newBranchName').value=''; await loadOrgHierarchy(); }
+});
+
+function renderPositions(){
+  const el = document.getElementById('positionRows');
+  el.innerHTML = POSITIONS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No positions yet.</div>';
+  POSITIONS.forEach(p=>{
+    const row = document.createElement('div'); row.className='position-row'; row.style.flexDirection='column'; row.style.alignItems='stretch';
+    const head = document.createElement('div'); head.style.display='flex'; head.style.justifyContent='space-between'; head.style.alignItems='center';
+    head.innerHTML = `<div class="dept-name">${p.title}</div>
+      <div><button class="btn btn-secondary btn-small" data-pos-toggle="${p.id}">Edit policy</button>
+      <button class="btn btn-danger btn-small" data-pos-del="${p.id}" style="margin-left:6px;">Remove</button></div>`;
+    row.appendChild(head);
+    const grid = document.createElement('div'); grid.className='policy-grid'; grid.id='policy-grid-'+p.id; grid.style.display='none';
+    POLICY_FIELDS.forEach(f=>{
+      const wrap = document.createElement('div');
+      const isBool = f==='has_mobile_line_instead' || f==='has_support_allowance';
+      if(f==='variable_salary_ratio'){
+        wrap.innerHTML = `<label>${f}</label><select data-pos-field="${f}" data-pos-id="${p.id}">
+          ${['none','10_90','20_80','30_70','40_60'].map(v=>`<option value="${v}" ${p[f]===v?'selected':''}>${v}</option>`).join('')}</select>`;
+      } else if(isBool){
+        wrap.innerHTML = `<label><input type="checkbox" data-pos-field="${f}" data-pos-id="${p.id}" ${p[f]?'checked':''}> ${f}</label>`;
+      } else {
+        wrap.innerHTML = `<label>${f}</label><input type="number" step="0.01" data-pos-field="${f}" data-pos-id="${p.id}" value="${p[f]!=null?p[f]:0}">`;
+      }
+      grid.appendChild(wrap);
+    });
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary btn-small'; saveBtn.style.marginTop='10px'; saveBtn.textContent = 'Save policy';
+    saveBtn.addEventListener('click', async ()=>{
+      const updates = {};
+      grid.querySelectorAll('[data-pos-field]').forEach(input=>{
+        const f = input.dataset.posField;
+        updates[f] = input.type==='checkbox' ? input.checked : (input.tagName==='SELECT' ? input.value : parseFloat(input.value)||0);
+      });
+      const statusEl = document.getElementById('positionStatus');
+      const { error } = await sb.from('positions').update(updates).eq('id', p.id);
+      statusEl.textContent = error ? ('Could not save: '+error.message) : 'Policy saved for ' + p.title + '.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadOrgHierarchy();
+    });
+    grid.appendChild(saveBtn);
+    row.appendChild(grid);
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-pos-toggle]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const grid = document.getElementById('policy-grid-'+btn.dataset.posToggle);
+    grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
+  }));
+  el.querySelectorAll('[data-pos-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    await sb.from('positions').delete().eq('id', btn.dataset.posDel);
+    await loadOrgHierarchy();
+  }));
+}
+document.getElementById('addPositionBtn').addEventListener('click', async ()=>{
+  const title = document.getElementById('newPositionTitle').value.trim();
+  const statusEl = document.getElementById('positionStatus');
+  if(!title){ statusEl.textContent='Enter a position title.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('positions').insert({ title });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Position added — click Edit policy to set its salary policy.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error){ document.getElementById('newPositionTitle').value=''; await loadOrgHierarchy(); }
+});
+
+/* ====================== MASTER DATA EXCEPTIONS QUEUE (BR-18) ====================== */
+let EXCEPTIONS = [];
+async function loadExceptions(){
+  const { data } = await sb.from('master_data_exceptions').select('*').order('created_at', { ascending:false });
+  EXCEPTIONS = data || [];
+  renderExceptions();
+}
+function renderExceptions(){
+  const el = document.getElementById('exceptionRows');
+  const open = EXCEPTIONS.filter(e=>!e.resolved);
+  el.innerHTML = open.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">Nothing waiting on review.</div>';
+  open.forEach(e=>{
+    const row = document.createElement('div'); row.className='exception-row';
+    row.innerHTML = `<div><b>${e.field_name}</b>: "${e.free_text_value}" <span style="color:var(--text-mute);font-size:11.5px;">(line #${e.manpower_plan_id})</span></div>
+      <button class="btn btn-secondary btn-small" data-resolve-id="${e.id}">Mark resolved</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-resolve-id]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    await sb.from('master_data_exceptions').update({ resolved: true }).eq('id', btn.dataset.resolveId);
+    await loadExceptions();
+  }));
+}
+
+/* ====================== STATUTORY PARAMETERS (§5.1.5) ====================== */
+let STATUTORY_ROWS = [];
+async function loadStatutory(){
+  const { data } = await sb.from('statutory_parameters').select('*').order('country').order('year', { ascending:false });
+  STATUTORY_ROWS = data || [];
+  const sel = document.getElementById('statutoryRowSelect');
+  sel.innerHTML = STATUTORY_ROWS.map(r=>`<option value="${r.id}">${r.country} ${r.year}</option>`).join('');
+  sel.onchange = renderStatutoryJson;
+  renderStatutoryJson();
+}
+function renderStatutoryJson(){
+  const sel = document.getElementById('statutoryRowSelect');
+  const row = STATUTORY_ROWS.find(r=>String(r.id)===sel.value) || STATUTORY_ROWS[0];
+  document.getElementById('statutoryParamsJson').value = row ? JSON.stringify(row.params, null, 2) : '';
+}
+document.getElementById('saveStatutoryBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('statutoryStatus');
+  const sel = document.getElementById('statutoryRowSelect');
+  const row = STATUTORY_ROWS.find(r=>String(r.id)===sel.value) || STATUTORY_ROWS[0];
+  if(!row){ statusEl.textContent='No row selected.'; statusEl.className='status-msg err'; return; }
+  let params;
+  try{ params = JSON.parse(document.getElementById('statutoryParamsJson').value); }
+  catch(e){ statusEl.textContent = 'Invalid JSON: ' + e.message; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('statutory_parameters').update({ params, updated_by: currentUser.id }).eq('id', row.id);
+  statusEl.textContent = error ? ('Could not save: '+error.message) : 'Saved — takes effect immediately on the Manpower Plan page.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error) await loadStatutory();
+});
+
+/* ====================== COST VISIBILITY SETTINGS (BR-16) ====================== */
+let COST_VIS_ROWS = [];
+const COST_VIS_ROLES = ['bu_head','recruiter','head_of_hr','top_management','company_vp','admin'];
+async function loadCostVisibility(){
+  const { data } = await sb.from('cost_visibility_settings').select('*');
+  COST_VIS_ROWS = data || [];
+  renderCostVisibility();
+}
+function renderCostVisibility(){
+  const el = document.getElementById('costVisRows');
+  el.innerHTML = '';
+  COST_VIS_ROLES.forEach(role=>{
+    const row = COST_VIS_ROWS.find(r=>r.role===role);
+    const level = row ? row.level : 'total_only';
+    const div = document.createElement('div'); div.className='dept-row';
+    div.innerHTML = `<div class="dept-name">${ROLE_LABELS[role]||role}</div>
+      <select data-visrole="${role}">
+        <option value="total_only" ${level==='total_only'?'selected':''}>Total Only</option>
+        <option value="full_breakdown" ${level==='full_breakdown'?'selected':''}>Full Breakdown + Export</option>
+      </select>`;
+    el.appendChild(div);
+  });
+}
+document.getElementById('saveCostVisBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('costVisStatus');
+  const updates = [...document.querySelectorAll('[data-visrole]')].map(sel=>({ role: sel.dataset.visrole, level: sel.value, updated_by: currentUser.id }));
+  const { error } = await sb.from('cost_visibility_settings').upsert(updates, { onConflict: 'role' });
+  statusEl.textContent = error ? ('Could not save: '+error.message) : 'Saved.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error) await loadCostVisibility();
+});
+
+/* ====================== DELEGATION (Head of HR / Admin only) ====================== */
+let DELEGATIONS = [];
+async function loadDelegations(){
+  const { data } = await sb.from('delegations').select('*').order('starts_on', { ascending:false });
+  DELEGATIONS = data || [];
+  renderDelegations();
+  const delegatorSel = document.getElementById('newDelegatorId');
+  const delegateSel = document.getElementById('newDelegateId');
+  const approverRoles = ['recruiter','bu_head','head_of_hr','top_management'];
+  const options = ALL_PROFILES.filter(p=>approverRoles.includes(p.role)).map(p=>`<option value="${p.id}">${p.full_name} (${ROLE_LABELS[p.role]})</option>`).join('');
+  delegatorSel.innerHTML = options;
+  delegateSel.innerHTML = ALL_PROFILES.map(p=>`<option value="${p.id}">${p.full_name} (${ROLE_LABELS[p.role]})</option>`).join('');
+}
+function renderDelegations(){
+  const el = document.getElementById('delegationRows');
+  el.innerHTML = DELEGATIONS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No delegations configured.</div>';
+  DELEGATIONS.forEach(d=>{
+    const delegator = ALL_PROFILES.find(p=>p.id===d.delegator_id);
+    const delegate = ALL_PROFILES.find(p=>p.id===d.delegate_id);
+    const row = document.createElement('div'); row.className='dept-row';
+    row.innerHTML = `<div class="dept-name">${delegator?delegator.full_name:'—'} &rarr; ${delegate?delegate.full_name:'—'} <span style="color:var(--text-mute);font-weight:400;">(${d.starts_on} to ${d.ends_on})</span></div>
+      <button class="btn btn-danger btn-small" data-del-delegation="${d.id}">Remove</button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-del-delegation]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    await sb.from('delegations').delete().eq('id', btn.dataset.delDelegation);
+    await loadDelegations();
+  }));
+}
+document.getElementById('addDelegationBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('delegationStatus');
+  const delegator_id = document.getElementById('newDelegatorId').value;
+  const delegate_id = document.getElementById('newDelegateId').value;
+  const starts_on = document.getElementById('newDelegationStart').value;
+  const ends_on = document.getElementById('newDelegationEnd').value;
+  if(!delegator_id || !delegate_id || !starts_on || !ends_on){ statusEl.textContent='Fill in delegator, delegate and both dates.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('delegations').insert({ delegator_id, delegate_id, starts_on, ends_on, created_by: currentUser.id });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Delegation added.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error) await loadDelegations();
+});
 
 init();
 </script>

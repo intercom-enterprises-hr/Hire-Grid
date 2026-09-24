@@ -6,6 +6,7 @@
 <title>HireGrid — Manpower Plan</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="manpower-plan-calc.js"></script>
 <style>
   :root{
     --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
@@ -14,7 +15,6 @@
   }
   *{box-sizing:border-box;}
   @keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-  @keyframes shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
   @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
   .brand{display:flex;align-items:center;gap:12px;}
   .brand-logo-chip{background:#fff;border-radius:8px;padding:4px 10px;display:flex;align-items:center;transition:transform .2s ease;animation:popIn .5s ease both;}
@@ -22,14 +22,6 @@
   .brand-logo{height:22px;width:auto;display:block;}
   .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
   .kpi-card, .chart-card, .module-card, .risk-card, .card{animation:fadeInUp .45s ease both;}
-  .kpi-grid .kpi-card:nth-child(1), .module-grid .module-card:nth-child(1){animation-delay:.02s;}
-  .kpi-grid .kpi-card:nth-child(2), .module-grid .module-card:nth-child(2){animation-delay:.08s;}
-  .kpi-grid .kpi-card:nth-child(3), .module-grid .module-card:nth-child(3){animation-delay:.14s;}
-  .kpi-grid .kpi-card:nth-child(4), .module-grid .module-card:nth-child(4){animation-delay:.2s;}
-  .module-grid .module-card:nth-child(5){animation-delay:.26s;}
-  .module-grid .module-card:nth-child(6){animation-delay:.32s;}
-  .kpi-card, .chart-card, .module-card:not(.disabled){transition:box-shadow .2s ease, transform .2s ease;}
-  .kpi-card:hover, .chart-card:hover{box-shadow:0 6px 16px rgba(0,0,0,0.06);transform:translateY(-1px);}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
   header{
     background:var(--charcoal);color:#fff;padding:14px 24px;display:flex;align-items:center;
@@ -49,10 +41,11 @@
   .btn-primary:hover{opacity:0.92;}
   .btn-secondary{background:#eee;color:var(--charcoal);}
   .btn-danger{background:var(--red);color:#fff;}
+  .btn-gold{background:var(--gold);color:#3a2a00;}
   .btn-small{padding:6px 11px;font-size:12px;}
   .btn:disabled{background:#e4e4e7;color:#a8a8ac;cursor:not-allowed;}
 
-  main{max-width:1280px;margin:0 auto;padding:24px;}
+  main{max-width:1400px;margin:0 auto;padding:24px;}
 
   #loginScreen{
     max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);
@@ -64,6 +57,11 @@
   #loginScreen input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;}
   #loginScreen .btn{width:100%;padding:11px;font-size:14px;}
   #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
+  #appScreen{display:none;}
+
+  .tab-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .tab-btn{font-family:inherit;font-size:13px;font-weight:600;padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:#fff;color:var(--text-mute);cursor:pointer;}
+  .tab-btn.active{background:var(--charcoal);color:#fff;border-color:var(--charcoal);}
 
   .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;}
   .toolbar input[type=text], .toolbar select{
@@ -77,23 +75,26 @@
   td{padding:10px 12px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
   tr:last-child td{border-bottom:none;}
   tr:hover td{background:#fafafa;}
-  .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;}
+  .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .status-Draft{background:#f4f4f5;color:#52525b;}
+  .status-Pending{background:#eef2ff;color:#4338ca;}
+  .status-Approved{background:#f0fdf4;color:#15803d;font-weight:700;}
+  .status-Rejected{background:#fef2f2;color:#b91c1c;}
+  .status-Returned{background:#fdf2f8;color:#9d174d;font-weight:700;}
+  .status-Deleted{background:#f4f4f5;color:#7f1d1d;}
   .status-Requested{background:#eef2ff;color:#4338ca;}
-  .status-Approved{background:#ecfeff;color:#0e7490;}
   .status-Open{background:#fff7ed;color:#c2410c;}
   .status-Interviewing{background:#fefce8;color:#a16207;}
   .status-Offer{background:#f0fdf4;color:#15803d;}
   .status-Closed{background:#f0fdf4;color:#166534;font-weight:700;}
   .status-On.Hold{background:#f4f4f5;color:#52525b;}
-  .status-Rejected{background:#fef2f2;color:#b91c1c;}
   .status-Cancelled{background:#fef2f2;color:#7f1d1d;}
-  .status-Sent.Back.for.Changes{background:#fdf2f8;color:#9d174d;font-weight:700;}
-  .approval-note-banner{grid-column:1/-1;background:#fdf2f8;border:1px solid #fbcfe8;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#9d174d;margin-bottom:4px;}
   .empty-state{padding:50px;text-align:center;color:var(--text-mute);font-size:13.5px;}
 
   .modal-overlay{position:fixed;inset:0;background:rgba(38,38,42,0.55);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
   .modal-overlay.show{display:flex;}
-  .modal{background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:88vh;overflow-y:auto;padding:26px 28px;}
+  .modal{background:#fff;border-radius:12px;max-width:820px;width:100%;max-height:90vh;overflow-y:auto;padding:26px 28px;}
+  .modal.narrow{max-width:480px;}
   .modal h2{margin:0 0 4px;font-size:17px;}
   .modal p.sub{margin:0 0 18px;font-size:12.5px;color:var(--text-mute);}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
@@ -104,9 +105,18 @@
   }
   .form-field input:disabled, .form-field select:disabled, .form-field textarea:disabled{background:#f4f4f5;color:#8b8b8f;}
   .form-field textarea{resize:vertical;min-height:56px;}
-  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;}
+  .not-in-list{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-mute);margin-top:4px;font-weight:500;}
+  .not-in-list input{width:auto;margin:0;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;flex-wrap:wrap;}
   .section-label{grid-column:1/-1;font-size:11.5px;font-weight:700;text-transform:uppercase;color:var(--text-mute);letter-spacing:0.03em;margin-top:6px;border-top:1px solid var(--border);padding-top:14px;}
   .section-label:first-child{border-top:none;margin-top:0;padding-top:0;}
+
+  .cost-total-only{background:#eef6ff;border:1px solid #cfe3f9;border-radius:10px;padding:16px 18px;font-size:14px;color:var(--charcoal);}
+  .cost-total-only b{font-size:20px;color:var(--blue);}
+  .breakdown-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px;}
+  .breakdown-table td{padding:5px 8px;border-bottom:1px solid #f0f0f2;white-space:normal;}
+  .breakdown-table tr.total td{font-weight:700;border-top:2px solid var(--border);background:#fafafa;}
+  .breakdown-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
 
   .toast{
     position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
@@ -117,7 +127,7 @@
   .status-msg{font-size:12.5px;margin-top:8px;}
   .status-msg.ok{color:var(--blue);}
   .status-msg.err{color:var(--red);}
-  #appScreen{display:none;}
+  .hint{font-size:11.5px;color:var(--text-mute);margin:0 0 10px;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -152,31 +162,74 @@
     </div>
   </header>
   <main>
-    <div class="toolbar">
-      <input type="text" id="searchBox" placeholder="Search position, code, employee…" style="min-width:220px;">
-      <select id="filterDivision"><option value="">All divisions</option></select>
-      <select id="filterDepartment"><option value="">All departments</option></select>
-      <select id="filterStatus">
-        <option value="">All statuses</option>
-        <option>Requested</option><option>Approved</option><option>Open</option>
-        <option>Interviewing</option><option>Offer</option><option>Closed</option>
-        <option>On Hold</option><option>Rejected</option><option>Cancelled</option>
-      </select>
-      <div class="spacer"></div>
-      <button class="btn btn-secondary" id="uploadOpenBtn">Upload Excel</button>
-      <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
+    <div class="tab-row" id="tabRow">
+      <button class="tab-btn active" data-view="worklist" id="tabWorklist">Worklist</button>
+      <button class="tab-btn" data-view="tmsummary" id="tabTmSummary" style="display:none;">Top Management Summary</button>
+      <button class="tab-btn" data-view="deleted" id="tabDeleted" style="display:none;">Deleted Lines</button>
     </div>
-    <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Position Code</th><th>Position</th><th>Division</th><th>Department</th>
-            <th>Status</th><th>Requested By</th><th>TA Owner</th><th>Opening Date</th><th>Expected Joining</th><th>Employee</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-      <div class="empty-state" id="emptyState" style="display:none;">No positions match your filters yet.</div>
+
+    <!-- ====================== WORKLIST VIEW ====================== -->
+    <div id="worklistView">
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="Search position, code…" style="min-width:220px;">
+        <select id="filterDivision"><option value="">All divisions</option></select>
+        <select id="filterDepartment"><option value="">All departments</option></select>
+        <select id="filterStatus"><option value="">All statuses</option></select>
+        <div class="spacer"></div>
+        <button class="btn btn-secondary" id="exportExcelBtn" style="display:none;">Export to Excel</button>
+        <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr id="worklistHeaderRow">
+              <th>Position ID</th><th>Position</th><th>Division</th><th>Department</th>
+              <th>Status</th><th>Submitted By</th><th id="costColHeader">Total Current Year Cost</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyState" style="display:none;">No positions match your filters yet.</div>
+      </div>
+    </div>
+
+    <!-- ====================== TOP MANAGEMENT SUMMARY VIEW ====================== -->
+    <div id="tmSummaryView" style="display:none;">
+      <p class="hint">Bulk-review every line waiting on Top Management approval. Select rows and use Approve / Reject / Return — reject and return both require a reason (BR-09), and can be applied to several selected lines at once, or one at a time.</p>
+      <div class="toolbar">
+        <select id="tmFilterDepartment"><option value="">All departments</option></select>
+        <div class="spacer"></div>
+        <button class="btn btn-secondary btn-small" id="tmSelectAllBtn">Select All</button>
+        <button class="btn btn-secondary btn-small" id="tmClearSelectionBtn">Clear selection</button>
+        <button class="btn btn-primary btn-small" id="tmBulkApproveBtn">Approve selected</button>
+        <button class="btn btn-gold btn-small" id="tmBulkReturnBtn">Return selected</button>
+        <button class="btn btn-danger btn-small" id="tmBulkRejectBtn">Reject selected</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="tmSelectAllCheckbox"></th>
+              <th>Position ID</th><th>Position</th><th>Department</th><th>Section</th>
+              <th>Net Basic Monthly Salary</th><th>Total Current Year Cost</th>
+            </tr>
+          </thead>
+          <tbody id="tmTableBody"></tbody>
+        </table>
+        <div class="empty-state" id="tmEmptyState" style="display:none;">Nothing is waiting on Top Management right now.</div>
+      </div>
+    </div>
+
+    <!-- ====================== DELETED LINES VIEW (BR-21 audit log) ====================== -->
+    <div id="deletedView" style="display:none;">
+      <p class="hint">Lines the Hiring Manager deleted outright after they were Returned or Rejected back to them (BR-21). Kept here for audit only — not part of any normal worklist.</p>
+      <div class="card">
+        <table>
+          <thead><tr><th>Position</th><th>Department</th><th>Deleted On</th><th>Deleted By</th></tr></thead>
+          <tbody id="deletedTableBody"></tbody>
+        </table>
+        <div class="empty-state" id="deletedEmptyState" style="display:none;">No deleted lines.</div>
+      </div>
     </div>
   </main>
 </div>
@@ -185,26 +238,53 @@
 <div class="modal-overlay" id="positionModal">
   <div class="modal">
     <h2 id="modalTitle">Add position</h2>
-    <p class="sub" id="modalSub">Fields you can't edit are greyed out based on your role.</p>
+    <p class="sub" id="modalSub">Every field below is required unless marked optional.</p>
     <div class="form-grid" id="formGrid"></div>
+    <div class="section-label">Cost preview</div>
+    <div id="costPreview" style="grid-column:1/-1;"></div>
     <div class="status-msg" id="formStatus"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="cancelFormBtn">Cancel</button>
-      <button class="btn btn-primary" id="saveFormBtn">Save</button>
+      <button class="btn btn-primary" id="saveFormBtn">Save as Draft</button>
+      <button class="btn btn-gold" id="submitFormBtn" style="display:none;">Submit for Approval</button>
     </div>
   </div>
 </div>
 
-<!-- Bulk upload modal -->
-<div class="modal-overlay" id="uploadModal">
-  <div class="modal" style="max-width:480px;">
-    <h2>Upload Excel</h2>
-    <p class="sub">Column headers should match the Manpower Plan fields (e.g. "Position Code", "Position", "Division", "Job Opening Date"…). Unrecognized columns are ignored. Every row is added as a new position.</p>
-    <input type="file" id="uploadFileInput" accept=".xlsx,.xls">
-    <div class="status-msg" id="uploadStatus"></div>
+<!-- Single-row approve/reject/return action modal -->
+<div class="modal-overlay" id="actionModal">
+  <div class="modal narrow">
+    <h2 id="actionModalTitle">Review line</h2>
+    <p class="sub" id="actionModalSub"></p>
+    <div class="form-field full" id="actionReasonWrap" style="display:none;">
+      <label>Reason (required)</label>
+      <textarea id="actionReasonInput"></textarea>
+    </div>
+    <div class="status-msg" id="actionStatus"></div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" id="cancelUploadBtn">Cancel</button>
-      <button class="btn btn-primary" id="doUploadBtn">Upload</button>
+      <button class="btn btn-secondary" id="cancelActionBtn">Cancel</button>
+      <button class="btn btn-gold" id="actionReturnBtn">Return for Revision</button>
+      <button class="btn btn-danger" id="actionRejectBtn">Reject</button>
+      <button class="btn btn-primary" id="actionApproveBtn">Approve</button>
+      <button class="btn btn-danger" id="actionDeleteBtn" style="display:none;">Delete (BR-21)</button>
+      <button class="btn btn-gold" id="actionResubmitBtn" style="display:none;">Submit for Approval</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk action reason modal (Top Management summary) -->
+<div class="modal-overlay" id="bulkReasonModal">
+  <div class="modal narrow">
+    <h2 id="bulkReasonTitle">Reason</h2>
+    <p class="sub">One shared reason will be recorded against every selected line (BR-09).</p>
+    <div class="form-field full">
+      <label>Reason (required)</label>
+      <textarea id="bulkReasonInput"></textarea>
+    </div>
+    <div class="status-msg" id="bulkReasonStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelBulkReasonBtn">Cancel</button>
+      <button class="btn btn-primary" id="confirmBulkReasonBtn">Confirm</button>
     </div>
   </div>
 </div>
@@ -217,47 +297,32 @@ const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ====================== FIELD DEFINITIONS ======================
-   Drives both the add/edit form and the bulk-upload column matching.
-   editableBy: which roles can change this field on an EXISTING row.
-   creatableBy: which roles can set this field on a BRAND-NEW row —
-   falls back to editableBy when omitted. BU Heads only get
-   the business-case fields on create; everything else (cost center,
-   TA Owner, status, dates) stays with Head of HR / TA Leaders. */
-const STATUS_OPTIONS = ['Requested','Sent Back for Changes','Approved','Open','Interviewing','Offer','Closed','On Hold','Rejected','Cancelled'];
-const HM_CREATABLE = ['head_of_hr','ta_leader','bu_head'];
-const FIELDS = [
-  {key:'position_code', label:'Position Code', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'position_title', label:'Position', section:'Position', type:'text', required:true, editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
-  {key:'branch', label:'Branch', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'division', label:'Division', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'department', label:'Department', section:'Position', type:'department_select', required:true, editableBy:['head_of_hr','ta_leader'], creatableBy:HM_CREATABLE},
-  {key:'sub_department', label:'Sub Department', section:'Position', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'cost_center_name', label:'Cost Center Name', section:'Cost & project', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'cost_center_number', label:'Cost Center Number', section:'Cost & project', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'project_name', label:'Project Name', section:'Cost & project', type:'text', editableBy:['head_of_hr','ta_leader']},
-  {key:'business_need', label:'Business Need', section:'Why this position', type:'text', editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
-  {key:'detailed_business_need', label:'Detailed Business Need', section:'Why this position', type:'textarea', full:true, editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
-  {key:'job_opening_date', label:'Job Opening Date', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader']},
-  {key:'expected_candidate_joining_date', label:'Expected Candidate Joining Date', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader','bu_head'], creatableBy:HM_CREATABLE},
-  {key:'job_issuance_date', label:'Job Issuance Date (offer issued)', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader','recruiter']},
-  {key:'hiring_date', label:'Hiring Date', section:'Dates', type:'date', editableBy:['head_of_hr','ta_leader','recruiter']},
-  {key:'ta_owner', label:'TA Owner', section:'Ownership & status', type:'ta_owner_select', editableBy:['head_of_hr','ta_leader']},
-  {key:'position_status', label:'Position Status', section:'Ownership & status', type:'status_select', required:true, editableBy:['head_of_hr','ta_leader','recruiter'], creatableBy:['head_of_hr','ta_leader']},
-  {key:'approval_note', label:'Approval Note (visible to requester — required when sending back)', section:'Ownership & status', type:'textarea', full:true, editableBy:['head_of_hr','ta_leader']},
-  {key:'offer_outcome', label:'Offer Outcome', section:'Ownership & status', type:'select', options:['','Accepted','Declined'], editableBy:['head_of_hr','ta_leader','recruiter']},
-  {key:'employee_code', label:'Employee Code', section:'Once hired', type:'text', editableBy:['head_of_hr','ta_leader','recruiter']},
-  {key:'employee_name', label:'Employee Name', section:'Once hired', type:'text', editableBy:['head_of_hr','ta_leader','recruiter']},
-  {key:'employee_title', label:'Employee Title', section:'Once hired', type:'text', editableBy:['head_of_hr','ta_leader','recruiter']},
-  {key:'retention_status', label:'Still employed at 1 year?', section:'Once hired', type:'select', options:['','Not yet due','Yes','No'], editableBy:['head_of_hr','ta_leader','recruiter']},
-];
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
+const EMPLOYMENT_TYPES = ['Full Time','Part Time - Non Project Based'];
+const PRIORITIES = ['High','Medium','Low'];
+const BUSINESS_NEED_TYPES = ['New Position','Replacement'];
+const DEFAULT_COST_VISIBILITY = {bu_head:'total_only', recruiter:'full_breakdown', head_of_hr:'full_breakdown', top_management:'total_only', company_vp:'total_only', admin:'full_breakdown'};
 
 /* ====================== STATE ====================== */
-let currentUser = null;   // { id, full_name, role }
-let ALL_PROFILES = [];    // for TA Owner dropdown + name lookups
-let ALL_DEPARTMENTS = []; // fixed department list + TA Leader coverage
-let ALL_ROWS = [];        // current manpower_plan rows
-let editingRowId = null;  // null = adding a new row
+let currentUser = null;
+let ALL_PROFILES = [];
+let ALL_DIVISIONS = [];
+let ALL_DEPARTMENTS = [];
+let ALL_SECTIONS = [];
+let ALL_COST_CENTERS = [];
+let ALL_BRANCHES = [];
+let ALL_POSITIONS = [];
+let ALL_ROWS = [];
+let COST_VIS = [];              // cost_visibility_settings rows
+let STATUTORY_EG = null;        // latest EG statutory_parameters.params
+let MY_DELEGATED_ROLES = [];    // roles I can act as, via an active delegation
+let MY_BU_DEPARTMENTS = [];
+let editingRowId = null;
+let currentView = 'worklist';
+let tmSelectedIds = new Set();
+let pendingBulkAction = null;   // 'rejected' | 'returned' — awaiting a shared reason
+let actionRow = null;           // row currently open in the single-row action modal
+let actionKind = null;          // 'approve'|'reject'|'return'|'delete'|'resubmit'
 
 /* ====================== AUTH ====================== */
 async function init(){
@@ -288,22 +353,17 @@ async function loadCurrentUserAndApp(){
     document.getElementById('teamLink').style.display = '';
   }
   document.getElementById('addOpenBtn').style.display = canCreate() ? '' : 'none';
-  document.getElementById('uploadOpenBtn').style.display = canBulkUpload() ? '' : 'none';
-  await loadProfiles();
-  await loadDepartments();
-  await loadMyBuDepartments();
+  document.getElementById('tabTmSummary').style.display = currentUser.role === 'top_management' ? '' : 'none';
+  document.getElementById('tabDeleted').style.display = ['head_of_hr','admin'].includes(currentUser.role) ? '' : 'none';
+
+  await Promise.all([
+    loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadCostCenters(),
+    loadBranches(), loadPositions(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
+  ]);
+  document.getElementById('exportExcelBtn').style.display = canExport() ? '' : 'none';
   await loadRows();
 }
-let MY_BU_DEPARTMENTS = []; // department names this BU Head can submit requests for
-async function loadMyBuDepartments(){
-  if(currentUser.role !== 'bu_head'){ MY_BU_DEPARTMENTS = []; return; }
-  const { data } = await sb.from('bu_head_departments').select('department_id').eq('bu_head_id', currentUser.id);
-  const ids = (data || []).map(r=>r.department_id);
-  MY_BU_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id)).map(d=>d.name);
-}
-function roleLabel(role){
-  return {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[role] || role;
-}
+function roleLabel(role){ return ROLE_LABELS[role] || role; }
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
@@ -317,32 +377,53 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
   currentUser = null;
-  document.getElementById('loginEmail').value = '';
-  document.getElementById('loginPassword').value = '';
   showLogin();
 });
 
 /* ====================== DATA LOADING ====================== */
-async function loadProfiles(){
-  const { data, error } = await sb.from('profiles').select('*').order('full_name');
-  if(!error) ALL_PROFILES = data || [];
+async function loadProfiles(){ const { data } = await sb.from('profiles').select('*').order('full_name'); ALL_PROFILES = data || []; }
+async function loadDivisions(){ const { data } = await sb.from('divisions').select('*').order('name'); ALL_DIVISIONS = data || []; }
+async function loadDepartments(){ const { data } = await sb.from('departments').select('*').order('name'); ALL_DEPARTMENTS = data || []; }
+async function loadSections(){ const { data } = await sb.from('sections').select('*').order('name'); ALL_SECTIONS = data || []; }
+async function loadCostCenters(){ const { data } = await sb.from('cost_centers').select('*').order('name'); ALL_COST_CENTERS = data || []; }
+async function loadBranches(){ const { data } = await sb.from('branches').select('*').order('name'); ALL_BRANCHES = data || []; }
+async function loadPositions(){ const { data } = await sb.from('positions').select('*').order('title'); ALL_POSITIONS = data || []; }
+async function loadCostVisibility(){ const { data } = await sb.from('cost_visibility_settings').select('*'); COST_VIS = data || []; }
+async function loadStatutory(){
+  const { data } = await sb.from('statutory_parameters').select('*').eq('country','EG').order('year', { ascending:false });
+  STATUTORY_EG = (data && data[0] && data[0].params) || MPCalc.defaultStatutoryParams();
 }
-async function loadDepartments(){
-  const { data, error } = await sb.from('departments').select('*').order('name');
-  if(!error) ALL_DEPARTMENTS = data || [];
+async function loadMyDelegations(){
+  MY_DELEGATED_ROLES = [];
+  if(!currentUser) return;
+  const { data } = await sb.from('delegations').select('*').eq('delegate_id', currentUser.id);
+  const today = new Date().toISOString().slice(0,10);
+  const active = (data||[]).filter(d=> d.starts_on <= today && d.ends_on >= today);
+  for(const d of active){
+    const delegator = ALL_PROFILES.find(p=>p.id===d.delegator_id);
+    if(delegator) MY_DELEGATED_ROLES.push({ role: delegator.role, delegator_id: delegator.id, delegator_name: delegator.full_name });
+  }
+}
+async function loadMyBuDepartments(){
+  if(currentUser.role !== 'bu_head'){ MY_BU_DEPARTMENTS = []; return; }
+  const { data } = await sb.from('bu_head_departments').select('department_id').eq('bu_head_id', currentUser.id);
+  const ids = (data || []).map(r=>r.department_id);
+  MY_BU_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id));
 }
 async function loadRows(){
   const { data, error } = await sb.from('manpower_plan').select('*').order('created_at', { ascending:false });
   if(error){ showToast('Could not load positions: ' + error.message); return; }
   ALL_ROWS = data || [];
+  window.ALL_ROWS = ALL_ROWS; // exposed for tests / debugging — reflects the latest load each time
   populateFilterOptions();
-  renderTable();
+  renderCurrentView();
 }
 function populateFilterOptions(){
-  const divisions = uniqueSorted(ALL_ROWS.map(r=>r.division));
-  const departments = uniqueSorted(ALL_ROWS.map(r=>r.department));
-  fillSelect('filterDivision', divisions);
-  fillSelect('filterDepartment', departments);
+  fillSelect('filterDivision', uniqueSorted(ALL_ROWS.map(r=>r.division)));
+  fillSelect('filterDepartment', uniqueSorted(ALL_ROWS.map(r=>r.department)));
+  const statuses = uniqueSorted(ALL_ROWS.map(r=>r.status));
+  fillSelect('filterStatus', statuses);
+  fillSelect('tmFilterDepartment', uniqueSorted(ALL_ROWS.map(r=>r.department)));
 }
 function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
 function fillSelect(id, values){
@@ -355,31 +436,99 @@ function fillSelect(id, values){
   if(values.includes(current)) el.value = current;
 }
 
-/* ====================== TABLE ====================== */
-function profileName(id){
-  const p = ALL_PROFILES.find(p=>p.id===id);
-  return p ? p.full_name : '—';
+/* ====================== ROLE / PERMISSION HELPERS ====================== */
+function canCreate(){ return ['bu_head','recruiter','head_of_hr'].includes(currentUser.role); }
+function canExport(){ return ['recruiter','head_of_hr','top_management','admin'].includes(currentUser.role); } // BR-22 minimum
+function getCostVisibilityLevel(role){
+  const row = COST_VIS.find(r=>r.role===role);
+  return (row && row.level) || DEFAULT_COST_VISIBILITY[role] || 'total_only';
 }
-function canEditRow(row){
-  if(currentUser.role === 'head_of_hr' || currentUser.role === 'ta_leader') return true;
-  if(currentUser.role === 'recruiter') return row.ta_owner === currentUser.id;
-  if(currentUser.role === 'bu_head') return row.requested_by === currentUser.id && row.position_status === 'Sent Back for Changes';
-  return false;
+// BRD §5.1.3: a Recruiter's department scope = the union of their TA
+// Leader's covered departments (derived, no separate table needed).
+async function myRecruiterDepartmentIds(){
+  if(currentUser.role !== 'recruiter' || !currentUser.ta_leader_id) return null;
+  const { data } = await sb.from('ta_leader_departments').select('department_id').eq('ta_leader_id', currentUser.ta_leader_id);
+  return (data||[]).map(r=>r.department_id);
 }
-function canCreate(){ return ['head_of_hr','ta_leader','bu_head'].includes(currentUser.role); }
-function canBulkUpload(){ return currentUser.role === 'head_of_hr' || currentUser.role === 'ta_leader'; }
+// Who is REQUIRED to act on a row right now (role name), or null if
+// the row isn't in an active approval step (Draft/with-initiator/terminal).
+function requiredRoleFor(row){
+  const step = row.current_step;
+  const chain = row.approval_chain || [];
+  if(step == null || step < 0 || step >= chain.length) return null;
+  return chain[step].role;
+}
+// BR-15a enforced client-side too: never show/allow an action for the
+// row's own submitter, even if their role matches the required role.
+function canActOnRow(row){
+  if(!currentUser) return false;
+  if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) return false;
+  const required = requiredRoleFor(row);
+  if(!required) return false;
+  if(currentUser.role === required) return true;
+  return MY_DELEGATED_ROLES.some(d=>d.role === required);
+}
+function canResubmit(row){
+  // Draft, or Returned-to-initiator: current_step === -1, and I'm the submitter.
+  return row.current_step === -1 && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id) && row.status !== 'Rejected' && !row.deleted_at;
+}
+function canDelete(row){
+  // BR-21: Hiring Manager may delete outright once it's Returned or
+  // Rejected back to them.
+  return currentUser.role === 'bu_head'
+    && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id)
+    && (row.status === 'Returned for Revision' || row.status === 'Rejected')
+    && !row.deleted_at;
+}
+
+/* ====================== VIEW SWITCHING ====================== */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    document.getElementById('worklistView').style.display = currentView === 'worklist' ? '' : 'none';
+    document.getElementById('tmSummaryView').style.display = currentView === 'tmsummary' ? '' : 'none';
+    document.getElementById('deletedView').style.display = currentView === 'deleted' ? '' : 'none';
+    renderCurrentView();
+  });
+});
+function renderCurrentView(){
+  if(currentView === 'worklist') renderTable();
+  else if(currentView === 'tmsummary') renderTmSummary();
+  else renderDeletedTable();
+}
+
+/* ====================== WORKLIST TABLE ====================== */
+function profileName(id){ const p = ALL_PROFILES.find(p=>p.id===id); return p ? p.full_name : '—'; }
+function statusPillClass(status){
+  if(!status) return 'status-Draft';
+  if(status.startsWith('Pending')) return 'status-Pending';
+  if(status.startsWith('Returned')) return 'status-Returned';
+  return 'status-' + status.replace(/\s+/g,'.');
+}
+function fmtMoney(v, currency){
+  if(v == null || isNaN(v)) return '—';
+  return Math.round(v).toLocaleString() + ' ' + (currency||'');
+}
+function visibleRows(){
+  return ALL_ROWS.filter(r=>!r.deleted_at);
+}
 function renderTable(){
   const search = document.getElementById('searchBox').value.trim().toLowerCase();
   const fDiv = document.getElementById('filterDivision').value;
   const fDept = document.getElementById('filterDepartment').value;
   const fStatus = document.getElementById('filterStatus').value;
 
-  const rows = ALL_ROWS.filter(r=>{
+  const level = getCostVisibilityLevel(currentUser.role);
+  document.getElementById('costColHeader').textContent = level === 'total_only' ? 'Total Current Year Cost' : 'Total Current Year Cost (full breakdown on row)';
+
+  const rows = visibleRows().filter(r=>{
     if(fDiv && r.division !== fDiv) return false;
     if(fDept && r.department !== fDept) return false;
-    if(fStatus && r.position_status !== fStatus) return false;
+    if(fStatus && r.status !== fStatus) return false;
     if(search){
-      const hay = [r.position_code, r.position_title, r.employee_name, r.employee_code].filter(Boolean).join(' ').toLowerCase();
+      const hay = [r.position_code, r.position_title].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
     }
     return true;
@@ -391,24 +540,40 @@ function renderTable(){
 
   rows.forEach(r=>{
     const tr = document.createElement('tr');
-    const statusClass = 'status-' + r.position_status.replace(/\s+/g,'.');
+    const costCell = level === 'total_only'
+      ? fmtMoney(r.total_current_year_cost, r.currency)
+      : fmtMoney(r.total_current_year_cost, r.currency) + (r.net_basic_monthly_salary ? ` <span style="color:var(--text-mute)">(net ${fmtMoney(r.net_basic_monthly_salary, r.currency)})</span>` : '');
     tr.innerHTML =
       '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
       '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
       '<td>'+escapeHtml(r.division||'—')+'</td>'+
       '<td>'+escapeHtml(r.department||'—')+'</td>'+
-      '<td><span class="status-pill '+statusClass+'">'+escapeHtml(r.position_status)+'</span></td>'+
-      '<td>'+escapeHtml(profileName(r.requested_by))+'</td>'+
-      '<td>'+escapeHtml(profileName(r.ta_owner))+'</td>'+
-      '<td>'+escapeHtml(r.job_opening_date||'—')+'</td>'+
-      '<td>'+escapeHtml(r.expected_candidate_joining_date||'—')+'</td>'+
-      '<td>'+escapeHtml(r.employee_name||'—')+'</td>'+
+      '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
+      '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
+      '<td>'+costCell+'</td>'+
       '<td></td>';
     const actionCell = tr.lastElementChild;
-    if(canEditRow(r)){
+    if(canActOnRow(r)){
       const btn = document.createElement('button');
-      btn.className = 'btn btn-secondary btn-small';
-      btn.textContent = 'Edit';
+      btn.className = 'btn btn-primary btn-small'; btn.textContent = 'Review';
+      btn.addEventListener('click', ()=> openActionModal(r));
+      actionCell.appendChild(btn);
+    }
+    if(canResubmit(r)){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-gold btn-small'; btn.style.marginLeft='6px'; btn.textContent = r.current_step === -1 && r.status === 'Draft' ? 'Submit' : 'Resubmit';
+      btn.addEventListener('click', ()=> openActionModal(r));
+      actionCell.appendChild(btn);
+    }
+    if(canDelete(r)){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-danger btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Delete';
+      btn.addEventListener('click', ()=> openActionModal(r));
+      actionCell.appendChild(btn);
+    }
+    if((r.requested_by === currentUser.id || r.submitted_by === currentUser.id) && (r.status === 'Draft')){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Edit';
       btn.addEventListener('click', ()=> openForm(r));
       actionCell.appendChild(btn);
     }
@@ -421,239 +586,603 @@ function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;
   document.getElementById(id).addEventListener('change', renderTable);
 });
 
-/* ====================== ADD / EDIT FORM ====================== */
+/* ====================== DELETED LINES VIEW (BR-21) ====================== */
+function renderDeletedTable(){
+  const rows = ALL_ROWS.filter(r=>r.deleted_at);
+  const tbody = document.getElementById('deletedTableBody');
+  tbody.innerHTML = '';
+  document.getElementById('deletedEmptyState').style.display = rows.length ? 'none' : 'block';
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
+      '<td>'+escapeHtml(r.department||'—')+'</td>'+
+      '<td>'+escapeHtml((r.deleted_at||'').slice(0,10))+'</td>'+
+      '<td>'+escapeHtml(profileName(r.deleted_by))+'</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+/* ====================== TOP MANAGEMENT SUMMARY VIEW (BR-08/09/10) ====================== */
+function tmPendingRows(){
+  const fDept = document.getElementById('tmFilterDepartment').value;
+  return visibleRows().filter(r=> requiredRoleFor(r) === 'top_management' && !MPCalc.isSelfApprovalBlocked(currentUser.id, r) && (!fDept || r.department === fDept));
+}
+function renderTmSummary(){
+  const rows = tmPendingRows();
+  const tbody = document.getElementById('tmTableBody');
+  tbody.innerHTML = '';
+  document.getElementById('tmEmptyState').style.display = rows.length ? 'none' : 'block';
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const checked = tmSelectedIds.has(r.id) ? 'checked' : '';
+    tr.innerHTML =
+      '<td><input type="checkbox" class="tm-select-row" data-id="'+r.id+'" '+checked+'></td>'+
+      '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
+      '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
+      '<td>'+escapeHtml(r.department||'—')+'</td>'+
+      '<td>'+escapeHtml(sectionName(r.section_id)||'—')+'</td>'+
+      '<td>'+fmtMoney(r.net_basic_monthly_salary, r.currency)+'</td>'+
+      '<td>'+fmtMoney(r.total_current_year_cost, r.currency)+'</td>';
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('.tm-select-row').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = Number(cb.dataset.id);
+      if(cb.checked) tmSelectedIds.add(id); else tmSelectedIds.delete(id);
+    });
+  });
+}
+function sectionName(id){ const s = ALL_SECTIONS.find(s=>s.id===id); return s ? s.name : null; }
+document.getElementById('tmFilterDepartment').addEventListener('change', renderTmSummary);
+document.getElementById('tmSelectAllBtn').addEventListener('click', ()=>{
+  tmPendingRows().forEach(r=>tmSelectedIds.add(r.id));
+  renderTmSummary();
+});
+document.getElementById('tmSelectAllCheckbox').addEventListener('change', (e)=>{
+  if(e.target.checked) tmPendingRows().forEach(r=>tmSelectedIds.add(r.id));
+  else tmSelectedIds.clear();
+  renderTmSummary();
+});
+document.getElementById('tmClearSelectionBtn').addEventListener('click', ()=>{ tmSelectedIds.clear(); renderTmSummary(); });
+
+document.getElementById('tmBulkApproveBtn').addEventListener('click', async ()=>{
+  const ids = [...tmSelectedIds];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(row) await applyAction(row, 'approved', null);
+  }
+  tmSelectedIds.clear();
+  showToast('Approved ' + ids.length + ' line(s).');
+  await loadRows();
+});
+document.getElementById('tmBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned'));
+document.getElementById('tmBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected'));
+
+function openBulkReasonModal(action){
+  if(!tmSelectedIds.size){ showToast('Select at least one line first.'); return; }
+  pendingBulkAction = action;
+  document.getElementById('bulkReasonTitle').textContent = action === 'rejected' ? 'Reject selected lines' : 'Return selected lines for revision';
+  document.getElementById('bulkReasonInput').value = '';
+  document.getElementById('bulkReasonStatus').textContent = '';
+  document.getElementById('bulkReasonModal').classList.add('show');
+}
+document.getElementById('cancelBulkReasonBtn').addEventListener('click', ()=> document.getElementById('bulkReasonModal').classList.remove('show'));
+document.getElementById('confirmBulkReasonBtn').addEventListener('click', async ()=>{
+  const reason = document.getElementById('bulkReasonInput').value.trim();
+  const statusEl = document.getElementById('bulkReasonStatus');
+  if(!reason){ statusEl.textContent = 'A reason is required (BR-09).'; statusEl.className='status-msg err'; return; }
+  const ids = [...tmSelectedIds];
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(row) await applyAction(row, pendingBulkAction, reason);
+  }
+  tmSelectedIds.clear();
+  document.getElementById('bulkReasonModal').classList.remove('show');
+  showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + ids.length + ' line(s).');
+  await loadRows();
+});
+
+/* ====================== SINGLE-ROW ACTION MODAL ====================== */
+function openActionModal(row){
+  actionRow = row;
+  document.getElementById('actionReasonInput').value = '';
+  document.getElementById('actionStatus').textContent = '';
+  document.getElementById('actionModalTitle').textContent = row.position_title || 'Position';
+  document.getElementById('actionModalSub').textContent = 'Status: ' + (row.status||'Draft') + (row.total_current_year_cost ? ' — Total Current Year Cost: ' + fmtMoney(row.total_current_year_cost, row.currency) : '');
+  const canAct = canActOnRow(row);
+  document.getElementById('actionApproveBtn').style.display = canAct ? '' : 'none';
+  document.getElementById('actionRejectBtn').style.display = canAct ? '' : 'none';
+  document.getElementById('actionReturnBtn').style.display = canAct ? '' : 'none';
+  document.getElementById('actionResubmitBtn').style.display = canResubmit(row) ? '' : 'none';
+  document.getElementById('actionDeleteBtn').style.display = canDelete(row) ? '' : 'none';
+  document.getElementById('actionReasonWrap').style.display = 'none';
+  document.getElementById('actionModal').classList.add('show');
+}
+document.getElementById('cancelActionBtn').addEventListener('click', ()=>{ document.getElementById('actionModal').classList.remove('show'); actionRow = null; });
+document.getElementById('actionApproveBtn').addEventListener('click', async ()=>{
+  await runSingleAction('approved', null);
+});
+document.getElementById('actionRejectBtn').addEventListener('click', ()=>{
+  document.getElementById('actionReasonWrap').style.display = '';
+  actionKind = 'rejected';
+});
+document.getElementById('actionReturnBtn').addEventListener('click', ()=>{
+  document.getElementById('actionReasonWrap').style.display = '';
+  actionKind = 'returned';
+});
+document.getElementById('actionResubmitBtn').addEventListener('click', async ()=>{
+  if(!actionRow) return;
+  await resubmitRow(actionRow);
+  document.getElementById('actionModal').classList.remove('show');
+  showToast('Submitted for approval.');
+  await loadRows();
+});
+document.getElementById('actionDeleteBtn').addEventListener('click', async ()=>{
+  if(!actionRow) return;
+  await deleteRow(actionRow);
+  document.getElementById('actionModal').classList.remove('show');
+  showToast('Line deleted — logged for audit.');
+  await loadRows();
+});
+async function runSingleAction(kind, reasonOverride){
+  if(!actionRow) return;
+  const statusEl = document.getElementById('actionStatus');
+  let reason = reasonOverride;
+  if(kind !== 'approved'){
+    reason = document.getElementById('actionReasonInput').value.trim();
+    if(!reason){ statusEl.textContent = 'A reason is required (BR-09).'; statusEl.className = 'status-msg err'; return; }
+  }
+  if(!canActOnRow(actionRow)){
+    statusEl.textContent = 'You cannot act on this line (BR-15a — you may have submitted it yourself, or already acted on it).';
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  await applyAction(actionRow, kind, reason);
+  document.getElementById('actionModal').classList.remove('show');
+  showToast('Line ' + kind + '.');
+  await loadRows();
+}
+// Reject/Return is a two-step click: the first click (wired above)
+// reveals the mandatory reason textarea; this second listener fires
+// the actual action once that textarea is visible and filled in.
+function wireConfirmOnSecondClick(btnId, kind){
+  const btn = document.getElementById(btnId);
+  btn.addEventListener('click', async ()=>{
+    const wrap = document.getElementById('actionReasonWrap');
+    if(wrap.style.display !== 'none' && document.getElementById('actionReasonInput').value.trim()){
+      await runSingleAction(kind, null);
+    }
+  });
+}
+wireConfirmOnSecondClick('actionRejectBtn', 'rejected');
+wireConfirmOnSecondClick('actionReturnBtn', 'returned');
+
+/* ====================== APPLY AN ACTION (shared by single + bulk) ====================== */
+function computeNextPositionId(divisionId){
+  const div = ALL_DIVISIONS.find(d=>d.id===divisionId);
+  const abbrev = (div && (div.abbreviation || div.name.slice(0,2).toUpperCase())) || 'NA';
+  const year = new Date().getFullYear();
+  const prefix = 'MP_' + year + '_' + abbrev + '_';
+  const serials = ALL_ROWS
+    .filter(r=>r.position_code && r.position_code.indexOf(prefix)===0)
+    .map(r=>parseInt(r.position_code.slice(prefix.length),10))
+    .filter(n=>!isNaN(n));
+  const next = (serials.length ? Math.max(...serials) : 0) + 1;
+  return MPCalc.formatPositionId(year, abbrev, next);
+}
+async function applyAction(row, action, reason){
+  if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) { showToast('Blocked by BR-15a — you cannot act on your own submission.'); return; }
+  const required = requiredRoleFor(row);
+  if(!required) return;
+  const isDelegate = currentUser.role !== required;
+  const delegateInfo = isDelegate ? MY_DELEGATED_ROLES.find(d=>d.role===required) : null;
+
+  const chain = row.approval_chain || [];
+  const payload = {};
+  if(action === 'approved'){
+    const nextStep = row.current_step + 1;
+    payload.current_step = nextStep;
+    if(nextStep >= chain.length){
+      payload.status = 'Approved';
+      payload.position_status = 'Open';
+      payload.position_code = computeNextPositionId(row.division_id);
+    } else {
+      payload.status = MPCalc.statusLabelForStep(chain, nextStep);
+    }
+  } else if(action === 'rejected'){
+    payload.status = 'Rejected';
+    payload.approval_note = reason;
+  } else if(action === 'returned'){
+    const backStep = MPCalc.stepAfterReturn(row.current_step);
+    payload.current_step = backStep;
+    payload.status = 'Returned for Revision';
+    payload.approval_note = reason;
+  }
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', row.id);
+  if(error){ showToast('Could not save: ' + error.message); return; }
+  await sb.from('approval_log').insert({
+    manpower_plan_id: row.id,
+    step: required,
+    action,
+    actor_id: currentUser.id,
+    acted_as_delegate_for: delegateInfo ? delegateInfo.delegator_id : null,
+    reason: reason || null
+  });
+}
+async function resubmitRow(row){
+  const chain = row.approval_chain || [];
+  const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0) };
+  await sb.from('manpower_plan').update(payload).eq('id', row.id);
+}
+async function deleteRow(row){
+  await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted' }).eq('id', row.id);
+}
+
+/* ====================== ADD / EDIT FORM (cascading dropdowns, Not-in-list, live calc) ====================== */
 document.getElementById('addOpenBtn').addEventListener('click', ()=> openForm(null));
 document.getElementById('cancelFormBtn').addEventListener('click', ()=> closeForm());
 document.getElementById('positionModal').addEventListener('click', (e)=>{ if(e.target.id==='positionModal') closeForm(); });
 
+function buildNotInListField(key, label, options, currentId, currentFreeText){
+  // Returns a form-field wrapper with a <select> + a hidden free-text
+  // <input> + a "Not in list?" checkbox that toggles between them
+  // (BR-18). `options` is [{id, label}].
+  const wrap = document.createElement('div');
+  wrap.className = 'form-field';
+  const lbl = document.createElement('label'); lbl.textContent = label + ' *';
+  wrap.appendChild(lbl);
+  const select = document.createElement('select'); select.id = 'field_'+key;
+  const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; select.appendChild(blank);
+  options.forEach(o=>{ const opt = document.createElement('option'); opt.value=o.id; opt.textContent=o.label; select.appendChild(opt); });
+  if(currentId) select.value = currentId;
+  const text = document.createElement('input'); text.type='text'; text.id = 'field_'+key+'_text';
+  text.style.display = currentFreeText ? '' : 'none';
+  text.placeholder = 'Type the new ' + label.toLowerCase();
+  if(currentFreeText) text.value = currentFreeText;
+  select.style.display = currentFreeText ? 'none' : '';
+  const notInListRow = document.createElement('label'); notInListRow.className = 'not-in-list';
+  const chk = document.createElement('input'); chk.type='checkbox'; chk.id = 'chk_'+key+'_notinlist'; chk.checked = !!currentFreeText;
+  notInListRow.appendChild(chk);
+  notInListRow.appendChild(document.createTextNode('Not in list? (flags for HR review)'));
+  chk.addEventListener('change', ()=>{
+    select.style.display = chk.checked ? 'none' : '';
+    text.style.display = chk.checked ? '' : 'none';
+    if(!chk.checked) text.value = '';
+    else select.value = '';
+  });
+  wrap.appendChild(select);
+  wrap.appendChild(text);
+  wrap.appendChild(notInListRow);
+  return wrap;
+}
+
 function openForm(row){
   editingRowId = row ? row.id : null;
-  document.getElementById('modalTitle').textContent = row ? 'Edit position' : 'Add position';
+  document.getElementById('modalTitle').textContent = row ? 'Edit position (Draft)' : 'Add position';
   document.getElementById('formStatus').textContent = '';
+  document.getElementById('costPreview').innerHTML = '';
   const grid = document.getElementById('formGrid');
   grid.innerHTML = '';
-  let lastSection = null;
+  const flag = (row && row.master_data_flag) || {};
 
-  FIELDS.forEach(f=>{
-    if(f.section !== lastSection){
-      const label = document.createElement('div');
-      label.className = 'section-label';
-      label.textContent = f.section;
-      grid.appendChild(label);
-      lastSection = f.section;
-    }
-    const wrap = document.createElement('div');
-    wrap.className = 'form-field' + (f.full ? ' full' : '');
-    const lbl = document.createElement('label');
-    lbl.textContent = f.label + (f.required ? ' *' : '');
-    wrap.appendChild(lbl);
+  const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
 
-    const isNew = !row;
-    let editable = isNew
-      ? (f.creatableBy || f.editableBy).includes(currentUser.role)
-      : (canEditRow(row) && f.editableBy.includes(currentUser.role));
-    let input;
-    if(f.type === 'textarea'){
-      input = document.createElement('textarea');
-      input.value = row ? (row[f.key] || '') : '';
-    } else if(f.type === 'status_select'){
-      input = document.createElement('select');
-      STATUS_OPTIONS.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; input.appendChild(o); });
-      input.value = row ? row.position_status : 'Requested';
-    } else if(f.type === 'department_select'){
-      input = document.createElement('select');
-      if(currentUser.role === 'bu_head'){
-        // Only the department(s) this BU Head is assigned in Admin
-        // Settings — never a free choice, never someone else's dept.
-        if(!MY_BU_DEPARTMENTS.length){
-          const blank = document.createElement('option'); blank.value=''; blank.textContent='— No department assigned —'; input.appendChild(blank);
-        } else {
-          MY_BU_DEPARTMENTS.forEach(name=>{ const o=document.createElement('option'); o.value=name; o.textContent=name; input.appendChild(o); });
-          if(row && row.department && !MY_BU_DEPARTMENTS.includes(row.department)){
-            const o=document.createElement('option'); o.value=row.department; o.textContent=row.department; input.appendChild(o);
-          }
-        }
-        input.value = row ? (row.department || '') : (MY_BU_DEPARTMENTS[0] || '');
-        // Only worth letting them pick when they cover more than one —
-        // with just one (or zero) department there's nothing to choose.
-        editable = editable && MY_BU_DEPARTMENTS.length > 1;
-      } else {
-        const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose a department —'; input.appendChild(blank);
-        ALL_DEPARTMENTS.forEach(d=>{ const o=document.createElement('option'); o.value=d.name; o.textContent=d.name; input.appendChild(o); });
-        input.value = row ? (row.department || '') : '';
-      }
-    } else if(f.type === 'select'){
-      input = document.createElement('select');
-      f.options.forEach(opt=>{ const o=document.createElement('option'); o.value=opt; o.textContent = opt || '— Not set —'; input.appendChild(o); });
-      input.value = row ? (row[f.key] || '') : '';
-    } else if(f.type === 'ta_owner_select'){
-      input = document.createElement('select');
-      const blank = document.createElement('option'); blank.value=''; blank.textContent='— Unassigned —'; input.appendChild(blank);
-      ALL_PROFILES.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.full_name+' ('+roleLabel(p.role)+')'; input.appendChild(o); });
-      input.value = row ? (row.ta_owner || '') : '';
-    } else {
-      input = document.createElement('input');
-      input.type = f.type;
-      input.value = row ? (row[f.key] || '') : '';
-    }
-    input.id = 'field_' + f.key;
-    input.disabled = !editable;
-    wrap.appendChild(input);
-    grid.appendChild(wrap);
-  });
+  // ---- Position ----
+  addSectionLabel(grid, 'Position');
+  grid.appendChild(buildNotInListField('position', 'Position (Title)', ALL_POSITIONS.map(p=>({id:p.id,label:p.title})), row ? row.position_master_id : null, flag.position || null));
 
+  // ---- Division / Department / Section / Cost Center (cascading) ----
+  grid.appendChild(buildNotInListField('division', 'Division', ALL_DIVISIONS.map(d=>({id:d.id,label:d.name})), row ? row.division_id : null, flag.division || null));
+  grid.appendChild(buildNotInListField('department', 'Department', [], row ? row.department_id : null, flag.department || null));
+  grid.appendChild(buildNotInListField('section', 'Section', [], row ? row.section_id : null, flag.section || null));
+  grid.appendChild(buildNotInListField('cost_center', 'Cost Center', [], row ? row.cost_center_id : null, flag.cost_center || null));
+
+  // ---- Branch (no Not-in-list — BR-18) ----
+  const branchWrap = document.createElement('div'); branchWrap.className='form-field';
+  branchWrap.innerHTML = '<label>Branch / Location *</label>';
+  const branchSel = document.createElement('select'); branchSel.id = 'field_branch';
+  const bBlank = document.createElement('option'); bBlank.value=''; bBlank.textContent='— Choose —'; branchSel.appendChild(bBlank);
+  ALL_BRANCHES.forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.name+' ('+b.country+')'; branchSel.appendChild(o); });
+  if(row && row.branch_id) branchSel.value = row.branch_id;
+  branchWrap.appendChild(branchSel);
+  grid.appendChild(branchWrap);
+
+  const currencyWrap = document.createElement('div'); currencyWrap.className='form-field';
+  currencyWrap.innerHTML = '<label>Currency</label><input type="text" id="field_currency_display" disabled>';
+  grid.appendChild(currencyWrap);
+
+  // ---- Employment Type / Priority ----
+  addSectionLabel(grid, 'Position details');
+  grid.appendChild(buildSelectField('employment_type','Employment Type', EMPLOYMENT_TYPES, row ? row.employment_type : ''));
+  grid.appendChild(buildSelectField('position_priority','Position Priority', PRIORITIES, row ? row.position_priority : ''));
+
+  const startWrap = document.createElement('div'); startWrap.className='form-field';
+  const todayStr = new Date().toISOString().slice(0,10);
+  startWrap.innerHTML = '<label>Position Target Start Date *</label><input type="date" id="field_position_target_start_date" min="'+todayStr+'" value="'+(row && row.position_target_start_date || '')+'">';
+  grid.appendChild(startWrap);
+
+  // ---- Business Need (conditional) ----
+  grid.appendChild(buildSelectField('business_need_type','Business Need', BUSINESS_NEED_TYPES, row ? row.business_need_type : ''));
+  const replacedWrap = document.createElement('div'); replacedWrap.className='form-field'; replacedWrap.id='wrap_employee_being_replaced';
+  replacedWrap.innerHTML = '<label>Employee Being Replaced *</label><input type="text" id="field_employee_being_replaced" placeholder="Free text — will connect to SAP Employee Central later" value="'+escapeHtml(row && row.employee_being_replaced || '')+'">';
+  grid.appendChild(replacedWrap);
+  const justWrap = document.createElement('div'); justWrap.className='form-field full'; justWrap.id='wrap_justification';
+  justWrap.innerHTML = '<label>Justification *</label><textarea id="field_justification">'+escapeHtml(row && row.justification || '')+'</textarea>';
+  grid.appendChild(justWrap);
+
+  // ---- Top Management approver (recruiter/head_of_hr only) ----
+  if(isTmOrHrSubmitter || (row && row.top_management_approver_id)){
+    const tmWrap = document.createElement('div'); tmWrap.className='form-field';
+    tmWrap.innerHTML = '<label>Top Management (approver) *</label>';
+    const tmSel = document.createElement('select'); tmSel.id='field_top_management_approver_id';
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; tmSel.appendChild(blank);
+    ALL_PROFILES.filter(p=>p.role==='top_management').forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.full_name; tmSel.appendChild(o); });
+    if(row && row.top_management_approver_id) tmSel.value = row.top_management_approver_id;
+    tmWrap.appendChild(tmSel);
+    grid.appendChild(tmWrap);
+  }
+
+  // ---- Department Utilization (Recruiter only) ----
+  const utilWrap = document.createElement('div'); utilWrap.className='form-field';
+  utilWrap.innerHTML = '<label>Department Utilization (%) '+(currentUser.role==='recruiter'?'*':'(set by Recruiter)')+'</label><input type="number" id="field_department_utilization" min="0" max="100" step="0.1" value="'+(row && row.department_utilization!=null ? row.department_utilization : '')+'" '+(currentUser.role==='recruiter'?'':'disabled')+'>';
+  grid.appendChild(utilWrap);
+
+  // ---- Salary ----
+  addSectionLabel(grid, 'Salary & cost (§5.1.5)');
+  const netWrap = document.createElement('div'); netWrap.className='form-field';
+  netWrap.innerHTML = '<label>Net Basic Monthly Salary *</label><input type="number" id="field_net_basic_monthly_salary" min="0" step="1" value="'+(row && row.net_basic_monthly_salary!=null?row.net_basic_monthly_salary:'')+'">';
+  grid.appendChild(netWrap);
+
+  if(currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr'){
+    const incWrap = document.createElement('div'); incWrap.className='form-field';
+    incWrap.innerHTML = '<label>Gross Incentive (optional)</label><input type="number" id="field_gross_incentive" min="0" step="1" value="'+(row && row.gross_incentive || 0)+'">';
+    grid.appendChild(incWrap);
+  }
+
+  // ---- Wire cascading + conditional behavior ----
+  wireCascadingDropdowns(row);
+  wireBusinessNeedToggle(row);
+  ['field_branch','field_net_basic_monthly_salary','field_gross_incentive','field_position_target_start_date','field_position_master_id_dummy']
+    .forEach(id=>{ const el = document.getElementById(id); if(el) el.addEventListener('input', recalcPreview); });
+  document.getElementById('field_branch').addEventListener('change', ()=>{ updateCurrencyDisplay(); recalcPreview(); });
+  document.getElementById('field_position').addEventListener('change', recalcPreview);
+  document.getElementById('field_net_basic_monthly_salary').addEventListener('input', recalcPreview);
+  const incEl = document.getElementById('field_gross_incentive'); if(incEl) incEl.addEventListener('input', recalcPreview);
+  document.getElementById('field_position_target_start_date').addEventListener('change', recalcPreview);
+
+  updateCurrencyDisplay();
+  recalcPreview();
+
+  const isDraft = !row || row.status === 'Draft';
+  document.getElementById('saveFormBtn').style.display = isDraft ? '' : 'none';
+  document.getElementById('submitFormBtn').style.display = isDraft ? '' : 'none';
   document.getElementById('positionModal').classList.add('show');
+}
+function addSectionLabel(grid, text){
+  const label = document.createElement('div'); label.className = 'section-label'; label.textContent = text;
+  grid.appendChild(label);
+}
+function buildSelectField(key, label, options, currentVal){
+  const wrap = document.createElement('div'); wrap.className='form-field';
+  wrap.innerHTML = '<label>'+label+' *</label>';
+  const sel = document.createElement('select'); sel.id = 'field_'+key;
+  const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; sel.appendChild(blank);
+  options.forEach(o=>{ const opt=document.createElement('option'); opt.value=o; opt.textContent=o; sel.appendChild(opt); });
+  if(currentVal) sel.value = currentVal;
+  wrap.appendChild(sel);
+  return wrap;
+}
+function wireCascadingDropdowns(row){
+  const divisionSel = document.getElementById('field_division');
+  const deptSel = document.getElementById('field_department');
+  const sectionSel = document.getElementById('field_section');
+  const ccSel = document.getElementById('field_cost_center');
+
+  function refreshDepartments(){
+    const divId = divisionSel.value ? Number(divisionSel.value) : null;
+    const opts = divId ? ALL_DEPARTMENTS.filter(d=>d.division_id===divId) : [];
+    deptSel.innerHTML = '<option value="">— Choose —</option>';
+    opts.forEach(d=>{ const o=document.createElement('option'); o.value=d.id; o.textContent=d.name; deptSel.appendChild(o); });
+    if(row && row.department_id && opts.some(d=>d.id===row.department_id)) deptSel.value = row.department_id;
+  }
+  function refreshSectionsAndCostCenters(){
+    const deptId = deptSel.value ? Number(deptSel.value) : null;
+    const secOpts = deptId ? ALL_SECTIONS.filter(s=>s.department_id===deptId) : [];
+    const ccOpts = deptId ? ALL_COST_CENTERS.filter(c=>c.department_id===deptId) : [];
+    sectionSel.innerHTML = '<option value="">— Choose —</option>';
+    secOpts.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sectionSel.appendChild(o); });
+    if(row && row.section_id && secOpts.some(s=>s.id===row.section_id)) sectionSel.value = row.section_id;
+    ccSel.innerHTML = '<option value="">— Choose —</option>';
+    ccOpts.forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name; ccSel.appendChild(o); });
+    if(row && row.cost_center_id && ccOpts.some(c=>c.id===row.cost_center_id)) ccSel.value = row.cost_center_id;
+  }
+  divisionSel.addEventListener('change', ()=>{ refreshDepartments(); refreshSectionsAndCostCenters(); });
+  deptSel.addEventListener('change', refreshSectionsAndCostCenters);
+  refreshDepartments();
+  refreshSectionsAndCostCenters();
+}
+function wireBusinessNeedToggle(row){
+  const sel = document.getElementById('field_business_need_type');
+  function apply(){
+    const isReplacement = sel.value === 'Replacement';
+    const isNew = sel.value === 'New Position';
+    document.getElementById('wrap_employee_being_replaced').style.display = isReplacement ? '' : 'none';
+    document.getElementById('wrap_justification').style.display = isNew ? '' : 'none';
+  }
+  sel.addEventListener('change', apply);
+  apply();
+}
+function updateCurrencyDisplay(){
+  const branchId = document.getElementById('field_branch').value;
+  const branch = ALL_BRANCHES.find(b=>String(b.id)===String(branchId));
+  const currency = branch ? MPCalc.currencyForCountry(branch.country) : '';
+  document.getElementById('field_currency_display').value = currency;
+}
+function selectedPositionPolicy(){
+  const posId = document.getElementById('field_position').value;
+  const notInList = document.getElementById('chk_position_notinlist').checked;
+  if(notInList || !posId) return {};
+  return ALL_POSITIONS.find(p=>String(p.id)===String(posId)) || {};
+}
+function recalcPreview(){
+  const branchId = document.getElementById('field_branch').value;
+  const branch = ALL_BRANCHES.find(b=>String(b.id)===String(branchId));
+  const net = parseFloat(document.getElementById('field_net_basic_monthly_salary').value);
+  const startDate = document.getElementById('field_position_target_start_date').value;
+  const incEl = document.getElementById('field_gross_incentive');
+  const grossIncentive = incEl ? parseFloat(incEl.value)||0 : 0;
+  const box = document.getElementById('costPreview');
+  if(!branch || isNaN(net) || !startDate){ box.innerHTML = '<p class="hint">Fill in Branch, Net Basic Monthly Salary and Position Target Start Date to see the live cost preview.</p>'; return; }
+  const currency = MPCalc.currencyForCountry(branch.country);
+  const position = selectedPositionPolicy();
+  const calc = MPCalc.calculateCost({
+    currency, netBasicMonthlySalary: net, position, grossIncentive,
+    positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
+  });
+  window.__LAST_CALC__ = calc; // used at save time
+  renderCostPreview(calc);
+}
+function renderCostPreview(calc){
+  const level = getCostVisibilityLevel(currentUser.role);
+  const box = document.getElementById('costPreview');
+  if(!calc){ box.innerHTML=''; return; }
+  if(level === 'total_only'){
+    box.innerHTML = '<div class="cost-total-only" id="costTotalOnly">Total Current Year Cost: <b>'+fmtMoney(calc.totalCurrentYearCost, calc.currency)+'</b></div>';
+    return;
+  }
+  const rows = Object.keys(calc)
+    .filter(k=>typeof calc[k] === 'number' && k !== 'remainingMonths')
+    .map(k=>'<tr'+(k==='totalCurrentYearCost'?' class="total"':'')+'><td>'+labelize(k)+'</td><td class="num">'+fmtMoney(calc[k], calc.currency)+'</td></tr>')
+    .join('');
+  box.innerHTML = '<table class="breakdown-table" id="costBreakdownTable">'+rows+'<tr><td>Remaining months (proration)</td><td class="num">'+calc.remainingMonths+'</td></tr></table>';
+}
+function labelize(key){
+  return key.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
 }
 function closeForm(){
   document.getElementById('positionModal').classList.remove('show');
   editingRowId = null;
 }
-document.getElementById('saveFormBtn').addEventListener('click', async ()=>{
+
+function collectPayloadFromForm(){
+  const flag = {};
+  function pick(key){
+    const chk = document.getElementById('chk_'+key+'_notinlist');
+    if(chk && chk.checked){
+      flag[key] = document.getElementById('field_'+key+'_text').value.trim();
+      return null;
+    }
+    const sel = document.getElementById('field_'+key);
+    return sel && sel.value ? Number(sel.value) : null;
+  }
+  const positionMasterId = pick('position');
+  const divisionId = pick('division');
+  const departmentId = pick('department');
+  const sectionId = pick('section');
+  const costCenterId = pick('cost_center');
+  const branchId = document.getElementById('field_branch').value ? Number(document.getElementById('field_branch').value) : null;
+  const branch = ALL_BRANCHES.find(b=>b.id===branchId);
+  const currency = branch ? MPCalc.currencyForCountry(branch.country) : null;
+  const positionTitle = flag.position || (ALL_POSITIONS.find(p=>p.id===positionMasterId)||{}).title || null;
+
+  const payload = {
+    position_master_id: positionMasterId,
+    position_title: positionTitle,
+    division_id: divisionId,
+    department_id: departmentId,
+    section_id: sectionId,
+    cost_center_id: costCenterId,
+    branch_id: branchId,
+    currency,
+    master_data_flag: flag,
+    employment_type: document.getElementById('field_employment_type').value || null,
+    position_priority: document.getElementById('field_position_priority').value || null,
+    position_target_start_date: document.getElementById('field_position_target_start_date').value || null,
+    business_need_type: document.getElementById('field_business_need_type').value || null,
+    employee_being_replaced: document.getElementById('field_employee_being_replaced') ? document.getElementById('field_employee_being_replaced').value.trim() : null,
+    justification: document.getElementById('field_justification') ? document.getElementById('field_justification').value.trim() : null,
+    department_utilization: document.getElementById('field_department_utilization').value !== '' ? parseFloat(document.getElementById('field_department_utilization').value) : null,
+    net_basic_monthly_salary: document.getElementById('field_net_basic_monthly_salary').value !== '' ? parseFloat(document.getElementById('field_net_basic_monthly_salary').value) : null,
+  };
+  const tmSel = document.getElementById('field_top_management_approver_id');
+  if(tmSel) payload.top_management_approver_id = tmSel.value || null;
+  const incEl = document.getElementById('field_gross_incentive');
+  payload.gross_incentive = incEl ? (parseFloat(incEl.value)||0) : 0;
+
+  const calc = window.__LAST_CALC__;
+  if(calc){
+    payload.cost_breakdown = calc;
+    payload.total_monthly_cost = calc.totalMonthlyCost;
+    payload.total_current_year_cost = calc.totalCurrentYearCost;
+    if(calc.onboardingOneTimeCost != null) payload.onboarding_one_time_cost = calc.onboardingOneTimeCost;
+  }
+  return payload;
+}
+async function logMasterDataExceptions(mpId, flag){
+  const entries = Object.keys(flag).filter(k=>flag[k]);
+  for(const field_name of entries){
+    await sb.from('master_data_exceptions').insert({ manpower_plan_id: mpId, field_name, free_text_value: flag[field_name] });
+  }
+}
+document.getElementById('saveFormBtn').addEventListener('click', async ()=> saveForm(false));
+document.getElementById('submitFormBtn').addEventListener('click', async ()=> saveForm(true));
+async function saveForm(submitNow){
   const statusEl = document.getElementById('formStatus');
   statusEl.className = 'status-msg'; statusEl.textContent = '';
+  if(!canCreate() && !editingRowId){ statusEl.textContent='You are not allowed to submit Manpower Plan lines.'; statusEl.className='status-msg err'; return; }
 
-  const isNew = !editingRowId;
-  if(isNew && !canCreate()){
-    statusEl.textContent = "Only Head of HR, TA Leaders and BU Heads can add new positions.";
-    statusEl.className = 'status-msg err';
-    return;
-  }
-  if(isNew && currentUser.role === 'bu_head' && !MY_BU_DEPARTMENTS.length){
-    statusEl.textContent = "You don't have a department assigned yet — ask an Admin to set that up in Admin Settings before submitting a request.";
-    statusEl.className = 'status-msg err';
-    return;
-  }
-  const existingRow = isNew ? null : ALL_ROWS.find(r=>r.id===editingRowId);
-  const payload = {};
+  const payload = collectPayloadFromForm();
+  if(!payload.position_title){ statusEl.textContent='Position is required.'; statusEl.className='status-msg err'; return; }
+  if(!payload.division_id && !payload.master_data_flag.division){ statusEl.textContent='Division is required.'; statusEl.className='status-msg err'; return; }
+  if(!payload.branch_id){ statusEl.textContent='Branch is required.'; statusEl.className='status-msg err'; return; }
+  if(!payload.employment_type){ statusEl.textContent='Employment Type is required.'; statusEl.className='status-msg err'; return; }
+  if(!payload.net_basic_monthly_salary){ statusEl.textContent='Net Basic Monthly Salary is required.'; statusEl.className='status-msg err'; return; }
+  if(!payload.position_target_start_date){ statusEl.textContent='Position Target Start Date is required.'; statusEl.className='status-msg err'; return; }
+  if(payload.business_need_type === 'Replacement' && !payload.employee_being_replaced){ statusEl.textContent='Employee Being Replaced is required for a Replacement.'; statusEl.className='status-msg err'; return; }
+  if(payload.business_need_type === 'New Position' && !payload.justification){ statusEl.textContent='Justification is required for a New Position.'; statusEl.className='status-msg err'; return; }
 
-  for(const f of FIELDS){
-    const el = document.getElementById('field_'+f.key);
-    if(!el || el.disabled) continue; // never send fields the user couldn't edit
-    let val = el.value;
-    if(f.key === 'ta_owner') val = val || null;
-    if((f.type==='date' || f.type==='select') && val === '') val = null;
-    payload[f.key] = val;
-  }
-  if(!payload.position_title && isNew){
-    statusEl.textContent = 'Position title is required.'; statusEl.className = 'status-msg err'; return;
-  }
-  if(payload.position_status === 'Sent Back for Changes' && !payload.approval_note){
-    statusEl.textContent = 'Add an approval note explaining what needs to change before sending this back.';
-    statusEl.className = 'status-msg err';
-    return;
-  }
-
-  let result;
-  if(isNew){
+  let result, mpId;
+  if(!editingRowId){
     payload.created_by = currentUser.id;
     payload.updated_by = currentUser.id;
     payload.requested_by = currentUser.id;
-    if(currentUser.role === 'bu_head'){
-      payload.position_status = 'Requested';
-      // The department select is read directly (not via the skip-if-disabled
-      // loop above) since it's disabled whenever there's only one choice.
-      const deptEl = document.getElementById('field_department');
-      payload.department = deptEl ? deptEl.value : (MY_BU_DEPARTMENTS[0] || null);
-    }
+    payload.submitted_by = currentUser.id;
+    payload.position_status = 'Requested';
+    payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
+    payload.current_step = submitNow ? 0 : -1;
+    payload.status = submitNow ? MPCalc.statusLabelForStep(payload.approval_chain, 0) : 'Draft';
     result = await sb.from('manpower_plan').insert(payload);
+    mpId = result.data && result.data[0] && result.data[0].id;
   } else {
     payload.updated_by = currentUser.id;
-    // A BU Head resubmitting after "Sent Back for Changes" moves it back to Requested.
-    if(currentUser.role === 'bu_head') payload.position_status = 'Requested';
-    result = await sb.from('manpower_plan').update(payload).eq('id', editingRowId);
-  }
-  if(result.error){
-    statusEl.textContent = 'Could not save: ' + result.error.message;
-    statusEl.className = 'status-msg err';
-    return;
-  }
-  closeForm();
-  showToast(isNew ? 'Position added.' : 'Position updated.');
-  await loadRows();
-});
-
-/* ====================== BULK UPLOAD ====================== */
-const UPLOAD_HEADER_MAP = {
-  'branch':'branch', 'position code':'position_code', 'position':'position_title',
-  'division':'division', 'department':'department', 'sub department':'sub_department',
-  'cost center name':'cost_center_name', 'cost center number':'cost_center_number',
-  'project name':'project_name', 'business need':'business_need',
-  'detailed business need':'detailed_business_need', 'job opening date':'job_opening_date',
-  'expected candidate joining date':'expected_candidate_joining_date',
-  'position status':'position_status', 'employee code':'employee_code',
-  'employee name':'employee_name', 'employee title':'employee_title',
-  'job issuance date':'job_issuance_date', 'hiring date':'hiring_date'
-};
-document.getElementById('uploadOpenBtn').addEventListener('click', ()=>{
-  document.getElementById('uploadModal').classList.add('show');
-  document.getElementById('uploadStatus').textContent = '';
-  document.getElementById('uploadFileInput').value = '';
-});
-document.getElementById('cancelUploadBtn').addEventListener('click', ()=> document.getElementById('uploadModal').classList.remove('show'));
-document.getElementById('uploadModal').addEventListener('click', (e)=>{ if(e.target.id==='uploadModal') document.getElementById('uploadModal').classList.remove('show'); });
-
-document.getElementById('doUploadBtn').addEventListener('click', async ()=>{
-  const fileInput = document.getElementById('uploadFileInput');
-  const statusEl = document.getElementById('uploadStatus');
-  if(!canBulkUpload()){ statusEl.textContent = 'Only Head of HR and TA Leaders can bulk-upload.'; statusEl.className='status-msg err'; return; }
-  if(!fileInput.files.length){ statusEl.textContent = 'Choose a file first.'; statusEl.className='status-msg err'; return; }
-  statusEl.textContent = 'Reading file…'; statusEl.className = 'status-msg';
-
-  const file = fileInput.files[0];
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type:'array', cellDates:true });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(sheet, { defval:'' });
-
-  if(!json.length){ statusEl.textContent = 'No rows found in that sheet.'; statusEl.className='status-msg err'; return; }
-
-  const rows = json.map(rawRow=>{
-    const row = {};
-    Object.keys(rawRow).forEach(header=>{
-      const key = UPLOAD_HEADER_MAP[header.trim().toLowerCase()];
-      if(!key) return;
-      let val = rawRow[header];
-      if(val instanceof Date) val = val.toISOString().slice(0,10);
-      if(val === '') val = null;
-      row[key] = val;
-    });
-    if(!row.position_status) row.position_status = 'Requested';
-    row.created_by = currentUser.id;
-    row.updated_by = currentUser.id;
-    return row;
-  }).filter(r=>r.position_title);
-
-  if(!rows.length){ statusEl.textContent = 'No usable rows — check that a "Position" column exists.'; statusEl.className='status-msg err'; return; }
-
-  // Departments are now a fixed list (Admin Settings → Departments). Match
-  // sheet values against it case-insensitively and normalize to the exact
-  // stored name, so free-text spelling from the spreadsheet can't create
-  // stray department values that bypass the dropdown elsewhere in the app.
-  const deptByLower = {};
-  ALL_DEPARTMENTS.forEach(d=> deptByLower[d.name.toLowerCase()] = d.name);
-  const badDeptRows = [];
-  rows.forEach((r, i)=>{
-    if(r.department){
-      const match = deptByLower[String(r.department).trim().toLowerCase()];
-      if(match){ r.department = match; }
-      else { badDeptRows.push({ row: i+2, value: r.department }); }
+    if(submitNow){
+      const row = ALL_ROWS.find(r=>r.id===editingRowId);
+      payload.current_step = 0;
+      payload.status = MPCalc.statusLabelForStep(row.approval_chain, 0);
     }
-  });
-  if(badDeptRows.length){
-    const list = badDeptRows.slice(0,5).map(b=>`row ${b.row}: "${b.value}"`).join(', ');
-    const more = badDeptRows.length > 5 ? ` (+${badDeptRows.length-5} more)` : '';
-    statusEl.textContent = `Unrecognized department(s) — ${list}${more}. Add them in Admin Settings → Departments first, or fix the spelling, then re-upload.`;
-    statusEl.className = 'status-msg err';
-    return;
+    result = await sb.from('manpower_plan').update(payload).eq('id', editingRowId);
+    mpId = editingRowId;
   }
-
-  statusEl.textContent = 'Uploading ' + rows.length + ' rows…';
-  const { error } = await sb.from('manpower_plan').insert(rows);
-  if(error){ statusEl.textContent = 'Upload failed: ' + error.message; statusEl.className='status-msg err'; return; }
-
-  statusEl.textContent = 'Uploaded ' + rows.length + ' positions.'; statusEl.className='status-msg ok';
+  if(result.error){ statusEl.textContent = 'Could not save: ' + result.error.message; statusEl.className='status-msg err'; return; }
+  if(Object.keys(payload.master_data_flag||{}).length) await logMasterDataExceptions(mpId, payload.master_data_flag);
+  closeForm();
+  showToast(submitNow ? 'Submitted for approval.' : 'Saved as Draft.');
   await loadRows();
-  setTimeout(()=> document.getElementById('uploadModal').classList.remove('show'), 1200);
+}
+
+/* ====================== EXCEL EXPORT (BR-22) ====================== */
+document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
+  const rows = visibleRows().map(r=>({
+    'Position ID': r.position_code, 'Position': r.position_title, 'Division': r.division, 'Department': r.department,
+    'Status': r.status, 'Net Basic Monthly Salary': r.net_basic_monthly_salary, 'Currency': r.currency,
+    'Total Monthly Cost': r.total_monthly_cost, 'Total Current Year Cost': r.total_current_year_cost,
+    'Submitted By': profileName(r.submitted_by||r.requested_by)
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Manpower Plan');
+  XLSX.writeFile(wb, 'manpower-plan-export.xlsx');
 });
 
 /* ====================== TOAST ====================== */
