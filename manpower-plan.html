@@ -70,9 +70,26 @@
   .toolbar .spacer{flex:1;}
 
   .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  /* Bug fix (round #10): the worklist table (and the inline editor row
+   * that lives inside it) can get wider than the viewport once enough
+   * columns/fields pile up. .card used to clip that overflow with
+   * overflow:hidden and no scrollbar at all — content (including the
+   * Save/Submit/Cancel buttons of an open inline editor) that fell
+   * outside the visible width was simply unreachable, with nothing to
+   * scroll. .table-scroll gives the table its OWN horizontal scrollport
+   * so wide content is always reachable by scrolling left/right, instead
+   * of being cut off. */
+  .table-scroll{overflow-x:auto;overflow-y:visible;max-width:100%;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.02em;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
-  td{padding:10px 12px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  /* Item #3: narrower columns + headers that wrap their label text
+   * instead of forcing one-line-per-column width, so the table needs
+   * less horizontal scrolling overall. */
+  th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.02em;padding:8px 8px;border-bottom:1px solid var(--border);white-space:normal;word-break:break-word;min-width:64px;}
+  td{padding:8px 8px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  /* Wordier columns (Position/Department/Business Need) are capped and
+   * truncated with an ellipsis + a title="" tooltip carrying the full
+   * text, rather than each forcing the whole table wider. */
+  td.cell-trunc{max-width:150px;overflow:hidden;text-overflow:ellipsis;}
   tr:last-child td{border-bottom:none;}
   tr:hover td{background:#fafafa;}
   .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;white-space:nowrap;}
@@ -134,12 +151,38 @@
    * the form renders as a normal <tr> inside the worklist table
    * itself, so nothing navigates and nothing overlays the page. */
   tr.inline-editor-row td{background:#fbfbfe;white-space:normal;padding:16px 14px;border-bottom:2px solid var(--gold);}
-  .inline-editor-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;flex-wrap:wrap;}
+  /* BUG FIX (root cause): this <td> spans colspan=12, so its rendered
+   * width is the WHOLE table's width — which can be well over 1600px
+   * once enough form fields pile up (see the .table-scroll comment
+   * above). The head row used to be `justify-content:space-between`,
+   * which stretches the title block on the left and the action buttons
+   * all the way to the FAR RIGHT EDGE of that oversized row — i.e. off
+   * past the visible viewport, with .card's old overflow:hidden giving
+   * no way to scroll to them. That's why Cancel/Save/Submit existed in
+   * the DOM (existence checks passed) but weren't reachable on screen.
+   * Fix: pack the title and the actions together at the LEFT edge
+   * (flex-start, not space-between) so the buttons render right next to
+   * the title, near x=0, regardless of how wide the row is — and cap
+   * the title block's width so a long subtitle can never push them out.
+   * The actions bar is ALSO made sticky to the left edge of the
+   * table's own horizontal scrollport (.table-scroll), so it stays
+   * pinned in view even if the user does scroll the table sideways. */
+  .inline-editor-head{display:flex;justify-content:flex-start;align-items:flex-start;gap:14px;margin-bottom:10px;flex-wrap:wrap;}
+  .inline-editor-title{max-width:460px;}
   .inline-editor-head h3{margin:0;font-size:14.5px;}
   .inline-editor-head .sub{margin:2px 0 0;font-size:12px;color:var(--text-mute);}
-  .inline-editor-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .inline-editor-actions{
+    display:flex;gap:8px;flex-wrap:wrap;
+    position:sticky;left:14px;
+    background:#fbfbfe;padding:2px;border-radius:8px;z-index:2;
+  }
   .draft-flag{display:inline-block;background:var(--gold);color:#3a2a00;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:8px;text-transform:uppercase;letter-spacing:0.03em;}
   .form-field input[readonly], .form-field input:disabled.auto-field{background:#f4f4f5;color:var(--charcoal-soft);}
+  /* Item #8 — Internal/Project: both Cost Center and Project Name are
+   * always visible side by side; the one that doesn't apply is
+   * disabled (see JS) and visually dimmed via this class, rather than
+   * hidden — the point is the user can see both fields exist. */
+  .form-field.field-inactive{opacity:.45;}
 </style>
 </head>
 <body>
@@ -192,6 +235,7 @@
         <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
       </div>
       <div class="card">
+        <div class="table-scroll">
         <table>
           <thead>
             <tr id="worklistHeaderRow">
@@ -202,6 +246,7 @@
           </thead>
           <tbody id="tableBody"></tbody>
         </table>
+        </div>
         <div class="empty-state" id="emptyState" style="display:none;">No positions match your filters yet.</div>
       </div>
     </div>
@@ -219,6 +264,7 @@
         <button class="btn btn-danger btn-small" id="tmBulkRejectBtn">Reject selected</button>
       </div>
       <div class="card">
+        <div class="table-scroll">
         <table>
           <thead>
             <tr>
@@ -229,6 +275,7 @@
           </thead>
           <tbody id="tmTableBody"></tbody>
         </table>
+        </div>
         <div class="empty-state" id="tmEmptyState" style="display:none;">Nothing is waiting on Top Management right now.</div>
       </div>
     </div>
@@ -237,10 +284,12 @@
     <div id="deletedView" style="display:none;">
       <p class="hint">Lines the Hiring Manager deleted outright after they were Returned or Rejected back to them (BR-21). Kept here for audit only — not part of any normal worklist.</p>
       <div class="card">
+        <div class="table-scroll">
         <table>
           <thead><tr><th>Position</th><th>Department</th><th>Deleted On</th><th>Deleted By</th></tr></thead>
           <tbody id="deletedTableBody"></tbody>
         </table>
+        </div>
         <div class="empty-state" id="deletedEmptyState" style="display:none;">No deleted lines.</div>
       </div>
     </div>
@@ -562,14 +611,19 @@ function renderTable(){
     const costCell = level === 'total_only'
       ? fmtMoney(r.total_current_year_cost, r.currency)
       : fmtMoney(r.total_current_year_cost, r.currency) + (r.net_basic_monthly_salary ? ` <span style="color:var(--text-mute)">(net ${fmtMoney(r.net_basic_monthly_salary, r.currency)})</span>` : '');
+    // Item #3: Department/Position/Business Need are the wordier columns
+    // — truncated with an ellipsis (`.cell-trunc`, see CSS) rather than
+    // each forcing the whole table wider, with a title="" tooltip
+    // carrying the full text so nothing is actually lost, just not
+    // shown inline.
     tr.innerHTML =
       '<td>'+escapeHtml(branchName(r.branch_id)||'—')+'</td>'+
       '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
       '<td>'+escapeHtml(r.division||'—')+'</td>'+
-      '<td>'+escapeHtml(r.department||'—')+'</td>'+
-      '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
+      '<td class="cell-trunc" title="'+escapeHtml(r.department||'')+'">'+escapeHtml(r.department||'—')+'</td>'+
+      '<td class="cell-trunc" title="'+escapeHtml(r.position_title||'')+'">'+escapeHtml(r.position_title||'—')+'</td>'+
       '<td>'+costCenterOrProjectCell(r)+'</td>'+
-      '<td>'+businessNeedCell(r)+'</td>'+
+      '<td class="cell-trunc" title="'+escapeHtml(r.business_need_type || r.business_need || '')+'">'+businessNeedCell(r)+'</td>'+
       '<td>'+fmtMoney(r.net_basic_monthly_salary, r.currency)+'</td>'+
       '<td>'+costCell+'</td>'+
       '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
@@ -878,7 +932,7 @@ function insertInlineEditorSkeleton(){
   td.colSpan = 12; // matches the 11 worklist data columns + actions column (product owner change #7)
   td.innerHTML =
     '<div class="inline-editor-head">' +
-      '<div><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +
+      '<div class="inline-editor-title"><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +
       '<div class="inline-editor-actions">' +
         '<button class="btn btn-secondary btn-small" id="cancelFormBtn">Cancel</button>' +
         '<button class="btn btn-primary btn-small" id="saveFormBtn">Save as Draft</button>' +
@@ -1025,8 +1079,8 @@ function openForm(row, opts){
   }
   grid.appendChild(buildNotInListField('department', 'Department', departmentOptions.map(d=>({id:d.id,label:d.name})), row ? row.department_id : null, flag.department || null));
 
-  // ---- Row 3: Section/Track | Position — Position options are filtered to Department+Section below by wireOrgCascade() ----
-  grid.appendChild(buildNotInListField('section', 'Section / Track', [], row ? row.section_id : null, flag.section || null));
+  // ---- Row 3: Section | Position — Position options are filtered to Department+Section below by wireOrgCascade() ----
+  grid.appendChild(buildNotInListField('section', 'Section', [], row ? row.section_id : null, flag.section || null));
   grid.appendChild(buildNotInListField('position', 'Position (Title)', [], row ? row.position_master_id : null, flag.position || null));
 
   // ---- Row 4: Specialization | Cost Center (or Project Name, when
@@ -1043,12 +1097,15 @@ function openForm(row, opts){
     grid.appendChild(specWrap);
   }
   // Cost Center — always auto-derived from Department+Section(+Specialization),
-  // never a raw dropdown. Hidden entirely when Internal/Project = "Project".
+  // never a raw dropdown. Item #8 — ALWAYS visible next to Project Name;
+  // disabled + dimmed (not hidden) when Internal/Project = "Project" —
+  // see wireInternalOrProjectToggle().
   const costCenterField = buildNotInListAutoField('cost_center', 'Cost Center', '', row ? row.cost_center_id : null, flag.cost_center || null);
   costCenterField.id = 'wrap_cost_center';
   grid.appendChild(costCenterField);
-  // Project Name — shown instead of Cost Center when Internal/Project = "Project".
-  const projWrap = document.createElement('div'); projWrap.className = 'form-field'; projWrap.id = 'wrap_project_name'; projWrap.style.display = 'none';
+  // Project Name — Item #8 — ALWAYS visible next to Cost Center; disabled
+  // + dimmed (not hidden) when Internal/Project = "Internal".
+  const projWrap = document.createElement('div'); projWrap.className = 'form-field'; projWrap.id = 'wrap_project_name';
   projWrap.innerHTML = '<label>Project Name *</label><input type="text" id="field_project_name" placeholder="Name of the project this headcount is for" value="'+escapeHtml(row && row.project_name || '')+'">';
   grid.appendChild(projWrap);
 
@@ -1152,7 +1209,7 @@ function buildSelectField(key, label, options, currentVal){
 }
 // Change #2 — the whole minimized BU Head flow lives here: Department is
 // the top-level pick (pre-selected/locked when there's only one covered
-// department), Division is derived and read-only, Section/Track is the
+// department), Division is derived and read-only, Section is the
 // one other real choice, Specialization appears ONLY when the Department+
 // Track genuinely branches into more than one Cost Center, and Cost
 // Center itself is always resolved silently — never a dropdown.
@@ -1247,11 +1304,24 @@ function wireOrgCascade(row){
     }
     applyCostCenterFromScopes();
   }
+  // Item #5 — Position (Title) must never be fillable before its
+  // prerequisite Section is set. Previously, with no Section chosen
+  // yet, this fell back to showing "legacy/global" positions (no
+  // department_id/section_id at all) — which meant Position was
+  // effectively choosable independently of Section. Now: no Section
+  // picked -> the dropdown is disabled and shows only a placeholder,
+  // full stop. Only once a Department+Section are both picked does it
+  // populate with positions filtered to that Department+Section.
   function refreshPositions(){
     const deptId = currentDeptId(), sectionId = currentSectionId();
-    let opts = (deptId && sectionId)
-      ? ALL_POSITIONS.filter(p=>p.department_id===deptId && p.section_id===sectionId)
-      : ALL_POSITIONS.filter(p=>p.department_id==null && p.section_id==null); // legacy/global positions, shown only until a real Department+Track is picked
+    if(!deptId || !sectionId){
+      positionSel.innerHTML = '<option value="">— choose a Section first —</option>';
+      positionSel.value = '';
+      positionSel.disabled = true;
+      return;
+    }
+    positionSel.disabled = false;
+    let opts = ALL_POSITIONS.filter(p=>p.department_id===deptId && p.section_id===sectionId);
     if(row && row.position_master_id && !opts.some(p=>p.id===row.position_master_id)){
       const extra = ALL_POSITIONS.find(p=>p.id===row.position_master_id);
       if(extra) opts = opts.concat([extra]); // never silently blank out an already-selected position (Edit/Duplicate) just because it predates Department/Track scoping
@@ -1291,24 +1361,40 @@ function wireBusinessNeedToggle(row){
   sel.addEventListener('change', apply);
   apply();
 }
-// Product owner change #6 — Internal (default): behaves exactly like
-// before, Cost Center auto-resolved from Department+Track(+Specialization).
-// Project: Cost Center is hidden/skipped entirely (and cleared, so a stale
-// value never gets saved after switching), and a required free-text
-// Project Name input appears instead.
+// Item #8 — Internal (default): Cost Center stays auto-resolved from
+// Department+Track(+Specialization) and is the ACTIVE field; Project
+// Name is disabled + dimmed (not hidden — the user should always see
+// both fields exist). Project: the reverse — Project Name becomes the
+// active, required, editable field; Cost Center is disabled + dimmed
+// and its value is cleared/ignored on save (never hidden either). Only
+// one of the two is ever actually saved (see collectPayloadFromForm()).
 function wireInternalOrProjectToggle(row){
   const sel = document.getElementById('field_internal_or_project');
   function apply(){
     const isProject = sel.value === 'Project';
-    document.getElementById('wrap_cost_center').style.display = isProject ? 'none' : '';
-    document.getElementById('wrap_project_name').style.display = isProject ? '' : 'none';
+    const ccWrap = document.getElementById('wrap_cost_center');
+    const projWrap = document.getElementById('wrap_project_name');
+    const ccHidden = document.getElementById('field_cost_center');
+    const ccDisplay = document.getElementById('field_cost_center_display');
+    const ccText = document.getElementById('field_cost_center_text');
+    const ccChk = document.getElementById('chk_cost_center_notinlist');
+    const projInput = document.getElementById('field_project_name');
+
+    ccWrap.classList.toggle('field-inactive', isProject);
+    projWrap.classList.toggle('field-inactive', !isProject);
+
     if(isProject){
-      const ccHidden = document.getElementById('field_cost_center');
-      const ccDisplay = document.getElementById('field_cost_center_display');
-      const ccChk = document.getElementById('chk_cost_center_notinlist');
+      // Cost Center becomes inactive — clear it so a stale value never
+      // gets saved once we've switched to Project, and disable its
+      // "Not in list?" flag (there's nothing to flag once it's inactive).
       if(ccHidden) ccHidden.value = '';
       if(ccDisplay) ccDisplay.value = '';
-      if(ccChk) ccChk.checked = false;
+      if(ccText) ccText.value = '';
+      if(ccChk){ ccChk.checked = false; ccChk.disabled = true; }
+      if(projInput) projInput.disabled = false;
+    } else {
+      if(ccChk) ccChk.disabled = false;
+      if(projInput){ projInput.disabled = true; projInput.value = ''; }
     }
   }
   sel.addEventListener('change', ()=>{ apply(); recalcPreview(); });
