@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HireGrid — Admin Settings</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
@@ -288,6 +289,18 @@
         <button class="btn btn-secondary" id="addTierBtn">Add tier</button>
       </div>
       <div class="status-msg" id="tierStatus" style="margin-top:10px;"></div>
+      <!-- Bulk edit via Excel — download every tier's amounts as one
+           spreadsheet, edit as many rows as you like at once, then
+           re-upload: an existing tier name updates that tier's amounts,
+           a new tier name creates a new tier. Same "download, edit,
+           re-upload" shape as the Manpower Plan's own template feature. -->
+      <div class="save-row" style="margin-top:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-small" id="downloadTiersBtn">Download Tiers (Excel)</button>
+        <button class="btn btn-secondary btn-small" id="uploadTiersBtn">Upload Tiers (Excel)</button>
+        <input type="file" id="uploadTiersInput" accept=".xlsx,.xls" style="display:none;">
+      </div>
+      <div class="status-msg" id="tiersBulkStatus" style="margin-top:6px;"></div>
+      <div class="card" id="tiersImportResultsPanel" style="display:none;margin-top:10px;"></div>
     </div>
 
     <div class="section-title">Master Data Exceptions queue (BR-18)</div>
@@ -923,6 +936,108 @@ document.getElementById('addTierBtn').addEventListener('click', async ()=>{
   statusEl.className = error ? 'status-msg err' : 'status-msg ok';
   if(!error){ document.getElementById('newTierName').value=''; await loadOrgHierarchy(); }
 });
+
+/* ====================== BULK EDIT COST TIERS VIA EXCEL ======================
+ * "Download Tiers" exports every tier's amounts as one spreadsheet, one
+ * row per tier, one column per POLICY_FIELDS entry plus "Tier Name".
+ * "Upload Tiers" re-reads an edited copy: a row whose Tier Name matches
+ * an existing tier (case-insensitive) updates that tier's amounts; a
+ * row whose name doesn't match any existing tier creates a new one.
+ * This is the bulk equivalent of expanding one tier at a time and
+ * editing its fields by hand — same underlying update, just editable
+ * for as many tiers at once as you like in a spreadsheet. */
+const BOOL_TIER_FIELDS = ['has_mobile_line_instead','has_support_allowance'];
+const VARIABLE_RATIO_VALUES = ['none','10_90','20_80','30_70','40_60'];
+function parseTierBoolCell(v){
+  return /^(true|yes|y|1)$/i.test(String(v==null?'':v).trim());
+}
+document.getElementById('downloadTiersBtn').addEventListener('click', ()=>{
+  const rows = COST_POLICY_TIERS.map(t=>{
+    const row = { 'Tier Name': t.name };
+    POLICY_FIELDS.forEach(f=>{
+      if(BOOL_TIER_FIELDS.includes(f)) row[f] = t[f] ? 'Yes' : 'No';
+      else row[f] = t[f] != null ? t[f] : 0;
+    });
+    return row;
+  });
+  const ws = XLSX.utils.json_to_sheet(rows, { header: ['Tier Name', ...POLICY_FIELDS] });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cost Tiers');
+  XLSX.writeFile(wb, 'cost-tiers-export.xlsx');
+});
+document.getElementById('uploadTiersBtn').addEventListener('click', ()=> document.getElementById('uploadTiersInput').click());
+document.getElementById('uploadTiersInput').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // reset so re-selecting the same file still fires 'change'
+  if(!file) return;
+  const bulkStatusEl = document.getElementById('tiersBulkStatus');
+  bulkStatusEl.textContent = 'Reading file…'; bulkStatusEl.className = 'status-msg';
+  const buf = await file.arrayBuffer();
+  let rows;
+  try{
+    const wb = XLSX.read(buf, { type: 'array' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  } catch(err){
+    bulkStatusEl.textContent = 'Could not read that file: ' + err.message;
+    bulkStatusEl.className = 'status-msg err';
+    return;
+  }
+  await importTiersFromExcel(rows);
+});
+async function importTiersFromExcel(rawRows){
+  const dataRows = (rawRows||[]).filter(r=>String(r['Tier Name']||'').trim() !== '');
+  const errors = [];
+  let updatedCount = 0, createdCount = 0;
+  for(let i=0;i<dataRows.length;i++){
+    const rowNum = i+1;
+    const row = dataRows[i];
+    const tierName = String(row['Tier Name']).trim();
+    const updates = {};
+    let rowError = null;
+    POLICY_FIELDS.forEach(f=>{
+      if(rowError) return;
+      if(f === 'variable_salary_ratio'){
+        const v = String(row[f]==null?'none':row[f]).trim();
+        if(!VARIABLE_RATIO_VALUES.includes(v)){
+          rowError = 'Row ' + rowNum + ' ("' + tierName + '"): variable_salary_ratio must be one of ' + VARIABLE_RATIO_VALUES.join(', ') + ' — got "' + v + '".';
+          return;
+        }
+        updates[f] = v;
+      } else if(BOOL_TIER_FIELDS.includes(f)){
+        updates[f] = parseTierBoolCell(row[f]);
+      } else {
+        const n = parseFloat(row[f]);
+        updates[f] = isNaN(n) ? 0 : n;
+      }
+    });
+    if(rowError){ errors.push(rowError); continue; }
+    const existing = COST_POLICY_TIERS.find(t=>String(t.name).trim().toLowerCase() === tierName.toLowerCase());
+    if(existing){
+      const { error } = await sb.from('cost_policy_tiers').update(updates).eq('id', existing.id);
+      if(error){ errors.push('Row ' + rowNum + ' ("' + tierName + '"): could not update — ' + error.message); continue; }
+      updatedCount++;
+    } else {
+      const { error } = await sb.from('cost_policy_tiers').insert(Object.assign({ name: tierName }, updates));
+      if(error){ errors.push('Row ' + rowNum + ' ("' + tierName + '"): could not create — ' + error.message); continue; }
+      createdCount++;
+    }
+  }
+  const bulkStatusEl = document.getElementById('tiersBulkStatus');
+  bulkStatusEl.textContent = updatedCount + ' tier(s) updated, ' + createdCount + ' created, ' + errors.length + ' failed.';
+  bulkStatusEl.className = errors.length ? 'status-msg err' : 'status-msg ok';
+  const panel = document.getElementById('tiersImportResultsPanel');
+  if(errors.length){
+    panel.style.display = '';
+    panel.innerHTML = '<div style="padding:14px 16px;"><div style="font-weight:700;margin-bottom:6px;color:var(--charcoal);">Upload Tiers — some rows failed</div>'
+      + '<ul style="margin:0;padding-left:18px;font-size:12.5px;color:var(--red);">' + errors.map(e=>'<li>'+e.replace(/</g,'&lt;')+'</li>').join('') + '</ul>'
+      + '<button class="btn btn-secondary btn-small" id="dismissTiersImportResultsBtn" style="margin-top:10px;">Dismiss</button></div>';
+    document.getElementById('dismissTiersImportResultsBtn').addEventListener('click', ()=>{ panel.style.display='none'; panel.innerHTML=''; });
+  } else {
+    panel.style.display = 'none'; panel.innerHTML = '';
+  }
+  if(updatedCount || createdCount) await loadOrgHierarchy();
+  return { updatedCount, createdCount, errorCount: errors.length, errors, totalRows: dataRows.length };
+}
 
 function renderDivisions(){
   const el = document.getElementById('divisionRows');
