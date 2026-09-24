@@ -884,7 +884,21 @@ function renderTiers(){
   }));
   el.querySelectorAll('[data-tier-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
     const statusEl = document.getElementById('tierStatus');
-    const { error } = await sb.from('cost_policy_tiers').delete().eq('id', btn.dataset.tierDel);
+    const tierId = btn.dataset.tierDel;
+    // A tier can't be removed while any position still points at it
+    // (positions.cost_tier_id references cost_policy_tiers(id), and
+    // that foreign key has no cascade) — Postgres would reject the
+    // delete with a raw constraint-violation message that means
+    // nothing to a non-technical reader. Check first and explain in
+    // plain language instead of letting that error surface.
+    const stillAssigned = POSITIONS.filter(p=>p.cost_tier_id===Number(tierId) || String(p.cost_tier_id)===String(tierId));
+    if(stillAssigned.length){
+      statusEl.textContent = 'Can’t remove this tier — ' + stillAssigned.length + ' position(s) are still assigned to it: '
+        + stillAssigned.map(p=>p.title).join(', ') + '. Move or remove them from this tier first (use the × on their tag, or drag them to another tier), then remove the tier.';
+      statusEl.className = 'status-msg err';
+      return;
+    }
+    const { error } = await sb.from('cost_policy_tiers').delete().eq('id', tierId);
     statusEl.textContent = error ? ('Could not remove: '+error.message) : 'Tier removed.';
     statusEl.className = error ? 'status-msg err' : 'status-msg ok';
     if(!error) await loadOrgHierarchy();
