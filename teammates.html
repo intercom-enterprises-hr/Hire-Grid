@@ -245,7 +245,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
   currentUser = null;
-  showLogin();
+  window.location.href = 'index.html'; // always land on the public landing page, not a stale in-memory login form
 });
 
 async function loadTeam(){

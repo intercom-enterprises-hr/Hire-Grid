@@ -315,7 +315,7 @@ async function loadCurrentUserAndApp(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('whoName').textContent = currentUser.full_name;
-  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[currentUser.role] || currentUser.role;
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'}[currentUser.role] || currentUser.role;
   if(currentUser.role === 'admin'){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
@@ -344,7 +344,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
   currentUser = null;
-  showLogin();
+  window.location.href = 'index.html'; // always land on the public landing page, not a stale in-memory login form
 });
 
 /* ====================== DATA ====================== */

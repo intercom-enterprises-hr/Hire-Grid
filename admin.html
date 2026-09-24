@@ -246,12 +246,17 @@
       <div class="status-msg" id="branchStatus" style="margin-top:10px;"></div>
     </div>
 
-    <div class="section-title">Positions &amp; salary policy (§5.1.5)</div>
+    <div class="section-title">Position Cost Policy (§5.1.5)</div>
     <div class="card">
-      <p class="hint">The master Position list, plus every per-position cost policy value the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs). Click a position to edit its policy values.</p>
+      <p class="hint">The master Position list (111 real titles imported from the org chart, plus any legacy ones), and every per-position cost policy value the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs). Newly-imported positions start at 0/blank on every policy field — fill them in here. Search or filter by Department/Track to find one quickly, then click it to edit its policy values inline.</p>
+      <div class="save-row" style="margin-bottom:12px;flex-wrap:wrap;">
+        <input type="text" id="positionSearchBox" placeholder="Search position title…" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <select id="positionFilterDept" style="font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"><option value="">All departments</option></select>
+        <select id="positionFilterSection" style="font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"><option value="">All tracks</option></select>
+      </div>
       <div id="positionRows"></div>
       <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
-        <input type="text" id="newPositionTitle" placeholder="New position title" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <input type="text" id="newPositionTitle" placeholder="New position title (global — not tied to a Department/Track)" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
         <button class="btn btn-secondary" id="addPositionBtn">Add position</button>
       </div>
       <div class="status-msg" id="positionStatus" style="margin-top:10px;"></div>
@@ -378,7 +383,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
   currentUser = null;
-  showLogin();
+  window.location.href = 'index.html'; // always land on the public landing page, not a stale in-memory login form
 });
 
 async function loadSettings(){
@@ -744,13 +749,43 @@ document.getElementById('addBranchBtn').addEventListener('click', async ()=>{
   if(!error){ document.getElementById('newBranchName').value=''; await loadOrgHierarchy(); }
 });
 
+function positionDeptName(p){ const d = DEPARTMENTS.find(d=>d.id===p.department_id); return d ? d.name : null; }
+function positionSectionName(p){ const s = SECTIONS.find(s=>s.id===p.section_id); return s ? s.name : null; }
+function renderPositionFilterOptions(){
+  const deptSel = document.getElementById('positionFilterDept');
+  const prevDept = deptSel.value;
+  const deptIds = [...new Set(POSITIONS.map(p=>p.department_id).filter(Boolean))];
+  deptSel.innerHTML = '<option value="">All departments</option>' +
+    deptIds.map(id=>{ const d = DEPARTMENTS.find(d=>d.id===id); return d ? `<option value="${id}">${d.name}</option>` : ''; }).join('');
+  if(deptIds.some(id=>String(id)===prevDept)) deptSel.value = prevDept;
+}
 function renderPositions(){
+  renderPositionFilterOptions();
+  const search = (document.getElementById('positionSearchBox').value || '').trim().toLowerCase();
+  const fDept = document.getElementById('positionFilterDept').value;
+  const fSection = document.getElementById('positionFilterSection').value;
+  // Track/Section options depend on the selected Department.
+  const sectionSel = document.getElementById('positionFilterSection');
+  const prevSection = sectionSel.value;
+  const sectionOpts = fDept ? SECTIONS.filter(s=>s.department_id===Number(fDept)) : [];
+  sectionSel.innerHTML = '<option value="">All tracks</option>' + sectionOpts.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(sectionOpts.some(s=>String(s.id)===prevSection)) sectionSel.value = prevSection;
+
+  const filtered = POSITIONS.filter(p=>{
+    if(search && !p.title.toLowerCase().includes(search)) return false;
+    if(fDept && String(p.department_id) !== fDept) return false;
+    if(fSection && String(p.section_id) !== fSection) return false;
+    return true;
+  });
+
   const el = document.getElementById('positionRows');
-  el.innerHTML = POSITIONS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No positions yet.</div>';
-  POSITIONS.forEach(p=>{
+  el.innerHTML = filtered.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No positions match.</div>';
+  filtered.forEach(p=>{
     const row = document.createElement('div'); row.className='position-row'; row.style.flexDirection='column'; row.style.alignItems='stretch';
     const head = document.createElement('div'); head.style.display='flex'; head.style.justifyContent='space-between'; head.style.alignItems='center';
-    head.innerHTML = `<div class="dept-name">${p.title}</div>
+    const deptName = positionDeptName(p), sectionName = positionSectionName(p);
+    const scopeLabel = deptName ? `<span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — ${deptName}${sectionName ? ' / ' + sectionName : ''}</span>` : '<span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — global (legacy)</span>';
+    head.innerHTML = `<div class="dept-name">${p.title}${scopeLabel}</div>
       <div><button class="btn btn-secondary btn-small" data-pos-toggle="${p.id}">Edit policy</button>
       <button class="btn btn-danger btn-small" data-pos-del="${p.id}" style="margin-left:6px;">Remove</button></div>`;
     row.appendChild(head);
@@ -795,6 +830,10 @@ function renderPositions(){
     await loadOrgHierarchy();
   }));
 }
+['positionSearchBox','positionFilterDept','positionFilterSection'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderPositions);
+  document.getElementById(id).addEventListener('change', renderPositions);
+});
 document.getElementById('addPositionBtn').addEventListener('click', async ()=>{
   const title = document.getElementById('newPositionTitle').value.trim();
   const statusEl = document.getElementById('positionStatus');

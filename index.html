@@ -259,7 +259,7 @@ async function loadCurrentUserAndApp(){
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('whoName').textContent = profile.full_name;
   document.getElementById('whoFirstName').textContent = (profile.full_name || '').split(' ')[0];
-  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[profile.role] || profile.role;
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'}[profile.role] || profile.role;
 
   if(profile.role === 'admin'){
     // Admins manage accounts & settings — recruitment modules aren't
@@ -272,6 +272,11 @@ async function loadCurrentUserAndApp(){
     document.getElementById('achieveCard').style.display = 'none';
   } else if(profile.role === 'top_management'){
     // Top Management: Dashboard + final approval on Manpower Plan only.
+    document.getElementById('kpiCard').style.display = 'none';
+    document.getElementById('achieveCard').style.display = 'none';
+  } else if(profile.role === 'company_vp'){
+    // Company VP: view-only — Dashboard + Manpower Plan (Total-Only cost
+    // view), nothing else. Not part of the approval chain.
     document.getElementById('kpiCard').style.display = 'none';
     document.getElementById('achieveCard').style.display = 'none';
   }
@@ -288,7 +293,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 });
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
-  showLogin();
+  window.location.href = 'index.html'; // reload this same landing page fresh — clears any stale in-memory state
 });
 
 init();

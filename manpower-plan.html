@@ -128,6 +128,18 @@
   .status-msg.ok{color:var(--blue);}
   .status-msg.err{color:var(--red);}
   .hint{font-size:11.5px;color:var(--text-mute);margin:0 0 10px;line-height:1.5;}
+
+  /* ---- Inline editable row (Add / Edit / Duplicate a position) ----
+   * Change #1: there is no separate "Add position" screen or modal —
+   * the form renders as a normal <tr> inside the worklist table
+   * itself, so nothing navigates and nothing overlays the page. */
+  tr.inline-editor-row td{background:#fbfbfe;white-space:normal;padding:16px 14px;border-bottom:2px solid var(--gold);}
+  .inline-editor-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;flex-wrap:wrap;}
+  .inline-editor-head h3{margin:0;font-size:14.5px;}
+  .inline-editor-head .sub{margin:2px 0 0;font-size:12px;color:var(--text-mute);}
+  .inline-editor-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .draft-flag{display:inline-block;background:var(--gold);color:#3a2a00;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:8px;text-transform:uppercase;letter-spacing:0.03em;}
+  .form-field input[readonly], .form-field input:disabled.auto-field{background:#f4f4f5;color:var(--charcoal-soft);}
 </style>
 </head>
 <body>
@@ -234,23 +246,6 @@
   </main>
 </div>
 
-<!-- Add / Edit modal -->
-<div class="modal-overlay" id="positionModal">
-  <div class="modal">
-    <h2 id="modalTitle">Add position</h2>
-    <p class="sub" id="modalSub">Every field below is required unless marked optional.</p>
-    <div class="form-grid" id="formGrid"></div>
-    <div class="section-label">Cost preview</div>
-    <div id="costPreview" style="grid-column:1/-1;"></div>
-    <div class="status-msg" id="formStatus"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" id="cancelFormBtn">Cancel</button>
-      <button class="btn btn-primary" id="saveFormBtn">Save as Draft</button>
-      <button class="btn btn-gold" id="submitFormBtn" style="display:none;">Submit for Approval</button>
-    </div>
-  </div>
-</div>
-
 <!-- Single-row approve/reject/return action modal -->
 <div class="modal-overlay" id="actionModal">
   <div class="modal narrow">
@@ -309,6 +304,8 @@ let ALL_PROFILES = [];
 let ALL_DIVISIONS = [];
 let ALL_DEPARTMENTS = [];
 let ALL_SECTIONS = [];
+let ALL_SPECIALIZATIONS = [];   // migration 9 — optional 3rd level under Department+Section
+let ALL_CC_SCOPES = [];         // migration 9 — cost_center_scopes: (dept, section, specialization?) -> cost_center
 let ALL_COST_CENTERS = [];
 let ALL_BRANCHES = [];
 let ALL_POSITIONS = [];
@@ -318,6 +315,8 @@ let STATUTORY_EG = null;        // latest EG statutory_parameters.params
 let MY_DELEGATED_ROLES = [];    // roles I can act as, via an active delegation
 let MY_BU_DEPARTMENTS = [];
 let editingRowId = null;
+let duplicatingFromId = null;   // change #3 — set while the inline editor was opened via "Duplicate"
+let inlineEditorOpen = false;   // change #1 — guards renderTable() from ever wiping an open, unsaved inline row
 let currentView = 'worklist';
 let tmSelectedIds = new Set();
 let pendingBulkAction = null;   // 'rejected' | 'returned' — awaiting a shared reason
@@ -357,7 +356,7 @@ async function loadCurrentUserAndApp(){
   document.getElementById('tabDeleted').style.display = ['head_of_hr','admin'].includes(currentUser.role) ? '' : 'none';
 
   await Promise.all([
-    loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadCostCenters(),
+    loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadSpecializations(), loadCostCenterScopes(), loadCostCenters(),
     loadBranches(), loadPositions(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
   ]);
   document.getElementById('exportExcelBtn').style.display = canExport() ? '' : 'none';
@@ -377,7 +376,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
   currentUser = null;
-  showLogin();
+  window.location.href = 'index.html'; // always land on the public landing page, not a stale in-memory login form
 });
 
 /* ====================== DATA LOADING ====================== */
@@ -385,6 +384,8 @@ async function loadProfiles(){ const { data } = await sb.from('profiles').select
 async function loadDivisions(){ const { data } = await sb.from('divisions').select('*').order('name'); ALL_DIVISIONS = data || []; }
 async function loadDepartments(){ const { data } = await sb.from('departments').select('*').order('name'); ALL_DEPARTMENTS = data || []; }
 async function loadSections(){ const { data } = await sb.from('sections').select('*').order('name'); ALL_SECTIONS = data || []; }
+async function loadSpecializations(){ const { data } = await sb.from('specializations').select('*').order('name'); ALL_SPECIALIZATIONS = data || []; }
+async function loadCostCenterScopes(){ const { data } = await sb.from('cost_center_scopes').select('*'); ALL_CC_SCOPES = data || []; }
 async function loadCostCenters(){ const { data } = await sb.from('cost_centers').select('*').order('name'); ALL_COST_CENTERS = data || []; }
 async function loadBranches(){ const { data } = await sb.from('branches').select('*').order('name'); ALL_BRANCHES = data || []; }
 async function loadPositions(){ const { data } = await sb.from('positions').select('*').order('title'); ALL_POSITIONS = data || []; }
@@ -515,6 +516,10 @@ function visibleRows(){
   return ALL_ROWS.filter(r=>!r.deleted_at);
 }
 function renderTable(){
+  // Change #1: never blow away an open, unsaved inline "Add/Edit/Duplicate
+  // position" row just because a filter/search input fired a re-render —
+  // that's the "obviously safe from accidental data loss" requirement.
+  if(inlineEditorOpen) return;
   const search = document.getElementById('searchBox').value.trim().toLowerCase();
   const fDiv = document.getElementById('filterDivision').value;
   const fDept = document.getElementById('filterDepartment').value;
@@ -575,6 +580,14 @@ function renderTable(){
       const btn = document.createElement('button');
       btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Edit';
       btn.addEventListener('click', ()=> openForm(r));
+      actionCell.appendChild(btn);
+    }
+    // Change #3: Duplicate — available to whoever could have originally
+    // submitted this kind of line (same gate as "+ Add Position").
+    if(canCreate()){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Duplicate';
+      btn.addEventListener('click', ()=> openForm(r, { duplicate: true }));
       actionCell.appendChild(btn);
     }
     tbody.appendChild(tr);
@@ -819,10 +832,47 @@ async function deleteRow(row){
   await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted' }).eq('id', row.id);
 }
 
-/* ====================== ADD / EDIT FORM (cascading dropdowns, Not-in-list, live calc) ====================== */
+/* ====================== ADD / EDIT / DUPLICATE FORM ======================
+ * Change #1: this is an INLINE ROW inside the worklist table, not a modal
+ * or a separate screen — see insertInlineEditorSkeleton() below. The
+ * three action buttons (Cancel/Save Draft/Submit) are rebuilt fresh
+ * every time that skeleton is (re)built, so their click handlers are
+ * wired inside that function rather than once at page load. */
 document.getElementById('addOpenBtn').addEventListener('click', ()=> openForm(null));
-document.getElementById('cancelFormBtn').addEventListener('click', ()=> closeForm());
-document.getElementById('positionModal').addEventListener('click', (e)=>{ if(e.target.id==='positionModal') closeForm(); });
+
+// Builds (or rebuilds) the single inline editor <tr> at the top of the
+// worklist table and returns its live container elements. Any
+// previously-open editor row is removed first, so there is only ever
+// one on screen at a time.
+function insertInlineEditorSkeleton(){
+  const old = document.getElementById('inlineEditorRow');
+  if(old) old.remove();
+  const tbody = document.getElementById('tableBody');
+  const tr = document.createElement('tr');
+  tr.id = 'inlineEditorRow';
+  tr.className = 'inline-editor-row';
+  const td = document.createElement('td');
+  td.colSpan = 8;
+  td.innerHTML =
+    '<div class="inline-editor-head">' +
+      '<div><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +
+      '<div class="inline-editor-actions">' +
+        '<button class="btn btn-secondary btn-small" id="cancelFormBtn">Cancel</button>' +
+        '<button class="btn btn-primary btn-small" id="saveFormBtn">Save as Draft</button>' +
+        '<button class="btn btn-gold btn-small" id="submitFormBtn" style="display:none;">Submit for Approval</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="form-grid" id="formGrid"></div>' +
+    '<div class="section-label">Cost preview</div>' +
+    '<div id="costPreview" style="grid-column:1/-1;"></div>' +
+    '<div class="status-msg" id="formStatus"></div>';
+  tr.appendChild(td);
+  tbody.insertBefore(tr, tbody.firstChild);
+  document.getElementById('cancelFormBtn').addEventListener('click', ()=> closeForm());
+  document.getElementById('saveFormBtn').addEventListener('click', ()=> saveForm(false));
+  document.getElementById('submitFormBtn').addEventListener('click', ()=> saveForm(true));
+  return tr;
+}
 
 function buildNotInListField(key, label, options, currentId, currentFreeText){
   // Returns a form-field wrapper with a <select> + a hidden free-text
@@ -857,26 +907,106 @@ function buildNotInListField(key, label, options, currentId, currentFreeText){
   return wrap;
 }
 
-function openForm(row){
-  editingRowId = row ? row.id : null;
-  document.getElementById('modalTitle').textContent = row ? 'Edit position (Draft)' : 'Add position';
+// Change #2 — Division and Cost Center are now ALWAYS derived/auto-filled
+// (never a raw dropdown a BU Head has to think about): a disabled display
+// input shows the resolved value, a hidden input carries the real FK the
+// rest of the form/save logic reads, and the same "Not in list?" flag
+// (BR-18) is still offered as a fallback, per the product owner's request
+// that the flag keep working the same way on every one of these 5 fields.
+function buildNotInListAutoField(key, label, currentDisplayValue, currentId, currentFreeText){
+  const wrap = document.createElement('div');
+  wrap.className = 'form-field';
+  const lbl = document.createElement('label'); lbl.textContent = label + ' *';
+  wrap.appendChild(lbl);
+  const display = document.createElement('input');
+  display.type = 'text'; display.id = 'field_'+key+'_display'; display.disabled = true; display.className = 'auto-field';
+  display.value = currentDisplayValue || '';
+  display.style.display = currentFreeText ? 'none' : '';
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden'; hidden.id = 'field_'+key;
+  hidden.value = currentId != null ? currentId : '';
+  const text = document.createElement('input'); text.type='text'; text.id = 'field_'+key+'_text';
+  text.style.display = currentFreeText ? '' : 'none';
+  text.placeholder = 'Type the new ' + label.toLowerCase();
+  if(currentFreeText) text.value = currentFreeText;
+  const notInListRow = document.createElement('label'); notInListRow.className = 'not-in-list';
+  const chk = document.createElement('input'); chk.type='checkbox'; chk.id = 'chk_'+key+'_notinlist'; chk.checked = !!currentFreeText;
+  notInListRow.appendChild(chk);
+  notInListRow.appendChild(document.createTextNode('Not in list? (flags for HR review)'));
+  chk.addEventListener('change', ()=>{
+    display.style.display = chk.checked ? 'none' : '';
+    text.style.display = chk.checked ? '' : 'none';
+    if(!chk.checked) text.value = '';
+  });
+  wrap.appendChild(display);
+  wrap.appendChild(hidden);
+  wrap.appendChild(text);
+  wrap.appendChild(notInListRow);
+  return wrap;
+}
+
+// row: the line to prefill from (Edit) or copy from (Duplicate) — null for
+// a brand new blank line. opts.duplicate: true means "insert a new row
+// pre-filled from `row`, resetting Status/Position ID/approval state"
+// (change #3) — editingRowId is deliberately left null in that case so
+// saveForm() takes its normal INSERT path instead of updating the original.
+function openForm(row, opts){
+  opts = opts || {};
+  const isDuplicate = !!opts.duplicate;
+  editingRowId = (row && !isDuplicate) ? row.id : null;
+  duplicatingFromId = (row && isDuplicate) ? row.id : null;
+  inlineEditorOpen = true;
+  insertInlineEditorSkeleton(); // change #1 — the form lives in the table itself, not a modal
+
+  document.getElementById('modalTitle').textContent = isDuplicate ? 'Duplicate position — new Draft' : (row ? 'Edit position (Draft)' : 'Add position');
+  document.getElementById('modalSub').textContent = isDuplicate
+    ? 'Everything is copied from the original except Status, Position ID and approval history — tweak what’s different, then Save or Submit.'
+    : 'Fill in this row directly — every field below is required unless marked optional.';
   document.getElementById('formStatus').textContent = '';
   document.getElementById('costPreview').innerHTML = '';
   const grid = document.getElementById('formGrid');
   grid.innerHTML = '';
-  const flag = (row && row.master_data_flag) || {};
+  const flag = (row && !isDuplicate ? row.master_data_flag : null) || {}; // a Duplicate starts with a clean slate of exception flags
 
   const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
+  const isBuHead = currentUser.role === 'bu_head';
 
-  // ---- Position ----
+  // ---- Change #2: Department — scoped to the BU Head's own covered
+  // departments (never shows a department they don't cover); Recruiter/
+  // Head of HR still get every department. ----
   addSectionLabel(grid, 'Position');
-  grid.appendChild(buildNotInListField('position', 'Position (Title)', ALL_POSITIONS.map(p=>({id:p.id,label:p.title})), row ? row.position_master_id : null, flag.position || null));
+  let departmentOptions = isBuHead ? MY_BU_DEPARTMENTS.slice() : ALL_DEPARTMENTS.slice();
+  if(row && row.department_id && !departmentOptions.some(d=>d.id===row.department_id)){
+    const extra = ALL_DEPARTMENTS.find(d=>d.id===row.department_id);
+    if(extra) departmentOptions.push(extra); // keep an already-picked-but-no-longer-covered department visible rather than silently blanking it
+  }
+  grid.appendChild(buildNotInListField('department', 'Department', departmentOptions.map(d=>({id:d.id,label:d.name})), row ? row.department_id : null, flag.department || null));
 
-  // ---- Division / Department / Section / Cost Center (cascading) ----
-  grid.appendChild(buildNotInListField('division', 'Division', ALL_DIVISIONS.map(d=>({id:d.id,label:d.name})), row ? row.division_id : null, flag.division || null));
-  grid.appendChild(buildNotInListField('department', 'Department', [], row ? row.department_id : null, flag.department || null));
-  grid.appendChild(buildNotInListField('section', 'Section', [], row ? row.section_id : null, flag.section || null));
-  grid.appendChild(buildNotInListField('cost_center', 'Cost Center', [], row ? row.cost_center_id : null, flag.cost_center || null));
+  // ---- Position — options are filtered to Department+Section below by wireOrgCascade() ----
+  grid.appendChild(buildNotInListField('position', 'Position (Title)', [], row ? row.position_master_id : null, flag.position || null));
+
+  // ---- Division — always auto-derived from Department, never a dropdown ----
+  {
+    const dept = row && row.department_id ? ALL_DEPARTMENTS.find(d=>d.id===row.department_id) : null;
+    const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    grid.appendChild(buildNotInListAutoField('division', 'Division', div ? div.name : '', row ? row.division_id : null, flag.division || null));
+  }
+
+  // ---- Section / Track — the ONE real choice besides Position/Department; options filtered to Department by wireOrgCascade() ----
+  grid.appendChild(buildNotInListField('section', 'Section / Track', [], row ? row.section_id : null, flag.section || null));
+
+  // ---- Specialization — ONLY rendered visibly when the Department+Track actually branches into more than one Cost Center; wireOrgCascade() shows/hides it. ----
+  {
+    const specWrap = document.createElement('div'); specWrap.className = 'form-field'; specWrap.id = 'wrap_specialization'; specWrap.style.display = 'none';
+    specWrap.innerHTML = '<label>Specialization *</label>';
+    const specSel = document.createElement('select'); specSel.id = 'field_specialization';
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; specSel.appendChild(blank);
+    specWrap.appendChild(specSel);
+    grid.appendChild(specWrap);
+  }
+
+  // ---- Cost Center — always auto-derived from Department+Section(+Specialization), never a raw dropdown ----
+  grid.appendChild(buildNotInListAutoField('cost_center', 'Cost Center', '', row ? row.cost_center_id : null, flag.cost_center || null));
 
   // ---- Branch (no Not-in-list — BR-18) ----
   const branchWrap = document.createElement('div'); branchWrap.className='form-field';
@@ -941,7 +1071,7 @@ function openForm(row){
   }
 
   // ---- Wire cascading + conditional behavior ----
-  wireCascadingDropdowns(row);
+  wireOrgCascade(row);
   wireBusinessNeedToggle(row);
   ['field_branch','field_net_basic_monthly_salary','field_gross_incentive','field_position_target_start_date','field_position_master_id_dummy']
     .forEach(id=>{ const el = document.getElementById(id); if(el) el.addEventListener('input', recalcPreview); });
@@ -954,10 +1084,13 @@ function openForm(row){
   updateCurrencyDisplay();
   recalcPreview();
 
-  const isDraft = !row || row.status === 'Draft';
+  const isDraft = !row || isDuplicate || row.status === 'Draft';
   document.getElementById('saveFormBtn').style.display = isDraft ? '' : 'none';
   document.getElementById('submitFormBtn').style.display = isDraft ? '' : 'none';
-  document.getElementById('positionModal').classList.add('show');
+  // Scroll the freshly-inserted row into view — it's always prepended at
+  // the top of the worklist table, so this matters most when the person
+  // clicked "Duplicate"/"Edit" on a row further down the list.
+  document.getElementById('inlineEditorRow').scrollIntoView({ block: 'nearest' });
 }
 function addSectionLabel(grid, text){
   const label = document.createElement('div'); label.className = 'section-label'; label.textContent = text;
@@ -973,34 +1106,135 @@ function buildSelectField(key, label, options, currentVal){
   wrap.appendChild(sel);
   return wrap;
 }
-function wireCascadingDropdowns(row){
-  const divisionSel = document.getElementById('field_division');
+// Change #2 — the whole minimized BU Head flow lives here: Department is
+// the top-level pick (pre-selected/locked when there's only one covered
+// department), Division is derived and read-only, Section/Track is the
+// one other real choice, Specialization appears ONLY when the Department+
+// Track genuinely branches into more than one Cost Center, and Cost
+// Center itself is always resolved silently — never a dropdown.
+function wireOrgCascade(row){
   const deptSel = document.getElementById('field_department');
+  const divHidden = document.getElementById('field_division');
+  const divDisplay = document.getElementById('field_division_display');
   const sectionSel = document.getElementById('field_section');
-  const ccSel = document.getElementById('field_cost_center');
+  const specWrap = document.getElementById('wrap_specialization');
+  const specSel = document.getElementById('field_specialization');
+  const positionSel = document.getElementById('field_position');
+  const ccHidden = document.getElementById('field_cost_center');
+  const ccDisplay = document.getElementById('field_cost_center_display');
 
-  function refreshDepartments(){
-    const divId = divisionSel.value ? Number(divisionSel.value) : null;
-    const opts = divId ? ALL_DEPARTMENTS.filter(d=>d.division_id===divId) : [];
-    deptSel.innerHTML = '<option value="">— Choose —</option>';
-    opts.forEach(d=>{ const o=document.createElement('option'); o.value=d.id; o.textContent=d.name; deptSel.appendChild(o); });
-    if(row && row.department_id && opts.some(d=>d.id===row.department_id)) deptSel.value = row.department_id;
+  // BU Head with exactly one covered department: pre-select it and lock
+  // the dropdown (still a real <select> under the hood, just disabled —
+  // its value still reads out fine via JS at save time). Left editable
+  // if the row being edited/duplicated already has a DIFFERENT
+  // department set (e.g. their coverage changed since it was created).
+  if(currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1 && !document.getElementById('chk_department_notinlist').checked){
+    const onlyDeptId = String(MY_BU_DEPARTMENTS[0].id);
+    if(!deptSel.value || deptSel.value === onlyDeptId){
+      deptSel.value = onlyDeptId;
+      deptSel.disabled = true;
+    }
   }
-  function refreshSectionsAndCostCenters(){
-    const deptId = deptSel.value ? Number(deptSel.value) : null;
-    const secOpts = deptId ? ALL_SECTIONS.filter(s=>s.department_id===deptId) : [];
-    const ccOpts = deptId ? ALL_COST_CENTERS.filter(c=>c.department_id===deptId) : [];
+
+  function currentDeptId(){ return deptSel.value ? Number(deptSel.value) : null; }
+  function currentSectionId(){ return sectionSel.value ? Number(sectionSel.value) : null; }
+  function scopesFor(deptId, sectionId){
+    return ALL_CC_SCOPES.filter(sc=>sc.department_id===deptId && sc.section_id===sectionId);
+  }
+
+  function refreshDivision(){
+    const deptId = currentDeptId();
+    const dept = ALL_DEPARTMENTS.find(d=>d.id===deptId);
+    const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    divHidden.value = div ? div.id : '';
+    divDisplay.value = div ? div.name : (dept ? 'No division set for this department yet — see Admin Settings' : '');
+  }
+  function refreshSections(){
+    const deptId = currentDeptId();
+    const prevVal = sectionSel.value;
+    const opts = deptId ? ALL_SECTIONS.filter(s=>s.department_id===deptId) : [];
     sectionSel.innerHTML = '<option value="">— Choose —</option>';
-    secOpts.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sectionSel.appendChild(o); });
-    if(row && row.section_id && secOpts.some(s=>s.id===row.section_id)) sectionSel.value = row.section_id;
-    ccSel.innerHTML = '<option value="">— Choose —</option>';
-    ccOpts.forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name; ccSel.appendChild(o); });
-    if(row && row.cost_center_id && ccOpts.some(c=>c.id===row.cost_center_id)) ccSel.value = row.cost_center_id;
+    opts.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sectionSel.appendChild(o); });
+    if(row && row.section_id && opts.some(s=>s.id===row.section_id)) sectionSel.value = row.section_id;
+    else if(opts.some(s=>String(s.id)===String(prevVal))) sectionSel.value = prevVal;
   }
-  divisionSel.addEventListener('change', ()=>{ refreshDepartments(); refreshSectionsAndCostCenters(); });
-  deptSel.addEventListener('change', refreshSectionsAndCostCenters);
-  refreshDepartments();
-  refreshSectionsAndCostCenters();
+  function applyCostCenterFromScopes(){
+    const deptId = currentDeptId(), sectionId = currentSectionId();
+    const scopes = (deptId && sectionId) ? scopesFor(deptId, sectionId) : [];
+    // Unambiguous (every scope row for this Department+Track shares the
+    // SAME Cost Center, e.g. a Project Management track shared across
+    // specializations) -> just use it, no Specialization selection
+    // needed. Ambiguous (>1 distinct Cost Center) -> resolve by whichever
+    // Specialization is currently selected.
+    const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+    let scope = null;
+    if(distinctCcIds.length === 1) scope = scopes[0];
+    else if(distinctCcIds.length > 1){
+      const specId = specSel.value ? Number(specSel.value) : null;
+      scope = scopes.find(sc=>sc.specialization_id === specId) || null;
+    }
+    if(scope){
+      const cc = ALL_COST_CENTERS.find(c=>c.id===scope.cost_center_id);
+      ccHidden.value = scope.cost_center_id;
+      ccDisplay.value = cc ? (cc.name + (cc.cc_number ? ' (' + cc.cc_number + ')' : '')) : '';
+    } else {
+      ccHidden.value = '';
+      ccDisplay.value = (deptId && sectionId) ? 'Not yet configured for this Department/Track — check "Not in list?" to flag it for HR' : '';
+    }
+  }
+  function refreshSpecialization(){
+    const deptId = currentDeptId(), sectionId = currentSectionId();
+    const scopes = (deptId && sectionId) ? scopesFor(deptId, sectionId) : [];
+    const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+    const needsSpecialization = distinctCcIds.length > 1; // the one real ambiguous case (change #2)
+    specWrap.style.display = needsSpecialization ? '' : 'none';
+    if(needsSpecialization){
+      const specIds = [...new Set(scopes.map(sc=>sc.specialization_id).filter(v=>v!=null))];
+      const prevVal = specSel.value;
+      specSel.innerHTML = '<option value="">— Choose —</option>';
+      specIds.forEach(id=>{
+        const spec = ALL_SPECIALIZATIONS.find(s=>s.id===id);
+        if(spec){ const o=document.createElement('option'); o.value=spec.id; o.textContent=spec.name; specSel.appendChild(o); }
+      });
+      if(row && row._prefillSpecializationId && specIds.includes(row._prefillSpecializationId)) specSel.value = row._prefillSpecializationId;
+      else if(specIds.some(id=>String(id)===String(prevVal))) specSel.value = prevVal;
+    } else {
+      specSel.value = '';
+    }
+    applyCostCenterFromScopes();
+  }
+  function refreshPositions(){
+    const deptId = currentDeptId(), sectionId = currentSectionId();
+    let opts = (deptId && sectionId)
+      ? ALL_POSITIONS.filter(p=>p.department_id===deptId && p.section_id===sectionId)
+      : ALL_POSITIONS.filter(p=>p.department_id==null && p.section_id==null); // legacy/global positions, shown only until a real Department+Track is picked
+    if(row && row.position_master_id && !opts.some(p=>p.id===row.position_master_id)){
+      const extra = ALL_POSITIONS.find(p=>p.id===row.position_master_id);
+      if(extra) opts = opts.concat([extra]); // never silently blank out an already-selected position (Edit/Duplicate) just because it predates Department/Track scoping
+    }
+    const prevVal = positionSel.value;
+    positionSel.innerHTML = '<option value="">— Choose —</option>';
+    opts.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.title; positionSel.appendChild(o); });
+    if(row && row.position_master_id && opts.some(p=>p.id===row.position_master_id)) positionSel.value = row.position_master_id;
+    else if(opts.some(p=>String(p.id)===String(prevVal))) positionSel.value = prevVal;
+  }
+
+  // Best-effort reverse lookup so Edit/Duplicate can also re-select the
+  // right Specialization (purely a UI convenience — specialization itself
+  // is never persisted on manpower_plan, only the Cost Center it resolves to).
+  if(row && row.department_id && row.section_id && row.cost_center_id){
+    const matches = scopesFor(row.department_id, row.section_id).filter(sc=>sc.cost_center_id===row.cost_center_id);
+    if(matches.length === 1) row._prefillSpecializationId = matches[0].specialization_id;
+  }
+
+  deptSel.addEventListener('change', ()=>{ refreshDivision(); refreshSections(); refreshSpecialization(); refreshPositions(); recalcPreview(); });
+  sectionSel.addEventListener('change', ()=>{ refreshSpecialization(); refreshPositions(); recalcPreview(); });
+  specSel.addEventListener('change', ()=>{ applyCostCenterFromScopes(); recalcPreview(); });
+
+  refreshDivision();
+  refreshSections();
+  refreshSpecialization();
+  refreshPositions();
 }
 function wireBusinessNeedToggle(row){
   const sel = document.getElementById('field_business_need_type');
@@ -1061,8 +1295,12 @@ function labelize(key){
   return key.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
 }
 function closeForm(){
-  document.getElementById('positionModal').classList.remove('show');
+  const tr = document.getElementById('inlineEditorRow');
+  if(tr) tr.remove();
+  inlineEditorOpen = false;
   editingRowId = null;
+  duplicatingFromId = null;
+  renderCurrentView(); // safe to re-render now that the inline editor is gone
 }
 
 function collectPayloadFromForm(){
@@ -1125,8 +1363,6 @@ async function logMasterDataExceptions(mpId, flag){
     await sb.from('master_data_exceptions').insert({ manpower_plan_id: mpId, field_name, free_text_value: flag[field_name] });
   }
 }
-document.getElementById('saveFormBtn').addEventListener('click', async ()=> saveForm(false));
-document.getElementById('submitFormBtn').addEventListener('click', async ()=> saveForm(true));
 async function saveForm(submitNow){
   const statusEl = document.getElementById('formStatus');
   statusEl.className = 'status-msg'; statusEl.textContent = '';
