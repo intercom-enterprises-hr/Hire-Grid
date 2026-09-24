@@ -1124,7 +1124,11 @@ function openForm(row, opts){
   branchWrap.innerHTML = '<label>Branch / Location *</label>';
   const branchSel = document.createElement('select'); branchSel.id = 'field_branch';
   const bBlank = document.createElement('option'); bBlank.value=''; bBlank.textContent='— Choose —'; branchSel.appendChild(bBlank);
-  ALL_BRANCHES.forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.name+' ('+b.country+')'; branchSel.appendChild(o); });
+  // Egypt-only for now (product owner change #14): only active branches are
+  // offered as choices. ALL_BRANCHES itself stays unfiltered elsewhere so a
+  // worklist row that already references an inactive Gulf branch still
+  // displays its name correctly via branchName().
+  ALL_BRANCHES.filter(b=>b.active !== false).forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.name+' ('+b.country+')'; branchSel.appendChild(o); });
   if(row && row.branch_id) branchSel.value = row.branch_id;
   branchWrap.appendChild(branchSel);
   grid.appendChild(branchWrap);
@@ -1226,6 +1230,15 @@ function openForm(row, opts){
   const totalYearWrap = document.createElement('div'); totalYearWrap.className='form-field';
   totalYearWrap.innerHTML = '<label>Total Year Cost</label><input type="text" id="field_total_year_cost_preview" placeholder="—" disabled>';
   grid.appendChild(totalYearWrap);
+
+  // Support Allowance Applicable — product owner change #14: an independent
+  // per-line override, relevant only for "Project" lines (see
+  // wireInternalOrProjectToggle()). Dimmed/disabled for Internal lines,
+  // mirroring the existing Project Name vs Cost Center pattern.
+  const supportAllowanceWrap = document.createElement('div'); supportAllowanceWrap.className='form-field'; supportAllowanceWrap.id='wrap_support_allowance';
+  supportAllowanceWrap.innerHTML = '<label><input type="checkbox" id="field_support_allowance_applicable" '+(row && row.support_allowance_applicable ? 'checked' : '')+'> Support Allowance Applicable</label>';
+  grid.appendChild(supportAllowanceWrap);
+  document.getElementById('field_support_allowance_applicable').addEventListener('change', recalcPreview);
 
   if(currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr'){
     const incWrap = document.createElement('div'); incWrap.className='form-field';
@@ -1466,6 +1479,8 @@ function wireInternalOrProjectToggle(row){
     const ccText = document.getElementById('field_cost_center_text');
     const ccChk = document.getElementById('chk_cost_center_notinlist');
     const projInput = document.getElementById('field_project_name');
+    const supportWrap = document.getElementById('wrap_support_allowance');
+    const supportChk = document.getElementById('field_support_allowance_applicable');
 
     ccWrap.classList.toggle('field-inactive', isProject);
     projWrap.classList.toggle('field-inactive', !isProject);
@@ -1479,10 +1494,18 @@ function wireInternalOrProjectToggle(row){
       if(ccText) ccText.value = '';
       if(ccChk){ ccChk.checked = false; ccChk.disabled = true; }
       if(projInput) projInput.disabled = false;
+      if(supportWrap) supportWrap.classList.remove('field-inactive');
+      if(supportChk) supportChk.disabled = false;
     } else {
       if(ccChk) ccChk.disabled = false;
       if(projInput){ projInput.disabled = true; projInput.value = ''; }
+      // Support Allowance Applicable only means anything for Project lines —
+      // dim/disable it and always treat it as false for Internal, same as
+      // the Cost Center/Project Name pattern above.
+      if(supportWrap) supportWrap.classList.add('field-inactive');
+      if(supportChk){ supportChk.checked = false; supportChk.disabled = true; }
     }
+    recalcPreview();
   }
   sel.addEventListener('change', ()=>{ apply(); recalcPreview(); });
   apply();
@@ -1536,8 +1559,20 @@ function recalcPreview(){
   }
   const currency = MPCalc.currencyForCountry(branch.country);
   const position = selectedPositionPolicy();
+  // Support Allowance Applicable — product owner change #14: a per-line
+  // override, relevant only for Project lines. We never touch
+  // manpower-plan-calc.js for this; instead we choose what gets passed as
+  // the `position` argument into MPCalc.calculateCost(). For Internal
+  // lines the tier's own has_support_allowance default keeps governing,
+  // exactly as before.
+  const internalOrProjectEl = document.getElementById('field_internal_or_project');
+  const supportChk = document.getElementById('field_support_allowance_applicable');
+  let effectivePosition = position;
+  if(internalOrProjectEl && internalOrProjectEl.value === 'Project'){
+    effectivePosition = Object.assign({}, position, { has_support_allowance: supportChk ? supportChk.checked : false });
+  }
   const calc = MPCalc.calculateCost({
-    currency, netBasicMonthlySalary: net, position, grossIncentive,
+    currency, netBasicMonthlySalary: net, position: effectivePosition, grossIncentive,
     positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
   });
   window.__LAST_CALC__ = calc; // used at save time
@@ -1638,6 +1673,7 @@ function collectPayloadFromForm(){
     justification: document.getElementById('field_justification') ? document.getElementById('field_justification').value.trim() : null,
     department_utilization: document.getElementById('field_department_utilization').value !== '' ? parseFloat(document.getElementById('field_department_utilization').value) : null,
     net_basic_monthly_salary: netSalary,
+    support_allowance_applicable: internalOrProject === 'Project' ? (document.getElementById('field_support_allowance_applicable') ? document.getElementById('field_support_allowance_applicable').checked : false) : false,
   };
   const tmSel = document.getElementById('field_top_management_approver_id');
   if(tmSel) payload.top_management_approver_id = tmSel.value || null;
@@ -1766,7 +1802,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
  * the template entirely for now, for every role — see the report. */
 const TEMPLATE_COLUMNS = ['Branch','Department','Section','Specialization','Position','Employment Type',
   'Business Need','Employee Being Replaced','Justification','Position Target Start Date',
-  'Internal / Project','Project Name','Net Basic Monthly Salary'];
+  'Internal / Project','Project Name','Net Basic Monthly Salary','Support Allowance Applicable'];
 function buildTemplateRows(){
   // BU Head covering exactly one Department: lock the example rows to
   // it (same "single covered department" convenience as the inline
@@ -1775,7 +1811,7 @@ function buildTemplateRows(){
   const lockedDept = (currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1) ? MY_BU_DEPARTMENTS[0] : null;
   const exampleDept = lockedDept || ALL_DEPARTMENTS[0] || null;
   const exampleSection = exampleDept ? sectionsForDepartment(exampleDept.id)[0] : null;
-  const exampleBranch = ALL_BRANCHES[0] || null;
+  const exampleBranch = ALL_BRANCHES.find(b=>b.active !== false) || ALL_BRANCHES[0] || null;
   const nextMonth = new Date(); nextMonth.setMonth(nextMonth.getMonth()+1); nextMonth.setDate(1);
   const nextMonthStr = nextMonth.toISOString().slice(0,10);
 
@@ -1796,7 +1832,8 @@ function buildTemplateRows(){
     'Position Target Start Date': nextMonthStr,
     'Internal / Project': 'Internal',
     'Project Name': '',
-    'Net Basic Monthly Salary': '10,000'
+    'Net Basic Monthly Salary': '10,000',
+    'Support Allowance Applicable': 'No'
   };
   const example2 = Object.assign({}, example1, {
     'Position': 'EXAMPLE — delete this row (Technical Engineer)',
@@ -1907,6 +1944,11 @@ function resolveUploadRow(row, rowNum){
   const netSalary = MPCalc.parseMoneyInput(row['Net Basic Monthly Salary']);
   if(netSalary == null || !(netSalary > 0)) return fail('Net Basic Monthly Salary must be a positive number.');
 
+  // Support Allowance Applicable — product owner change #14: case-
+  // insensitive "Yes"/"Y" -> true, anything else -> false; always false
+  // when Internal/Project is Internal.
+  const supportAllowanceApplicable = internalOrProject === 'Project' && /^y/i.test(String(row['Support Allowance Applicable']||'').trim());
+
   const specializationName = String(row['Specialization']||'').trim();
   let specializationId = null;
   let costCenterId = null;
@@ -1950,15 +1992,22 @@ function resolveUploadRow(row, rowNum){
     justification: businessNeedType === 'New Position' ? justification : null,
     department_utilization: null,
     net_basic_monthly_salary: netSalary,
-    gross_incentive: 0
+    gross_incentive: 0,
+    support_allowance_applicable: supportAllowanceApplicable
   };
 
   // Same cost calculation the inline editor's live preview runs
   // (recalcPreview() -> MPCalc.calculateCost()), just fed the parsed
-  // row's inputs instead of live form fields.
+  // row's inputs instead of live form fields. Apply the same
+  // Support Allowance Applicable override pattern as the inline editor's
+  // recalcPreview() so an uploaded Project row's cost actually reflects
+  // the flag instead of silently ignoring it.
   const policy = MPCalc.resolveEffectivePolicy(position, ALL_COST_POLICY_TIERS);
+  const effectivePolicy = internalOrProject === 'Project'
+    ? Object.assign({}, policy, { has_support_allowance: supportAllowanceApplicable })
+    : policy;
   const calc = MPCalc.calculateCost({
-    currency, netBasicMonthlySalary: netSalary, position: policy, grossIncentive: 0,
+    currency, netBasicMonthlySalary: netSalary, position: effectivePolicy, grossIncentive: 0,
     positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
   });
   payload.cost_breakdown = calc;

@@ -664,11 +664,15 @@ function renderBuHeadCoverage(){
 let DIVISIONS = [], SECTIONS = [], COST_CENTERS = [], BRANCHES = [], POSITIONS = [];
 // Migration 10 (product owner change #9) — every one of these amount
 // columns now lives on cost_policy_tiers, not on positions directly.
+// Egypt-only for now (product owner change #14): the 12 Gulf-only amount
+// fields (housing_allowance ... onboarding_one_time_cost) are removed from
+// this list so the Cost Tier edit screen only renders Egypt-relevant
+// fields. This is purely a rendering change — the DB columns and any
+// values already stored on a Gulf tier row are left untouched, and this
+// is reversible by adding the fields back whenever Gulf work resumes.
 const POLICY_FIELDS = [
   'variable_salary_ratio','transportation_allowance','mobile_allowance','has_mobile_line_instead','mobile_line_company_cost',
-  'has_support_allowance','medical_insurance_monthly','life_insurance_annual','laptop_cost_annual','overhead_capex_annual','training_annual',
-  'housing_allowance','gosi_saudization_flat','flight_tickets_biannual','iqama_fees_annual','evisa_cost_3yr','medical_exam_cost_3yr',
-  'change_of_status_cost_3yr','contract_fees_3yr','employment_letter_cost_3yr','bank_account_opening_cost_3yr','other_current_year_cost_yearly','onboarding_one_time_cost'
+  'has_support_allowance','medical_insurance_monthly','life_insurance_annual','laptop_cost_annual','overhead_capex_annual','training_annual'
 ];
 let COST_POLICY_TIERS = [];
 
@@ -992,13 +996,22 @@ function renderBranches(){
   const el = document.getElementById('branchRows');
   el.innerHTML = BRANCHES.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No branches yet.</div>';
   BRANCHES.forEach(b=>{
+    const active = b.active !== false;
     const row = document.createElement('div'); row.className='dept-row';
-    row.innerHTML = `<div class="dept-name">${b.name} <span style="color:var(--text-mute);font-weight:400;">(${b.country})</span></div>
-      <button class="btn btn-danger btn-small" data-branch-del="${b.id}">Remove</button>`;
+    if(!active){ row.style.opacity = '0.5'; }
+    row.innerHTML = `<div class="dept-name">${b.name} <span style="color:var(--text-mute);font-weight:400;">(${b.country})</span>${active?'':' <span style="color:var(--text-mute);font-style:italic;">(inactive)</span>'}</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <label style="font-size:12.5px;display:flex;align-items:center;gap:4px;"><input type="checkbox" data-branch-active="${b.id}" ${active?'checked':''}> Active</label>
+        <button class="btn btn-danger btn-small" data-branch-del="${b.id}">Remove</button>
+      </div>`;
     el.appendChild(row);
   });
   el.querySelectorAll('[data-branch-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
     await sb.from('branches').delete().eq('id', btn.dataset.branchDel);
+    await loadOrgHierarchy();
+  }));
+  el.querySelectorAll('[data-branch-active]').forEach(chk=>chk.addEventListener('change', async ()=>{
+    await sb.from('branches').update({ active: chk.checked }).eq('id', chk.dataset.branchActive);
     await loadOrgHierarchy();
   }));
 }
@@ -1042,7 +1055,10 @@ async function loadStatutory(){
   const { data } = await sb.from('statutory_parameters').select('*').order('country').order('year', { ascending:false });
   STATUTORY_ROWS = data || [];
   const sel = document.getElementById('statutoryRowSelect');
-  sel.innerHTML = STATUTORY_ROWS.map(r=>`<option value="${r.id}">${r.country} ${r.year}</option>`).join('');
+  // Egypt-only for now (product owner change #14): the underlying query still
+  // fetches every country's row (harmless), but UAE/KSA rows aren't offered
+  // as selectable options since editing them has no visible effect right now.
+  sel.innerHTML = STATUTORY_ROWS.filter(r=>r.country==='EG').map(r=>`<option value="${r.id}">${r.country} ${r.year}</option>`).join('');
   sel.onchange = renderStatutoryJson;
   renderStatutoryJson();
 }
