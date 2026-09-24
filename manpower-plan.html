@@ -528,7 +528,7 @@ function fillSelect(id, values){
 }
 
 /* ====================== ROLE / PERMISSION HELPERS ====================== */
-function canCreate(){ return ['bu_head','recruiter','head_of_hr'].includes(currentUser.role); }
+function canCreate(){ return ['bu_head','recruiter','head_of_hr','ta_leader'].includes(currentUser.role); }
 // Round #12: BU Head also gets Export to Excel now — the cost-visibility
 // rule (getCostVisibilityLevel) still governs WHICH columns are exported
 // for them (see the export click handler below), so this addition alone
@@ -1110,6 +1110,7 @@ function openForm(row, opts){
 
   const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
   const isBuHead = currentUser.role === 'bu_head';
+  const isTaLeader = currentUser.role === 'ta_leader';
 
   // ---- Product owner change #2: identity block, reordered/grouped into
   // exactly: Branch/Location (alone) / Division | Department / Section-Track
@@ -1139,7 +1140,7 @@ function openForm(row, opts){
     const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
     grid.appendChild(buildNotInListAutoField('division', 'Division', div ? div.name : '', row ? row.division_id : null, flag.division || null));
   }
-  let departmentOptions = isBuHead ? MY_BU_DEPARTMENTS.slice() : ALL_DEPARTMENTS.slice();
+  let departmentOptions = isBuHead ? MY_BU_DEPARTMENTS.slice() : isTaLeader ? MY_TA_LEADER_DEPARTMENTS.slice() : ALL_DEPARTMENTS.slice();
   if(row && row.department_id && !departmentOptions.some(d=>d.id===row.department_id)){
     const extra = ALL_DEPARTMENTS.find(d=>d.id===row.department_id);
     if(extra) departmentOptions.push(extra); // keep an already-picked-but-no-longer-covered department visible rather than silently blanking it
@@ -1340,6 +1341,12 @@ function wireOrgCascade(row){
   // department set (e.g. their coverage changed since it was created).
   if(currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1 && !document.getElementById('chk_department_notinlist').checked){
     const onlyDeptId = String(MY_BU_DEPARTMENTS[0].id);
+    if(!deptSel.value || deptSel.value === onlyDeptId){
+      deptSel.value = onlyDeptId;
+      deptSel.disabled = true;
+    }
+  } else if(currentUser.role === 'ta_leader' && MY_TA_LEADER_DEPARTMENTS.length === 1 && !document.getElementById('chk_department_notinlist').checked){
+    const onlyDeptId = String(MY_TA_LEADER_DEPARTMENTS[0].id);
     if(!deptSel.value || deptSel.value === onlyDeptId){
       deptSel.value = onlyDeptId;
       deptSel.disabled = true;
@@ -1808,7 +1815,7 @@ function buildTemplateRows(){
   // it (same "single covered department" convenience as the inline
   // editor's own Department pre-fill/lock) — they couldn't create a
   // line for any other department anyway (enforced again on upload).
-  const lockedDept = (currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1) ? MY_BU_DEPARTMENTS[0] : null;
+  const lockedDept = (currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1) ? MY_BU_DEPARTMENTS[0] : (currentUser.role === 'ta_leader' && MY_TA_LEADER_DEPARTMENTS.length === 1) ? MY_TA_LEADER_DEPARTMENTS[0] : null;
   const exampleDept = lockedDept || ALL_DEPARTMENTS[0] || null;
   const exampleSection = exampleDept ? sectionsForDepartment(exampleDept.id)[0] : null;
   const exampleBranch = ALL_BRANCHES.find(b=>b.active !== false) || ALL_BRANCHES[0] || null;
@@ -1905,6 +1912,9 @@ function resolveUploadRow(row, rowNum){
   const dept = findByNameCI(ALL_DEPARTMENTS, row['Department']);
   if(!dept) return fail('Department "' + (row['Department']||'') + '" not found.');
   if(currentUser.role === 'bu_head' && !MY_BU_DEPARTMENTS.some(d=>d.id===dept.id)){
+    return fail('Department "' + dept.name + '" is not one of your covered departments.');
+  }
+  if(currentUser.role === 'ta_leader' && !MY_TA_LEADER_DEPARTMENTS.some(d=>d.id===dept.id)){
     return fail('Department "' + dept.name + '" is not one of your covered departments.');
   }
 
