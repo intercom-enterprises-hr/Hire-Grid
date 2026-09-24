@@ -232,8 +232,20 @@
         <select id="filterStatus"><option value="">All statuses</option></select>
         <div class="spacer"></div>
         <button class="btn btn-secondary" id="exportExcelBtn" style="display:none;">Export to Excel</button>
+        <!-- Round #12 (product owner): bulk-add positions from Excel —
+             visible to whoever can already create lines one at a time
+             (canCreate(): bu_head, recruiter, head_of_hr). The upload
+             button triggers a hidden native file input rather than
+             building a custom drag/drop widget. -->
+        <button class="btn btn-secondary" id="downloadTemplateBtn" style="display:none;">Download Template</button>
+        <button class="btn btn-secondary" id="uploadExcelBtn" style="display:none;">Upload from Excel</button>
+        <input type="file" id="uploadExcelInput" accept=".xlsx,.xls" style="display:none;">
         <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
       </div>
+      <!-- Round #12: per-row Upload-from-Excel results — a real inline
+           panel (not alert()) so several row errors are all readable at
+           once. Hidden whenever there is nothing to show. -->
+      <div class="card" id="importResultsPanel" style="display:none;margin-bottom:16px;"></div>
       <div class="card">
         <div class="table-scroll">
         <table>
@@ -411,6 +423,11 @@ async function loadCurrentUserAndApp(){
     loadBranches(), loadPositions(), loadCostPolicyTiers(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
   ]);
   document.getElementById('exportExcelBtn').style.display = canExport() ? '' : 'none';
+  // Round #12 — same gate as "+ Add Position": whoever can create a
+  // line by hand can also bulk-add lines via Download Template / Upload
+  // from Excel.
+  document.getElementById('downloadTemplateBtn').style.display = canCreate() ? '' : 'none';
+  document.getElementById('uploadExcelBtn').style.display = canCreate() ? '' : 'none';
   await loadRows();
 }
 function roleLabel(role){ return ROLE_LABELS[role] || role; }
@@ -491,7 +508,11 @@ function fillSelect(id, values){
 
 /* ====================== ROLE / PERMISSION HELPERS ====================== */
 function canCreate(){ return ['bu_head','recruiter','head_of_hr'].includes(currentUser.role); }
-function canExport(){ return ['recruiter','head_of_hr','top_management','admin'].includes(currentUser.role); } // BR-22 minimum
+// Round #12: BU Head also gets Export to Excel now — the cost-visibility
+// rule (getCostVisibilityLevel) still governs WHICH columns are exported
+// for them (see the export click handler below), so this addition alone
+// never leaks the full cost breakdown a BU Head doesn't see on screen.
+function canExport(){ return ['recruiter','head_of_hr','top_management','admin','bu_head'].includes(currentUser.role); } // BR-22 minimum
 function getCostVisibilityLevel(role){
   const row = COST_VIS.find(r=>r.role===role);
   return (row && row.level) || DEFAULT_COST_VISIBILITY[role] || 'total_only';
@@ -1213,6 +1234,39 @@ function buildSelectField(key, label, options, currentVal){
 // one other real choice, Specialization appears ONLY when the Department+
 // Track genuinely branches into more than one Cost Center, and Cost
 // Center itself is always resolved silently — never a dropdown.
+// Round #12 — pulled out of wireOrgCascade() so the Upload-from-Excel
+// bulk-add path (importRowsFromExcel() / resolveUploadRow() below) can
+// resolve Section/Position/Cost-Center for a parsed spreadsheet row
+// through the EXACT same lookups the inline editor's dropdowns use,
+// rather than re-implementing any of this logic a second time.
+function sectionsForDepartment(deptId){
+  return ALL_SECTIONS.filter(s=>s.department_id===deptId);
+}
+function positionsForDeptSection(deptId, sectionId){
+  return ALL_POSITIONS.filter(p=>p.department_id===deptId && p.section_id===sectionId);
+}
+function costCenterScopesFor(deptId, sectionId){
+  return ALL_CC_SCOPES.filter(sc=>sc.department_id===deptId && sc.section_id===sectionId);
+}
+// Resolves the Cost Center for a Department+Section(+Specialization),
+// exactly the same "unambiguous -> just use it / ambiguous -> resolve
+// by Specialization" rule the inline editor's applyCostCenterFromScopes()
+// used to implement inline. Returns:
+//   costCenterId   the resolved id, or null if it can't be resolved yet
+//   needsSpecialization  true when this Department+Section genuinely
+//                  branches into more than one Cost Center (i.e. a
+//                  Specialization is required to disambiguate)
+function resolveCostCenterForScope(deptId, sectionId, specializationId){
+  const scopes = (deptId && sectionId) ? costCenterScopesFor(deptId, sectionId) : [];
+  const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+  if(distinctCcIds.length === 1) return { costCenterId: scopes[0].cost_center_id, needsSpecialization: false };
+  if(distinctCcIds.length > 1){
+    const specId = specializationId != null ? Number(specializationId) : null;
+    const scope = scopes.find(sc=>sc.specialization_id === specId) || null;
+    return { costCenterId: scope ? scope.cost_center_id : null, needsSpecialization: true };
+  }
+  return { costCenterId: null, needsSpecialization: false }; // no scope configured at all for this Department+Section
+}
 function wireOrgCascade(row){
   const deptSel = document.getElementById('field_department');
   const divHidden = document.getElementById('field_division');
@@ -1239,9 +1293,6 @@ function wireOrgCascade(row){
 
   function currentDeptId(){ return deptSel.value ? Number(deptSel.value) : null; }
   function currentSectionId(){ return sectionSel.value ? Number(sectionSel.value) : null; }
-  function scopesFor(deptId, sectionId){
-    return ALL_CC_SCOPES.filter(sc=>sc.department_id===deptId && sc.section_id===sectionId);
-  }
 
   function refreshDivision(){
     const deptId = currentDeptId();
@@ -1253,7 +1304,7 @@ function wireOrgCascade(row){
   function refreshSections(){
     const deptId = currentDeptId();
     const prevVal = sectionSel.value;
-    const opts = deptId ? ALL_SECTIONS.filter(s=>s.department_id===deptId) : [];
+    const opts = deptId ? sectionsForDepartment(deptId) : [];
     sectionSel.innerHTML = '<option value="">— Choose —</option>';
     opts.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sectionSel.appendChild(o); });
     if(row && row.section_id && opts.some(s=>s.id===row.section_id)) sectionSel.value = row.section_id;
@@ -1261,31 +1312,25 @@ function wireOrgCascade(row){
   }
   function applyCostCenterFromScopes(){
     const deptId = currentDeptId(), sectionId = currentSectionId();
-    const scopes = (deptId && sectionId) ? scopesFor(deptId, sectionId) : [];
-    // Unambiguous (every scope row for this Department+Track shares the
-    // SAME Cost Center, e.g. a Project Management track shared across
-    // specializations) -> just use it, no Specialization selection
-    // needed. Ambiguous (>1 distinct Cost Center) -> resolve by whichever
-    // Specialization is currently selected.
-    const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
-    let scope = null;
-    if(distinctCcIds.length === 1) scope = scopes[0];
-    else if(distinctCcIds.length > 1){
-      const specId = specSel.value ? Number(specSel.value) : null;
-      scope = scopes.find(sc=>sc.specialization_id === specId) || null;
-    }
-    if(scope){
-      const cc = ALL_COST_CENTERS.find(c=>c.id===scope.cost_center_id);
-      ccHidden.value = scope.cost_center_id;
+    if(!deptId || !sectionId){ ccHidden.value=''; ccDisplay.value=''; return; }
+    const specId = specSel.value ? Number(specSel.value) : null;
+    // Round #12: the actual scope/ambiguity resolution now lives in the
+    // shared top-level resolveCostCenterForScope() so the Upload-from-
+    // Excel bulk-add path can reuse the EXACT same logic instead of
+    // re-implementing it (see importRowsFromExcel() below).
+    const resolved = resolveCostCenterForScope(deptId, sectionId, specId);
+    if(resolved.costCenterId){
+      const cc = ALL_COST_CENTERS.find(c=>c.id===resolved.costCenterId);
+      ccHidden.value = resolved.costCenterId;
       ccDisplay.value = cc ? (cc.name + (cc.cc_number ? ' (' + cc.cc_number + ')' : '')) : '';
     } else {
       ccHidden.value = '';
-      ccDisplay.value = (deptId && sectionId) ? 'Not yet configured for this Department/Track — check "Not in list?" to flag it for HR' : '';
+      ccDisplay.value = 'Not yet configured for this Department/Track — check "Not in list?" to flag it for HR';
     }
   }
   function refreshSpecialization(){
     const deptId = currentDeptId(), sectionId = currentSectionId();
-    const scopes = (deptId && sectionId) ? scopesFor(deptId, sectionId) : [];
+    const scopes = (deptId && sectionId) ? costCenterScopesFor(deptId, sectionId) : [];
     const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
     const needsSpecialization = distinctCcIds.length > 1; // the one real ambiguous case (change #2)
     specWrap.style.display = needsSpecialization ? '' : 'none';
@@ -1321,7 +1366,7 @@ function wireOrgCascade(row){
       return;
     }
     positionSel.disabled = false;
-    let opts = ALL_POSITIONS.filter(p=>p.department_id===deptId && p.section_id===sectionId);
+    let opts = positionsForDeptSection(deptId, sectionId);
     if(row && row.position_master_id && !opts.some(p=>p.id===row.position_master_id)){
       const extra = ALL_POSITIONS.find(p=>p.id===row.position_master_id);
       if(extra) opts = opts.concat([extra]); // never silently blank out an already-selected position (Edit/Duplicate) just because it predates Department/Track scoping
@@ -1337,7 +1382,7 @@ function wireOrgCascade(row){
   // right Specialization (purely a UI convenience — specialization itself
   // is never persisted on manpower_plan, only the Cost Center it resolves to).
   if(row && row.department_id && row.section_id && row.cost_center_id){
-    const matches = scopesFor(row.department_id, row.section_id).filter(sc=>sc.cost_center_id===row.cost_center_id);
+    const matches = costCenterScopesFor(row.department_id, row.section_id).filter(sc=>sc.cost_center_id===row.cost_center_id);
     if(matches.length === 1) row._prefillSpecializationId = matches[0].specialization_id;
   }
 
@@ -1575,19 +1620,44 @@ async function logMasterDataExceptions(mpId, flag){
 async function saveForm(submitNow){
   const statusEl = document.getElementById('formStatus');
   statusEl.className = 'status-msg'; statusEl.textContent = '';
-  if(!canCreate() && !editingRowId){ statusEl.textContent='You are not allowed to submit Manpower Plan lines.'; statusEl.className='status-msg err'; return; }
+
+  // Bug fix (round #12): disable BOTH action buttons the instant either
+  // is clicked — before any validation or async work runs — and swap
+  // the clicked one's label to a "…ing" state. Previously nothing
+  // disabled them while the insert/update was in flight, so a fast
+  // double-click could fire two inserts for the same line. They're only
+  // ever re-enabled below, via fail(), on a validation problem or a
+  // save error; on success the whole row is torn down by closeForm(),
+  // so there is nothing left on screen to re-enable.
+  const saveBtn = document.getElementById('saveFormBtn');
+  const submitBtn = document.getElementById('submitFormBtn');
+  const originalSaveText = saveBtn.textContent;
+  const originalSubmitText = submitBtn.textContent;
+  saveBtn.disabled = true;
+  submitBtn.disabled = true;
+  if(submitNow) submitBtn.textContent = 'Submitting…'; else saveBtn.textContent = 'Saving…';
+  function reenableButtons(){
+    saveBtn.disabled = false; submitBtn.disabled = false;
+    saveBtn.textContent = originalSaveText; submitBtn.textContent = originalSubmitText;
+  }
+  function fail(msg){
+    statusEl.textContent = msg; statusEl.className = 'status-msg err';
+    reenableButtons();
+  }
+
+  if(!canCreate() && !editingRowId){ fail('You are not allowed to submit Manpower Plan lines.'); return; }
 
   const payload = collectPayloadFromForm();
-  if(!payload.position_title){ statusEl.textContent='Position is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.division_id && !payload.master_data_flag.division){ statusEl.textContent='Division is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.branch_id){ statusEl.textContent='Branch is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.employment_type){ statusEl.textContent='Employment Type is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.net_basic_monthly_salary){ statusEl.textContent='Net Basic Monthly Salary is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.position_target_start_date){ statusEl.textContent='Position Target Start Date is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.internal_or_project){ statusEl.textContent='Internal / Project is required.'; statusEl.className='status-msg err'; return; }
-  if(payload.internal_or_project === 'Project' && !payload.project_name){ statusEl.textContent='Project Name is required when Internal / Project is set to Project.'; statusEl.className='status-msg err'; return; }
-  if(payload.business_need_type === 'Replacement' && !payload.employee_being_replaced){ statusEl.textContent='Employee Being Replaced is required for a Replacement.'; statusEl.className='status-msg err'; return; }
-  if(payload.business_need_type === 'New Position' && !payload.justification){ statusEl.textContent='Justification is required for a New Position.'; statusEl.className='status-msg err'; return; }
+  if(!payload.position_title){ fail('Position is required.'); return; }
+  if(!payload.division_id && !payload.master_data_flag.division){ fail('Division is required.'); return; }
+  if(!payload.branch_id){ fail('Branch is required.'); return; }
+  if(!payload.employment_type){ fail('Employment Type is required.'); return; }
+  if(!payload.net_basic_monthly_salary){ fail('Net Basic Monthly Salary is required.'); return; }
+  if(!payload.position_target_start_date){ fail('Position Target Start Date is required.'); return; }
+  if(!payload.internal_or_project){ fail('Internal / Project is required.'); return; }
+  if(payload.internal_or_project === 'Project' && !payload.project_name){ fail('Project Name is required when Internal / Project is set to Project.'); return; }
+  if(payload.business_need_type === 'Replacement' && !payload.employee_being_replaced){ fail('Employee Being Replaced is required for a Replacement.'); return; }
+  if(payload.business_need_type === 'New Position' && !payload.justification){ fail('Justification is required for a New Position.'); return; }
 
   let result, mpId;
   if(!editingRowId){
@@ -1611,7 +1681,7 @@ async function saveForm(submitNow){
     result = await sb.from('manpower_plan').update(payload).eq('id', editingRowId);
     mpId = editingRowId;
   }
-  if(result.error){ statusEl.textContent = 'Could not save: ' + result.error.message; statusEl.className='status-msg err'; return; }
+  if(result.error){ fail('Could not save: ' + result.error.message); return; }
   if(Object.keys(payload.master_data_flag||{}).length) await logMasterDataExceptions(mpId, payload.master_data_flag);
   closeForm();
   showToast(submitNow ? 'Submitted for approval.' : 'Saved as Draft.');
@@ -1619,17 +1689,312 @@ async function saveForm(submitNow){
 }
 
 /* ====================== EXCEL EXPORT (BR-22) ====================== */
+// Round #12: BU Head now also has this button (canExport()), but their
+// cost-visibility level is 'total_only' (same rule that governs the
+// on-screen worklist column and the inline editor's cost preview) — so
+// the exported "Total Monthly Cost" column (the finer-grained breakdown
+// figure they never see on screen either) is left OUT for them. Every
+// full-breakdown role keeps getting both cost columns, unchanged.
 document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
-  const rows = visibleRows().map(r=>({
-    'Position ID': r.position_code, 'Position': r.position_title, 'Division': r.division, 'Department': r.department,
-    'Status': r.status, 'Net Basic Monthly Salary': r.net_basic_monthly_salary, 'Currency': r.currency,
-    'Total Monthly Cost': r.total_monthly_cost, 'Total Current Year Cost': r.total_current_year_cost,
-    'Submitted By': profileName(r.submitted_by||r.requested_by)
-  }));
+  const level = getCostVisibilityLevel(currentUser.role);
+  const rows = visibleRows().map(r=>{
+    const row = {
+      'Position ID': r.position_code, 'Position': r.position_title, 'Division': r.division, 'Department': r.department,
+      'Status': r.status, 'Net Basic Monthly Salary': r.net_basic_monthly_salary, 'Currency': r.currency
+    };
+    if(level !== 'total_only') row['Total Monthly Cost'] = r.total_monthly_cost;
+    row['Total Current Year Cost'] = r.total_current_year_cost;
+    row['Submitted By'] = profileName(r.submitted_by||r.requested_by);
+    return row;
+  });
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Manpower Plan');
   XLSX.writeFile(wb, 'manpower-plan-export.xlsx');
+});
+
+/* ====================== DOWNLOAD TEMPLATE (round #12) ======================
+ * Generates a .xlsx with one header row plus a short NOTE row and two
+ * clearly-marked EXAMPLE rows, covering exactly the mandatory §5.1.4
+ * fields the inline editor collects for a new line (minus the fields
+ * that are auto-derived — Division/Cost Center/Currency — or system-
+ * generated — Status/Position ID/approval fields — which the template
+ * deliberately leaves out). Limitation: the "Top Management (approver)"
+ * field the inline editor shows a Recruiter/Head of HR is also left off
+ * the template entirely for now, for every role — see the report. */
+const TEMPLATE_COLUMNS = ['Branch','Department','Section','Specialization','Position','Employment Type',
+  'Business Need','Employee Being Replaced','Justification','Position Target Start Date',
+  'Internal / Project','Project Name','Net Basic Monthly Salary'];
+function buildTemplateRows(){
+  // BU Head covering exactly one Department: lock the example rows to
+  // it (same "single covered department" convenience as the inline
+  // editor's own Department pre-fill/lock) — they couldn't create a
+  // line for any other department anyway (enforced again on upload).
+  const lockedDept = (currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1) ? MY_BU_DEPARTMENTS[0] : null;
+  const exampleDept = lockedDept || ALL_DEPARTMENTS[0] || null;
+  const exampleSection = exampleDept ? sectionsForDepartment(exampleDept.id)[0] : null;
+  const exampleBranch = ALL_BRANCHES[0] || null;
+  const nextMonth = new Date(); nextMonth.setMonth(nextMonth.getMonth()+1); nextMonth.setDate(1);
+  const nextMonthStr = nextMonth.toISOString().slice(0,10);
+
+  // A plain instructional row — only its first cell is filled, so it
+  // reads as an obvious note rather than a data row; skipped on upload
+  // by isExampleOrNoteRow() below.
+  const noteRow = { 'Branch': 'NOTE — read before filling in: leave Specialization blank unless your Department/Section has more than one specialization; delete the two EXAMPLE rows below before uploading.' };
+  const example1 = {
+    'Branch': exampleBranch ? exampleBranch.name : '',
+    'Department': exampleDept ? exampleDept.name : '',
+    'Section': exampleSection ? exampleSection.name : '',
+    'Specialization': '',
+    'Position': 'EXAMPLE — delete this row (Software Engineer)',
+    'Employment Type': EMPLOYMENT_TYPES[0],
+    'Business Need': 'New Position',
+    'Employee Being Replaced': '',
+    'Justification': 'Explain why this new headcount is needed.',
+    'Position Target Start Date': nextMonthStr,
+    'Internal / Project': 'Internal',
+    'Project Name': '',
+    'Net Basic Monthly Salary': '10,000'
+  };
+  const example2 = Object.assign({}, example1, {
+    'Position': 'EXAMPLE — delete this row (Technical Engineer)',
+    'Business Need': 'Replacement',
+    'Employee Being Replaced': 'Jane Doe (leaving the company)',
+    'Justification': '',
+    'Net Basic Monthly Salary': '12,500'
+  });
+  return [noteRow, example1, example2];
+}
+document.getElementById('downloadTemplateBtn').addEventListener('click', ()=>{
+  const rows = buildTemplateRows();
+  const ws = XLSX.utils.json_to_sheet(rows, { header: TEMPLATE_COLUMNS });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Positions Template');
+  XLSX.writeFile(wb, 'manpower-plan-template.xlsx');
+});
+
+/* ====================== UPLOAD FROM EXCEL — bulk add (round #12) ======================
+ * Parses an uploaded .xlsx client-side with SheetJS, resolves each row
+ * against the SAME master data / ambiguity / validation rules the
+ * inline editor already enforces (reusing sectionsForDepartment(),
+ * positionsForDeptSection(), resolveCostCenterForScope(), the
+ * EMPLOYMENT_TYPES/BUSINESS_NEED_TYPES/INTERNAL_OR_PROJECT_OPTIONS
+ * constants, and MPCalc.buildApprovalChain()/calculateCost()), and
+ * inserts every row that resolves cleanly as a plain Draft — never
+ * auto-submitted, exactly like a manually-typed line starts as a Draft
+ * too. One bad row never blocks the others; every row is attempted and
+ * reported independently. */
+function findByNameCI(list, name, field){
+  field = field || 'name';
+  if(!name) return null;
+  const norm = String(name).trim().toLowerCase();
+  return list.find(x=>String(x[field]||'').trim().toLowerCase() === norm) || null;
+}
+// Accepts a genuine Excel date (SheetJS hands back a JS Date when the
+// source cell is a real date and the sheet uses cellDates), an Excel
+// date SERIAL number (when it isn't), or a parseable date string.
+function parseExcelDateCell(v){
+  if(v == null || v === '') return null;
+  if(v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString().slice(0,10);
+  if(typeof v === 'number'){
+    const ms = Math.round((v - 25569) * 86400 * 1000); // Excel epoch (1899-12-30) -> Unix epoch
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+  }
+  const d = new Date(String(v).trim());
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+}
+// Skips the template's own NOTE row and the two EXAMPLE rows (matched
+// the same way they're marked when the template is generated), and any
+// row that's entirely blank (e.g. a trailing blank line in the sheet).
+function isExampleOrNoteRow(row){
+  const vals = Object.values(row).map(v=>String(v==null?'':v));
+  if(vals.every(v=>v.trim()==='')) return true;
+  return vals.some(v=>/EXAMPLE\s*—\s*delete this row|^\s*NOTE\s*[—:-]/i.test(v));
+}
+// Resolves + validates ONE parsed spreadsheet row into a manpower_plan
+// insert payload. Never throws — every failure is caught and returned
+// as a per-row error string instead, so one bad row can't abort the
+// whole batch. rowNum is 1-based, counting only real data rows (the
+// note/example/blank rows are already excluded by the caller).
+function resolveUploadRow(row, rowNum){
+  function fail(msg){ return { ok:false, error: 'Row ' + rowNum + ': ' + msg }; }
+
+  const branch = findByNameCI(ALL_BRANCHES, row['Branch']);
+  if(!branch) return fail('Branch "' + (row['Branch']||'') + '" not found.');
+
+  const dept = findByNameCI(ALL_DEPARTMENTS, row['Department']);
+  if(!dept) return fail('Department "' + (row['Department']||'') + '" not found.');
+  if(currentUser.role === 'bu_head' && !MY_BU_DEPARTMENTS.some(d=>d.id===dept.id)){
+    return fail('Department "' + dept.name + '" is not one of your covered departments.');
+  }
+
+  const sectionsInDept = sectionsForDepartment(dept.id);
+  const section = findByNameCI(sectionsInDept, row['Section']);
+  if(!section) return fail('Section "' + (row['Section']||'') + '" not found in Department "' + dept.name + '".');
+
+  const positionsInScope = positionsForDeptSection(dept.id, section.id);
+  const position = findByNameCI(positionsInScope, row['Position'], 'title');
+  if(!position) return fail('Position "' + (row['Position']||'') + '" not found in Department "' + dept.name + '" / Section "' + section.name + '".');
+
+  const employmentType = String(row['Employment Type']||'').trim();
+  if(!EMPLOYMENT_TYPES.includes(employmentType)) return fail('Employment Type "' + employmentType + '" is not valid. Use one of: ' + EMPLOYMENT_TYPES.join(', ') + '.');
+
+  const businessNeedType = String(row['Business Need']||'').trim();
+  if(!BUSINESS_NEED_TYPES.includes(businessNeedType)) return fail('Business Need "' + businessNeedType + '" is not valid. Use one of: ' + BUSINESS_NEED_TYPES.join(', ') + '.');
+
+  const employeeBeingReplaced = String(row['Employee Being Replaced']||'').trim();
+  if(businessNeedType === 'Replacement' && !employeeBeingReplaced) return fail('Employee Being Replaced is required when Business Need is Replacement.');
+
+  const justification = String(row['Justification']||'').trim();
+  if(businessNeedType === 'New Position' && !justification) return fail('Justification is required when Business Need is New Position.');
+
+  const internalOrProject = String(row['Internal / Project']||'').trim();
+  if(!INTERNAL_OR_PROJECT_OPTIONS.includes(internalOrProject)) return fail('Internal / Project "' + internalOrProject + '" is not valid. Use one of: ' + INTERNAL_OR_PROJECT_OPTIONS.join(', ') + '.');
+
+  const projectName = String(row['Project Name']||'').trim();
+  if(internalOrProject === 'Project' && !projectName) return fail('Project Name is required when Internal / Project is Project.');
+
+  const startDate = parseExcelDateCell(row['Position Target Start Date']);
+  if(!startDate) return fail('Position Target Start Date is missing or not a recognizable date.');
+  // NOTE: the manual inline editor's date input sets min="today" but
+  // saveForm() itself never re-checks that server-side/on save — there
+  // is no "reject a past date" rule actually enforced today, so this
+  // bulk path deliberately does not invent a stricter one either.
+
+  const netSalary = MPCalc.parseMoneyInput(row['Net Basic Monthly Salary']);
+  if(netSalary == null || !(netSalary > 0)) return fail('Net Basic Monthly Salary must be a positive number.');
+
+  const specializationName = String(row['Specialization']||'').trim();
+  let specializationId = null;
+  let costCenterId = null;
+  if(internalOrProject !== 'Project'){
+    // Item #8's rule, mirrored here: a Project line never carries a
+    // Cost Center — Internal is the only case that needs one resolved.
+    const scopes = costCenterScopesFor(dept.id, section.id);
+    const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+    if(distinctCcIds.length > 1){
+      if(!specializationName) return fail('Specialization is required for Department "' + dept.name + '" / Section "' + section.name + '" (more than one specialization exists).');
+      const specOptions = [...new Set(scopes.map(sc=>sc.specialization_id).filter(v=>v!=null))]
+        .map(id=>ALL_SPECIALIZATIONS.find(s=>s.id===id)).filter(Boolean);
+      const spec = findByNameCI(specOptions, specializationName);
+      if(!spec) return fail('Specialization "' + specializationName + '" not found for Department "' + dept.name + '" / Section "' + section.name + '".');
+      specializationId = spec.id;
+    }
+    const resolved = resolveCostCenterForScope(dept.id, section.id, specializationId);
+    if(!resolved.costCenterId) return fail('No Cost Center configured for Department "' + dept.name + '" / Section "' + section.name + '"' + (specializationName ? ' / Specialization "' + specializationName + '"' : '') + '.');
+    costCenterId = resolved.costCenterId;
+  }
+
+  const division = ALL_DIVISIONS.find(d=>d.id===dept.division_id) || null;
+  const currency = MPCalc.currencyForCountry(branch.country);
+
+  const payload = {
+    position_master_id: position.id,
+    position_title: position.title,
+    division_id: division ? division.id : null,
+    department_id: dept.id,
+    section_id: section.id,
+    cost_center_id: costCenterId,
+    internal_or_project: internalOrProject,
+    project_name: internalOrProject === 'Project' ? projectName : null,
+    branch_id: branch.id,
+    currency,
+    master_data_flag: {},
+    employment_type: employmentType,
+    position_target_start_date: startDate,
+    business_need_type: businessNeedType,
+    employee_being_replaced: businessNeedType === 'Replacement' ? employeeBeingReplaced : null,
+    justification: businessNeedType === 'New Position' ? justification : null,
+    department_utilization: null,
+    net_basic_monthly_salary: netSalary,
+    gross_incentive: 0
+  };
+
+  // Same cost calculation the inline editor's live preview runs
+  // (recalcPreview() -> MPCalc.calculateCost()), just fed the parsed
+  // row's inputs instead of live form fields.
+  const policy = MPCalc.resolveEffectivePolicy(position, ALL_COST_POLICY_TIERS);
+  const calc = MPCalc.calculateCost({
+    currency, netBasicMonthlySalary: netSalary, position: policy, grossIncentive: 0,
+    positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
+  });
+  payload.cost_breakdown = calc;
+  payload.total_monthly_cost = calc.totalMonthlyCost;
+  payload.total_current_year_cost = calc.totalCurrentYearCost;
+  if(calc.onboardingOneTimeCost != null) payload.onboarding_one_time_cost = calc.onboardingOneTimeCost;
+
+  return { ok:true, payload };
+}
+// Runs every row from the parsed sheet through resolveUploadRow(),
+// inserting each one that resolves cleanly as a Draft (current_step -1,
+// status 'Draft') using the SAME requested_by/submitted_by/
+// approval_chain-building logic saveForm() uses for a normal manual
+// insert. Declared as a plain top-level function (reachable as
+// window.importRowsFromExcel) so it can also be exercised directly by
+// tests without needing a real .xlsx file round-trip.
+async function importRowsFromExcel(rawRows){
+  const dataRows = (rawRows||[]).filter(r=>!isExampleOrNoteRow(r));
+  const errors = [];
+  let successCount = 0;
+  for(let i=0;i<dataRows.length;i++){
+    const rowNum = i+1;
+    const resolved = resolveUploadRow(dataRows[i], rowNum);
+    if(!resolved.ok){ errors.push(resolved.error); continue; }
+    const payload = resolved.payload;
+    payload.created_by = currentUser.id;
+    payload.updated_by = currentUser.id;
+    payload.requested_by = currentUser.id;
+    payload.submitted_by = currentUser.id;
+    payload.position_status = 'Requested';
+    payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
+    payload.current_step = -1;
+    payload.status = 'Draft';
+    const result = await sb.from('manpower_plan').insert(payload);
+    if(result.error){ errors.push('Row ' + rowNum + ': could not save — ' + result.error.message); continue; }
+    successCount++;
+  }
+  return { successCount, errorCount: errors.length, errors, totalRows: dataRows.length };
+}
+function showImportResultsPanel(result){
+  const panel = document.getElementById('importResultsPanel');
+  if(!result || !result.errorCount){ panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  panel.style.display = '';
+  panel.innerHTML =
+    '<div style="padding:14px 16px;">' +
+      '<div style="font-weight:700;margin-bottom:6px;color:var(--charcoal);">Upload from Excel — ' + result.successCount + ' created as Draft, ' + result.errorCount + ' failed</div>' +
+      '<ul style="margin:0;padding-left:18px;font-size:12.5px;color:var(--red);">' +
+        result.errors.map(e=>'<li>'+escapeHtml(e)+'</li>').join('') +
+      '</ul>' +
+      '<button class="btn btn-secondary btn-small" id="dismissImportResultsBtn" style="margin-top:10px;">Dismiss</button>' +
+    '</div>';
+  document.getElementById('dismissImportResultsBtn').addEventListener('click', ()=>{ panel.style.display = 'none'; });
+}
+async function handleExcelUpload(file){
+  let rawRows = [];
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheetName = wb.SheetNames && wb.SheetNames[0];
+    const sheet = sheetName ? wb.Sheets[sheetName] : null;
+    rawRows = sheet ? XLSX.utils.sheet_to_json(sheet, { defval: '' }) : [];
+  } catch(e){
+    showImportResultsPanel({ successCount:0, errorCount:1, errors:['Could not read that file: ' + e.message] });
+    return;
+  }
+  const result = await importRowsFromExcel(rawRows);
+  showImportResultsPanel(result);
+  if(result.successCount){
+    showToast('Created ' + result.successCount + ' position(s) as Draft from the uploaded file.');
+    await loadRows();
+  }
+}
+document.getElementById('uploadExcelBtn').addEventListener('click', ()=> document.getElementById('uploadExcelInput').click());
+document.getElementById('uploadExcelInput').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // reset so re-selecting the same file still fires 'change'
+  if(!file) return;
+  await handleExcelUpload(file);
 });
 
 /* ====================== TOAST ====================== */
