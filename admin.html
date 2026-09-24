@@ -79,6 +79,38 @@
   .policy-grid label{font-size:11px;color:var(--text-mute);display:block;margin-bottom:2px;}
   .policy-grid input{width:100%;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;}
 
+  /* Merged Cost Tier card (redesign, migration 13 round): each tier's
+     assigned positions shown as removable tag/chip pills, plus a small
+     "+ add position" control, right below that tier's amount fields. */
+  .tier-positions{margin-top:16px;padding-top:14px;border-top:1px dashed var(--border);}
+  .tier-positions .group-label{font-size:11.5px;font-weight:600;color:var(--text-mute);margin-bottom:8px;}
+  .position-tag{
+    display:inline-flex;align-items:center;gap:6px;background:#eef4fb;color:var(--blue);
+    border:1px solid #d7e6f7;border-radius:16px;padding:5px 6px 5px 12px;font-size:12px;font-weight:600;
+  }
+  .position-tag button{background:none;border:none;color:var(--blue);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;font-weight:700;}
+  .position-tag button:hover{color:var(--red);}
+  /* Drag-and-drop (product owner change: drag a tag between tier cards as
+     an alternative to the "+ add position" dropdown, which stays put too).
+     Native HTML5 DnD — mouse-only, which is fine for this internal admin
+     tool; no touch fallback is built. */
+  .position-tag[draggable="true"]{cursor:grab;}
+  .position-tag.dragging{cursor:grabbing;opacity:0.45;}
+  .tier-add-position{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;}
+  .unassigned-positions{
+    background:#fff8ea;border:1px solid rgba(251,174,47,0.35);border-radius:10px;
+    padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--charcoal-soft);line-height:1.5;
+  }
+  .unassigned-positions b{color:var(--charcoal);}
+  /* Visual cue for a valid drop target while a tag is being dragged over
+     it — a tier's positions area, or the "Unassigned positions" line. */
+  .tier-positions.drag-hover{
+    background:#eef4fb;border-radius:8px;box-shadow:inset 0 0 0 2px var(--blue);border-top-color:transparent;
+  }
+  .unassigned-positions.drag-hover{
+    background:#fff3d6;box-shadow:inset 0 0 0 2px var(--gold);
+  }
+
   .coverage-block{padding:16px 0;border-bottom:1px solid #f0f0f2;}
   .coverage-block:last-child{border-bottom:none;}
   .coverage-block .person-name{font-size:14px;font-weight:700;color:var(--charcoal);margin-bottom:2px;}
@@ -249,29 +281,13 @@
 
     <div class="section-title">Cost Tiers (§5.1.5)</div>
     <div class="card">
-      <p class="hint">Every per-position cost amount the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs, etc.) now lives on a small set of reusable Cost Tiers instead of on each of the 111 positions individually. Edit a tier's amounts here — every position assigned to it inherits them exactly (there is no per-position override on top of a tier). Click a tier to expand its amounts.</p>
+      <p class="hint">Every per-position cost amount the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs, etc.) lives on a small set of reusable Cost Tiers instead of on each position individually — a position just points at one tier and inherits its amounts exactly (there is no per-position override on top of a tier). Click "Edit amounts &amp; positions" to expand a tier: its amount fields, the positions currently assigned to it (as removable tags), and a control to add another position into it (which also moves that position out of whichever tier it was in before).</p>
       <div id="tierRows"></div>
       <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
         <input type="text" id="newTierName" placeholder="New tier name (e.g. Senior Technical)" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
         <button class="btn btn-secondary" id="addTierBtn">Add tier</button>
       </div>
       <div class="status-msg" id="tierStatus" style="margin-top:10px;"></div>
-    </div>
-
-    <div class="section-title">Positions &amp; Tiers</div>
-    <div class="card">
-      <p class="hint">The master Position list (111 real titles imported from the org chart, plus any legacy ones). The only thing you set per position here is which Cost Tier it belongs to — a single dropdown, not 15 fields. Search or filter by Department/Track to find one quickly among the 111 rows.</p>
-      <div class="save-row" style="margin-bottom:12px;flex-wrap:wrap;">
-        <input type="text" id="positionSearchBox" placeholder="Search position title…" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
-        <select id="positionFilterDept" style="font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"><option value="">All departments</option></select>
-        <select id="positionFilterSection" style="font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"><option value="">All tracks</option></select>
-      </div>
-      <div id="positionRows"></div>
-      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
-        <input type="text" id="newPositionTitle" placeholder="New position title (global — not tied to a Department/Track)" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
-        <button class="btn btn-secondary" id="addPositionBtn">Add position</button>
-      </div>
-      <div class="status-msg" id="positionStatus" style="margin-top:10px;"></div>
     </div>
 
     <div class="section-title">Master Data Exceptions queue (BR-18)</div>
@@ -672,26 +688,78 @@ async function loadOrgHierarchy(){
   renderSectionsAndCostCenters();
   renderBranches();
   renderTiers();
-  renderPositions();
 }
 
-/* ====================== COST TIERS (product owner change #9) ======================
+/* ====================== COST TIERS (product owner change #9, then the
+ * redesign that merged in the old "Positions & Tiers" card) ======================
  * Small table of reusable Cost Tiers — replaces the old "111 positions x
  * 15 amount columns" grid. A position just points at ONE tier
  * (positions.cost_tier_id) and inherits its amounts wholesale; there is
- * no per-position override on top of a tier in this round. */
+ * no per-position override on top of a tier in this round.
+ *
+ * Redesign (product owner feedback on the split-card UI): the standalone
+ * "Positions & Tiers" card (search box + 111-row list + per-row tier
+ * dropdown) is gone. Instead, each tier's own card shows — when expanded —
+ * its amount fields, the positions currently assigned to it as removable
+ * tags, and a "+ add position" control to assign (or move) one into it.
+ * Positions with no tier at all are listed, purely for visibility, in a
+ * small "Unassigned positions" line above the tier list — assigning one
+ * is done from whichever tier's "+ add position" control it belongs in. */
 function renderTiers(){
   const el = document.getElementById('tierRows');
-  el.innerHTML = COST_POLICY_TIERS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No cost tiers yet — add one below.</div>';
+  el.innerHTML = '';
+
+  // ---- Unassigned positions: informational only, no dropdown here. ----
+  const unassigned = POSITIONS.filter(p=>!p.cost_tier_id);
+  if(unassigned.length){
+    const box = document.createElement('div');
+    box.className = 'unassigned-positions';
+    box.innerHTML = `<b>Unassigned positions (${unassigned.length}):</b> ` +
+      unassigned.map(p=>p.title).join(', ') +
+      ` <span style="display:block;margin-top:4px;font-style:italic;">Use "+ add position" on the right tier's card below to assign one, or drag a tag out of a tier and drop it here.</span>`;
+    // Natural extension of the same drag-and-drop mechanism: dropping a
+    // tag on this line clears its cost_tier_id (back to unassigned),
+    // mirroring the existing "×" remove-from-tier control. This box only
+    // exists when there's at least one unassigned position, so the drop
+    // target simply isn't offered when the line itself isn't shown.
+    box.addEventListener('dragover', e=>{ e.preventDefault(); box.classList.add('drag-hover'); });
+    box.addEventListener('dragleave', ()=> box.classList.remove('drag-hover'));
+    box.addEventListener('drop', async e=>{
+      e.preventDefault();
+      box.classList.remove('drag-hover');
+      const posId = e.dataTransfer.getData('text/plain');
+      if(!posId) return;
+      const statusEl = document.getElementById('tierStatus');
+      const { error } = await sb.from('positions').update({ cost_tier_id: null }).eq('id', posId);
+      statusEl.textContent = error ? ('Could not unassign: '+error.message) : 'Position unassigned from its tier.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadOrgHierarchy();
+    });
+    el.appendChild(box);
+  }
+
+  if(!COST_POLICY_TIERS.length){
+    const empty = document.createElement('div');
+    empty.style.padding = '10px 0'; empty.style.color = 'var(--text-mute)'; empty.style.fontSize = '12.5px';
+    empty.textContent = 'No cost tiers yet — add one below.';
+    el.appendChild(empty);
+    return;
+  }
+
   COST_POLICY_TIERS.forEach(t=>{
     const row = document.createElement('div'); row.className='position-row'; row.style.flexDirection='column'; row.style.alignItems='stretch';
     const head = document.createElement('div'); head.style.display='flex'; head.style.justifyContent='space-between'; head.style.alignItems='center';
-    const posCount = POSITIONS.filter(p=>p.cost_tier_id===t.id).length;
-    head.innerHTML = `<div class="dept-name">${t.name} <span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — ${posCount} position(s)</span></div>
-      <div><button class="btn btn-secondary btn-small" data-tier-toggle="${t.id}">Edit amounts</button>
+    const myPositions = POSITIONS.filter(p=>p.cost_tier_id===t.id);
+    head.innerHTML = `<div class="dept-name">${t.name} <span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — ${myPositions.length} position(s)</span></div>
+      <div><button class="btn btn-secondary btn-small" data-tier-toggle="${t.id}">Edit amounts &amp; positions</button>
       <button class="btn btn-danger btn-small" data-tier-del="${t.id}" style="margin-left:6px;">Remove</button></div>`;
     row.appendChild(head);
-    const grid = document.createElement('div'); grid.className='policy-grid'; grid.id='tier-grid-'+t.id; grid.style.display='none';
+
+    // Amounts, assigned-position tags and the "+ add position" control all
+    // toggle together as one body — that's the merged single-screen view.
+    const body = document.createElement('div'); body.id = 'tier-body-'+t.id; body.style.display = 'none';
+
+    const grid = document.createElement('div'); grid.className='policy-grid';
     POLICY_FIELDS.forEach(f=>{
       const wrap = document.createElement('div');
       const isBool = f==='has_mobile_line_instead' || f==='has_support_allowance';
@@ -705,6 +773,8 @@ function renderTiers(){
       }
       grid.appendChild(wrap);
     });
+    body.appendChild(grid);
+
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary btn-small'; saveBtn.style.marginTop='10px'; saveBtn.textContent = 'Save tier amounts';
     saveBtn.addEventListener('click', async ()=>{
@@ -719,18 +789,109 @@ function renderTiers(){
       statusEl.className = error ? 'status-msg err' : 'status-msg ok';
       if(!error) await loadOrgHierarchy();
     });
-    grid.appendChild(saveBtn);
-    row.appendChild(grid);
+    body.appendChild(saveBtn);
+
+    // ---- Merged in from the old standalone "Positions & Tiers" card ----
+    const posBlock = document.createElement('div'); posBlock.className = 'tier-positions';
+    posBlock.innerHTML = `<div class="group-label">Positions in this tier</div>`;
+    const tagsWrap = document.createElement('div'); tagsWrap.className = 'chip-row';
+    if(myPositions.length){
+      myPositions.forEach(p=>{
+        const tag = document.createElement('span'); tag.className = 'position-tag';
+        tag.innerHTML = `${p.title} <button type="button" data-untier-pos="${p.id}" title="Remove from this tier">&times;</button>`;
+        // ---- Drag-and-drop: an ADDITIONAL way to move a position between
+        // tiers, alongside the existing "+ add position" dropdown (which
+        // stays exactly as-is below). Native HTML5 DnD, mouse-only.
+        tag.setAttribute('draggable', 'true');
+        tag.addEventListener('dragstart', e=>{
+          // Only the position id needs to travel — the drop handler looks
+          // up which tier it lands in from the DOM element it's dropped on.
+          e.dataTransfer.setData('text/plain', String(p.id));
+          e.dataTransfer.effectAllowed = 'move';
+          tag.classList.add('dragging');
+        });
+        tag.addEventListener('dragend', ()=> tag.classList.remove('dragging'));
+        tagsWrap.appendChild(tag);
+      });
+    } else {
+      const empty = document.createElement('span'); empty.className = 'chip-empty'; empty.textContent = 'No positions assigned yet.';
+      tagsWrap.appendChild(empty);
+    }
+    posBlock.appendChild(tagsWrap);
+
+    // Make this tier's whole positions area (tags + "no positions" text)
+    // a drop target. dragover must call preventDefault() or the browser
+    // never allows a drop here; dragleave/drop clear the hover highlight.
+    posBlock.addEventListener('dragover', e=>{ e.preventDefault(); posBlock.classList.add('drag-hover'); });
+    posBlock.addEventListener('dragleave', ()=> posBlock.classList.remove('drag-hover'));
+    posBlock.addEventListener('drop', async e=>{
+      e.preventDefault();
+      posBlock.classList.remove('drag-hover');
+      const posId = e.dataTransfer.getData('text/plain');
+      if(!posId) return;
+      // Dropping a tag on the tier it's already in is a harmless no-op:
+      // this issues the same idempotent update the "+ add position"
+      // control uses, so re-setting the same cost_tier_id changes nothing.
+      const statusEl = document.getElementById('tierStatus');
+      const { error } = await sb.from('positions').update({ cost_tier_id: t.id }).eq('id', posId);
+      statusEl.textContent = error ? ('Could not move: '+error.message) : 'Position moved to "' + t.name + '".';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadOrgHierarchy();
+    });
+
+    // "+ add position" — every position NOT already in this tier is a
+    // candidate, whether it's currently unassigned or sitting in a
+    // different tier (picking one here moves it here).
+    const candidates = POSITIONS.filter(p=>p.cost_tier_id !== t.id);
+    const addRow = document.createElement('div'); addRow.className = 'tier-add-position';
+    if(candidates.length){
+      const sel = document.createElement('select');
+      sel.style.minWidth = '220px'; sel.style.fontFamily = 'inherit'; sel.style.fontSize = '12.5px';
+      sel.style.padding = '6px 8px'; sel.style.border = '1px solid var(--border)'; sel.style.borderRadius = '7px';
+      sel.innerHTML = candidates.map(p=>{
+        const currentTier = COST_POLICY_TIERS.find(ct=>ct.id===p.cost_tier_id);
+        const note = currentTier ? ` (currently ${currentTier.name})` : ' (unassigned)';
+        return `<option value="${p.id}">${p.title}${note}</option>`;
+      }).join('');
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-secondary btn-small'; addBtn.textContent = '+ add position';
+      addBtn.addEventListener('click', async ()=>{
+        const statusEl = document.getElementById('tierStatus');
+        const { error } = await sb.from('positions').update({ cost_tier_id: t.id }).eq('id', sel.value);
+        statusEl.textContent = error ? ('Could not assign: '+error.message) : 'Position assigned to "' + t.name + '".';
+        statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+        if(!error) await loadOrgHierarchy();
+      });
+      addRow.appendChild(sel); addRow.appendChild(addBtn);
+    } else {
+      const note = document.createElement('span'); note.className = 'chip-empty'; note.textContent = 'Every position is already in this tier.';
+      addRow.appendChild(note);
+    }
+    posBlock.appendChild(addRow);
+    body.appendChild(posBlock);
+
+    row.appendChild(body);
     el.appendChild(row);
   });
+
   el.querySelectorAll('[data-tier-toggle]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const grid = document.getElementById('tier-grid-'+btn.dataset.tierToggle);
-    grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
+    const body = document.getElementById('tier-body-'+btn.dataset.tierToggle);
+    body.style.display = body.style.display === 'none' ? 'block' : 'none';
   }));
   el.querySelectorAll('[data-tier-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
     const statusEl = document.getElementById('tierStatus');
     const { error } = await sb.from('cost_policy_tiers').delete().eq('id', btn.dataset.tierDel);
     statusEl.textContent = error ? ('Could not remove: '+error.message) : 'Tier removed.';
+    statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+    if(!error) await loadOrgHierarchy();
+  }));
+  // Removing a position from its tier is just an update of its
+  // cost_tier_id to null — the position row itself is untouched, it
+  // simply reappears in the "Unassigned positions" line above.
+  el.querySelectorAll('[data-untier-pos]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    const statusEl = document.getElementById('tierStatus');
+    const { error } = await sb.from('positions').update({ cost_tier_id: null }).eq('id', btn.dataset.untierPos);
+    statusEl.textContent = error ? ('Could not remove: '+error.message) : 'Position removed from tier.';
     statusEl.className = error ? 'status-msg err' : 'status-msg ok';
     if(!error) await loadOrgHierarchy();
   }));
@@ -850,78 +1011,6 @@ document.getElementById('addBranchBtn').addEventListener('click', async ()=>{
   statusEl.textContent = error ? ('Could not add: '+error.message) : 'Branch added.';
   statusEl.className = error ? 'status-msg err' : 'status-msg ok';
   if(!error){ document.getElementById('newBranchName').value=''; await loadOrgHierarchy(); }
-});
-
-function positionDeptName(p){ const d = DEPARTMENTS.find(d=>d.id===p.department_id); return d ? d.name : null; }
-function positionSectionName(p){ const s = SECTIONS.find(s=>s.id===p.section_id); return s ? s.name : null; }
-function renderPositionFilterOptions(){
-  const deptSel = document.getElementById('positionFilterDept');
-  const prevDept = deptSel.value;
-  const deptIds = [...new Set(POSITIONS.map(p=>p.department_id).filter(Boolean))];
-  deptSel.innerHTML = '<option value="">All departments</option>' +
-    deptIds.map(id=>{ const d = DEPARTMENTS.find(d=>d.id===id); return d ? `<option value="${id}">${d.name}</option>` : ''; }).join('');
-  if(deptIds.some(id=>String(id)===prevDept)) deptSel.value = prevDept;
-}
-function renderPositions(){
-  renderPositionFilterOptions();
-  const search = (document.getElementById('positionSearchBox').value || '').trim().toLowerCase();
-  const fDept = document.getElementById('positionFilterDept').value;
-  const fSection = document.getElementById('positionFilterSection').value;
-  // Track/Section options depend on the selected Department.
-  const sectionSel = document.getElementById('positionFilterSection');
-  const prevSection = sectionSel.value;
-  const sectionOpts = fDept ? SECTIONS.filter(s=>s.department_id===Number(fDept)) : [];
-  sectionSel.innerHTML = '<option value="">All tracks</option>' + sectionOpts.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  if(sectionOpts.some(s=>String(s.id)===prevSection)) sectionSel.value = prevSection;
-
-  const filtered = POSITIONS.filter(p=>{
-    if(search && !p.title.toLowerCase().includes(search)) return false;
-    if(fDept && String(p.department_id) !== fDept) return false;
-    if(fSection && String(p.section_id) !== fSection) return false;
-    return true;
-  });
-
-  const el = document.getElementById('positionRows');
-  el.innerHTML = filtered.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No positions match.</div>';
-  // Product owner change #9 — the ONLY thing set per position here is
-  // which Cost Tier it belongs to: a single dropdown, not 15 fields.
-  filtered.forEach(p=>{
-    const row = document.createElement('div'); row.className='position-row';
-    const deptName = positionDeptName(p), sectionName = positionSectionName(p);
-    const scopeLabel = deptName ? `<span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — ${deptName}${sectionName ? ' / ' + sectionName : ''}</span>` : '<span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — global (legacy)</span>';
-    const tierOptions = '<option value="">— No tier (all amounts zero) —</option>' +
-      COST_POLICY_TIERS.map(t=>`<option value="${t.id}" ${p.cost_tier_id===t.id?'selected':''}>${t.name}</option>`).join('');
-    row.innerHTML = `<div class="dept-name">${p.title}${scopeLabel}</div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <select data-pos-tier-id="${p.id}" style="min-width:180px;font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;">${tierOptions}</select>
-        <button class="btn btn-danger btn-small" data-pos-del="${p.id}">Remove</button>
-      </div>`;
-    el.appendChild(row);
-  });
-  el.querySelectorAll('[data-pos-tier-id]').forEach(sel=>sel.addEventListener('change', async ()=>{
-    const statusEl = document.getElementById('positionStatus');
-    const { error } = await sb.from('positions').update({ cost_tier_id: sel.value ? Number(sel.value) : null }).eq('id', sel.dataset.posTierId);
-    statusEl.textContent = error ? ('Could not save: '+error.message) : 'Tier assignment saved.';
-    statusEl.className = error ? 'status-msg err' : 'status-msg ok';
-    if(!error) await loadOrgHierarchy();
-  }));
-  el.querySelectorAll('[data-pos-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
-    await sb.from('positions').delete().eq('id', btn.dataset.posDel);
-    await loadOrgHierarchy();
-  }));
-}
-['positionSearchBox','positionFilterDept','positionFilterSection'].forEach(id=>{
-  document.getElementById(id).addEventListener('input', renderPositions);
-  document.getElementById(id).addEventListener('change', renderPositions);
-});
-document.getElementById('addPositionBtn').addEventListener('click', async ()=>{
-  const title = document.getElementById('newPositionTitle').value.trim();
-  const statusEl = document.getElementById('positionStatus');
-  if(!title){ statusEl.textContent='Enter a position title.'; statusEl.className='status-msg err'; return; }
-  const { error } = await sb.from('positions').insert({ title });
-  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Position added — click Edit policy to set its salary policy.';
-  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
-  if(!error){ document.getElementById('newPositionTitle').value=''; await loadOrgHierarchy(); }
 });
 
 /* ====================== MASTER DATA EXCEPTIONS QUEUE (BR-18) ====================== */
