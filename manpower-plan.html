@@ -195,8 +195,9 @@
         <table>
           <thead>
             <tr id="worklistHeaderRow">
-              <th>Position ID</th><th>Position</th><th>Division</th><th>Department</th>
-              <th>Status</th><th>Submitted By</th><th id="costColHeader">Total Current Year Cost</th><th></th>
+              <th>Branch</th><th>Position ID</th><th>Division</th><th>Department</th><th>Position</th>
+              <th>Cost Center</th><th>Business Need</th><th>Net Basic Monthly Salary</th>
+              <th id="costColHeader">Total Current Year Cost</th><th>Status</th><th>Submitted By</th><th></th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -294,8 +295,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
 const EMPLOYMENT_TYPES = ['Full Time','Part Time - Non Project Based'];
-const PRIORITIES = ['High','Medium','Low'];
 const BUSINESS_NEED_TYPES = ['New Position','Replacement'];
+const INTERNAL_OR_PROJECT_OPTIONS = ['Internal','Project']; // product owner change #6
 const DEFAULT_COST_VISIBILITY = {bu_head:'total_only', recruiter:'full_breakdown', head_of_hr:'full_breakdown', top_management:'total_only', company_vp:'total_only', admin:'full_breakdown'};
 
 /* ====================== STATE ====================== */
@@ -309,6 +310,7 @@ let ALL_CC_SCOPES = [];         // migration 9 — cost_center_scopes: (dept, se
 let ALL_COST_CENTERS = [];
 let ALL_BRANCHES = [];
 let ALL_POSITIONS = [];
+let ALL_COST_POLICY_TIERS = []; // migration 10 — replaces reading policy amounts directly off positions
 let ALL_ROWS = [];
 let COST_VIS = [];              // cost_visibility_settings rows
 let STATUTORY_EG = null;        // latest EG statutory_parameters.params
@@ -357,7 +359,7 @@ async function loadCurrentUserAndApp(){
 
   await Promise.all([
     loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadSpecializations(), loadCostCenterScopes(), loadCostCenters(),
-    loadBranches(), loadPositions(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
+    loadBranches(), loadPositions(), loadCostPolicyTiers(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
   ]);
   document.getElementById('exportExcelBtn').style.display = canExport() ? '' : 'none';
   await loadRows();
@@ -389,6 +391,7 @@ async function loadCostCenterScopes(){ const { data } = await sb.from('cost_cent
 async function loadCostCenters(){ const { data } = await sb.from('cost_centers').select('*').order('name'); ALL_COST_CENTERS = data || []; }
 async function loadBranches(){ const { data } = await sb.from('branches').select('*').order('name'); ALL_BRANCHES = data || []; }
 async function loadPositions(){ const { data } = await sb.from('positions').select('*').order('title'); ALL_POSITIONS = data || []; }
+async function loadCostPolicyTiers(){ const { data } = await sb.from('cost_policy_tiers').select('*').order('name'); ALL_COST_POLICY_TIERS = data || []; }
 async function loadCostVisibility(){ const { data } = await sb.from('cost_visibility_settings').select('*'); COST_VIS = data || []; }
 async function loadStatutory(){
   const { data } = await sb.from('statutory_parameters').select('*').eq('country','EG').order('year', { ascending:false });
@@ -512,6 +515,17 @@ function fmtMoney(v, currency){
   if(v == null || isNaN(v)) return '—';
   return Math.round(v).toLocaleString() + ' ' + (currency||'');
 }
+function branchName(id){ const b = ALL_BRANCHES.find(b=>b.id===id); return b ? b.name : null; }
+function costCenterName(id){ const c = ALL_COST_CENTERS.find(c=>c.id===id); return c ? c.name : null; }
+// Product owner change #6 — a Project line has no Cost Center at all;
+// show its free-text Project Name instead, clearly labeled.
+function costCenterOrProjectCell(r){
+  if(r.internal_or_project === 'Project'){
+    return r.project_name ? (escapeHtml(r.project_name) + ' <span style="color:var(--text-mute);font-size:11px;">(Project)</span>') : '—';
+  }
+  return escapeHtml(costCenterName(r.cost_center_id) || '—');
+}
+function businessNeedCell(r){ return escapeHtml(r.business_need_type || r.business_need || '—'); }
 function visibleRows(){
   return ALL_ROWS.filter(r=>!r.deleted_at);
 }
@@ -549,13 +563,17 @@ function renderTable(){
       ? fmtMoney(r.total_current_year_cost, r.currency)
       : fmtMoney(r.total_current_year_cost, r.currency) + (r.net_basic_monthly_salary ? ` <span style="color:var(--text-mute)">(net ${fmtMoney(r.net_basic_monthly_salary, r.currency)})</span>` : '');
     tr.innerHTML =
+      '<td>'+escapeHtml(branchName(r.branch_id)||'—')+'</td>'+
       '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
-      '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
       '<td>'+escapeHtml(r.division||'—')+'</td>'+
       '<td>'+escapeHtml(r.department||'—')+'</td>'+
+      '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
+      '<td>'+costCenterOrProjectCell(r)+'</td>'+
+      '<td>'+businessNeedCell(r)+'</td>'+
+      '<td>'+fmtMoney(r.net_basic_monthly_salary, r.currency)+'</td>'+
+      '<td>'+costCell+'</td>'+
       '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
       '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
-      '<td>'+costCell+'</td>'+
       '<td></td>';
     const actionCell = tr.lastElementChild;
     if(canActOnRow(r)){
@@ -772,13 +790,18 @@ wireConfirmOnSecondClick('actionRejectBtn', 'rejected');
 wireConfirmOnSecondClick('actionReturnBtn', 'returned');
 
 /* ====================== APPLY AN ACTION (shared by single + bulk) ====================== */
-function computeNextPositionId(divisionId){
-  const div = ALL_DIVISIONS.find(d=>d.id===divisionId);
-  const abbrev = (div && (div.abbreviation || div.name.slice(0,2).toUpperCase())) || 'NA';
+// Product owner change #8 — Position ID now reads the DEPARTMENT's
+// abbreviation (not the Division's), and the sequential serial is
+// scoped to lines in the SAME DEPARTMENT within the same calendar
+// year (not the same Division). Falls back to a derived abbreviation
+// from the department name if Admin hasn't set one yet.
+function computeNextPositionId(departmentId){
+  const dept = ALL_DEPARTMENTS.find(d=>d.id===departmentId);
+  const abbrev = (dept && (dept.abbreviation || dept.name.slice(0,3).toUpperCase())) || 'NA';
   const year = new Date().getFullYear();
   const prefix = 'MP_' + year + '_' + abbrev + '_';
   const serials = ALL_ROWS
-    .filter(r=>r.position_code && r.position_code.indexOf(prefix)===0)
+    .filter(r=>r.department_id === departmentId && r.position_code && r.position_code.indexOf(prefix)===0)
     .map(r=>parseInt(r.position_code.slice(prefix.length),10))
     .filter(n=>!isNaN(n));
   const next = (serials.length ? Math.max(...serials) : 0) + 1;
@@ -799,7 +822,7 @@ async function applyAction(row, action, reason){
     if(nextStep >= chain.length){
       payload.status = 'Approved';
       payload.position_status = 'Open';
-      payload.position_code = computeNextPositionId(row.division_id);
+      payload.position_code = computeNextPositionId(row.department_id);
     } else {
       payload.status = MPCalc.statusLabelForStep(chain, nextStep);
     }
@@ -852,7 +875,7 @@ function insertInlineEditorSkeleton(){
   tr.id = 'inlineEditorRow';
   tr.className = 'inline-editor-row';
   const td = document.createElement('td');
-  td.colSpan = 8;
+  td.colSpan = 12; // matches the 11 worklist data columns + actions column (product owner change #7)
   td.innerHTML =
     '<div class="inline-editor-head">' +
       '<div><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +
@@ -971,45 +994,16 @@ function openForm(row, opts){
   const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
   const isBuHead = currentUser.role === 'bu_head';
 
-  // ---- Change #2: Department — scoped to the BU Head's own covered
+  // ---- Product owner change #2: identity block, reordered/grouped into
+  // exactly: Branch/Location (alone) / Division | Department / Section-Track
+  // | Position / Specialization | Cost Center (or Project Name — change #6).
+  // Change #2: Department is scoped to the BU Head's own covered
   // departments (never shows a department they don't cover); Recruiter/
   // Head of HR still get every department. ----
   addSectionLabel(grid, 'Position');
-  let departmentOptions = isBuHead ? MY_BU_DEPARTMENTS.slice() : ALL_DEPARTMENTS.slice();
-  if(row && row.department_id && !departmentOptions.some(d=>d.id===row.department_id)){
-    const extra = ALL_DEPARTMENTS.find(d=>d.id===row.department_id);
-    if(extra) departmentOptions.push(extra); // keep an already-picked-but-no-longer-covered department visible rather than silently blanking it
-  }
-  grid.appendChild(buildNotInListField('department', 'Department', departmentOptions.map(d=>({id:d.id,label:d.name})), row ? row.department_id : null, flag.department || null));
 
-  // ---- Position — options are filtered to Department+Section below by wireOrgCascade() ----
-  grid.appendChild(buildNotInListField('position', 'Position (Title)', [], row ? row.position_master_id : null, flag.position || null));
-
-  // ---- Division — always auto-derived from Department, never a dropdown ----
-  {
-    const dept = row && row.department_id ? ALL_DEPARTMENTS.find(d=>d.id===row.department_id) : null;
-    const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
-    grid.appendChild(buildNotInListAutoField('division', 'Division', div ? div.name : '', row ? row.division_id : null, flag.division || null));
-  }
-
-  // ---- Section / Track — the ONE real choice besides Position/Department; options filtered to Department by wireOrgCascade() ----
-  grid.appendChild(buildNotInListField('section', 'Section / Track', [], row ? row.section_id : null, flag.section || null));
-
-  // ---- Specialization — ONLY rendered visibly when the Department+Track actually branches into more than one Cost Center; wireOrgCascade() shows/hides it. ----
-  {
-    const specWrap = document.createElement('div'); specWrap.className = 'form-field'; specWrap.id = 'wrap_specialization'; specWrap.style.display = 'none';
-    specWrap.innerHTML = '<label>Specialization *</label>';
-    const specSel = document.createElement('select'); specSel.id = 'field_specialization';
-    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; specSel.appendChild(blank);
-    specWrap.appendChild(specSel);
-    grid.appendChild(specWrap);
-  }
-
-  // ---- Cost Center — always auto-derived from Department+Section(+Specialization), never a raw dropdown ----
-  grid.appendChild(buildNotInListAutoField('cost_center', 'Cost Center', '', row ? row.cost_center_id : null, flag.cost_center || null));
-
-  // ---- Branch (no Not-in-list — BR-18) ----
-  const branchWrap = document.createElement('div'); branchWrap.className='form-field';
+  // ---- Row 1: Branch / Location — alone, full width (no Not-in-list — BR-18) ----
+  const branchWrap = document.createElement('div'); branchWrap.className='form-field full';
   branchWrap.innerHTML = '<label>Branch / Location *</label>';
   const branchSel = document.createElement('select'); branchSel.id = 'field_branch';
   const bBlank = document.createElement('option'); bBlank.value=''; bBlank.textContent='— Choose —'; branchSel.appendChild(bBlank);
@@ -1018,14 +1012,50 @@ function openForm(row, opts){
   branchWrap.appendChild(branchSel);
   grid.appendChild(branchWrap);
 
-  const currencyWrap = document.createElement('div'); currencyWrap.className='form-field';
-  currencyWrap.innerHTML = '<label>Currency</label><input type="text" id="field_currency_display" disabled>';
-  grid.appendChild(currencyWrap);
+  // ---- Row 2: Division | Department — Division always auto-derived from Department, never a dropdown ----
+  {
+    const dept = row && row.department_id ? ALL_DEPARTMENTS.find(d=>d.id===row.department_id) : null;
+    const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    grid.appendChild(buildNotInListAutoField('division', 'Division', div ? div.name : '', row ? row.division_id : null, flag.division || null));
+  }
+  let departmentOptions = isBuHead ? MY_BU_DEPARTMENTS.slice() : ALL_DEPARTMENTS.slice();
+  if(row && row.department_id && !departmentOptions.some(d=>d.id===row.department_id)){
+    const extra = ALL_DEPARTMENTS.find(d=>d.id===row.department_id);
+    if(extra) departmentOptions.push(extra); // keep an already-picked-but-no-longer-covered department visible rather than silently blanking it
+  }
+  grid.appendChild(buildNotInListField('department', 'Department', departmentOptions.map(d=>({id:d.id,label:d.name})), row ? row.department_id : null, flag.department || null));
 
-  // ---- Employment Type / Priority ----
+  // ---- Row 3: Section/Track | Position — Position options are filtered to Department+Section below by wireOrgCascade() ----
+  grid.appendChild(buildNotInListField('section', 'Section / Track', [], row ? row.section_id : null, flag.section || null));
+  grid.appendChild(buildNotInListField('position', 'Position (Title)', [], row ? row.position_master_id : null, flag.position || null));
+
+  // ---- Row 4: Specialization | Cost Center (or Project Name, when
+  // Internal/Project below is set to "Project" — change #6). Specialization
+  // is ONLY rendered visibly when the Department+Track actually branches
+  // into more than one Cost Center; wireOrgCascade() shows/hides it — when
+  // hidden, Cost Center's row simply flows to take the space (grid auto-flow). ----
+  {
+    const specWrap = document.createElement('div'); specWrap.className = 'form-field'; specWrap.id = 'wrap_specialization'; specWrap.style.display = 'none';
+    specWrap.innerHTML = '<label>Specialization *</label>';
+    const specSel = document.createElement('select'); specSel.id = 'field_specialization';
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; specSel.appendChild(blank);
+    specWrap.appendChild(specSel);
+    grid.appendChild(specWrap);
+  }
+  // Cost Center — always auto-derived from Department+Section(+Specialization),
+  // never a raw dropdown. Hidden entirely when Internal/Project = "Project".
+  const costCenterField = buildNotInListAutoField('cost_center', 'Cost Center', '', row ? row.cost_center_id : null, flag.cost_center || null);
+  costCenterField.id = 'wrap_cost_center';
+  grid.appendChild(costCenterField);
+  // Project Name — shown instead of Cost Center when Internal/Project = "Project".
+  const projWrap = document.createElement('div'); projWrap.className = 'form-field'; projWrap.id = 'wrap_project_name'; projWrap.style.display = 'none';
+  projWrap.innerHTML = '<label>Project Name *</label><input type="text" id="field_project_name" placeholder="Name of the project this headcount is for" value="'+escapeHtml(row && row.project_name || '')+'">';
+  grid.appendChild(projWrap);
+
+  // ---- Employment Type / Internal-Project (change #6) — Position Priority removed (change #5) ----
   addSectionLabel(grid, 'Position details');
+  grid.appendChild(buildSelectField('internal_or_project','Internal / Project', INTERNAL_OR_PROJECT_OPTIONS, row ? (row.internal_or_project || 'Internal') : 'Internal'));
   grid.appendChild(buildSelectField('employment_type','Employment Type', EMPLOYMENT_TYPES, row ? row.employment_type : ''));
-  grid.appendChild(buildSelectField('position_priority','Position Priority', PRIORITIES, row ? row.position_priority : ''));
 
   const startWrap = document.createElement('div'); startWrap.className='form-field';
   const todayStr = new Date().toISOString().slice(0,10);
@@ -1058,11 +1088,24 @@ function openForm(row, opts){
   utilWrap.innerHTML = '<label>Department Utilization (%) '+(currentUser.role==='recruiter'?'*':'(set by Recruiter)')+'</label><input type="number" id="field_department_utilization" min="0" max="100" step="0.1" value="'+(row && row.department_utilization!=null ? row.department_utilization : '')+'" '+(currentUser.role==='recruiter'?'':'disabled')+'>';
   grid.appendChild(utilWrap);
 
-  // ---- Salary ----
+  // ---- Salary — product owner change #3: Currency sits immediately next
+  // to Net Basic Monthly Salary (same row). Change #4: the salary input
+  // shows comma thousands-separators as you type (stored/calculated as a
+  // plain number — MPCalc.parseMoneyInput() strips the commas back out),
+  // and a small read-only "Total Year Cost" box sits directly next to it,
+  // live-updating with the rest of the preview. ----
   addSectionLabel(grid, 'Salary & cost (§5.1.5)');
   const netWrap = document.createElement('div'); netWrap.className='form-field';
-  netWrap.innerHTML = '<label>Net Basic Monthly Salary *</label><input type="number" id="field_net_basic_monthly_salary" min="0" step="1" value="'+(row && row.net_basic_monthly_salary!=null?row.net_basic_monthly_salary:'')+'">';
+  netWrap.innerHTML = '<label>Net Basic Monthly Salary *</label><input type="text" inputmode="numeric" id="field_net_basic_monthly_salary" placeholder="0" value="'+(row && row.net_basic_monthly_salary!=null ? MPCalc.formatMoneyInput(row.net_basic_monthly_salary) : '')+'">';
   grid.appendChild(netWrap);
+
+  const currencyWrap = document.createElement('div'); currencyWrap.className='form-field';
+  currencyWrap.innerHTML = '<label>Currency</label><input type="text" id="field_currency_display" disabled>';
+  grid.appendChild(currencyWrap);
+
+  const totalYearWrap = document.createElement('div'); totalYearWrap.className='form-field';
+  totalYearWrap.innerHTML = '<label>Total Year Cost</label><input type="text" id="field_total_year_cost_preview" placeholder="—" disabled>';
+  grid.appendChild(totalYearWrap);
 
   if(currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr'){
     const incWrap = document.createElement('div'); incWrap.className='form-field';
@@ -1073,11 +1116,12 @@ function openForm(row, opts){
   // ---- Wire cascading + conditional behavior ----
   wireOrgCascade(row);
   wireBusinessNeedToggle(row);
-  ['field_branch','field_net_basic_monthly_salary','field_gross_incentive','field_position_target_start_date','field_position_master_id_dummy']
+  wireInternalOrProjectToggle(row);
+  wireSalaryInputFormatting();
+  ['field_branch','field_gross_incentive','field_position_target_start_date','field_position_master_id_dummy']
     .forEach(id=>{ const el = document.getElementById(id); if(el) el.addEventListener('input', recalcPreview); });
   document.getElementById('field_branch').addEventListener('change', ()=>{ updateCurrencyDisplay(); recalcPreview(); });
   document.getElementById('field_position').addEventListener('change', recalcPreview);
-  document.getElementById('field_net_basic_monthly_salary').addEventListener('input', recalcPreview);
   const incEl = document.getElementById('field_gross_incentive'); if(incEl) incEl.addEventListener('input', recalcPreview);
   document.getElementById('field_position_target_start_date').addEventListener('change', recalcPreview);
 
@@ -1247,27 +1291,76 @@ function wireBusinessNeedToggle(row){
   sel.addEventListener('change', apply);
   apply();
 }
+// Product owner change #6 — Internal (default): behaves exactly like
+// before, Cost Center auto-resolved from Department+Track(+Specialization).
+// Project: Cost Center is hidden/skipped entirely (and cleared, so a stale
+// value never gets saved after switching), and a required free-text
+// Project Name input appears instead.
+function wireInternalOrProjectToggle(row){
+  const sel = document.getElementById('field_internal_or_project');
+  function apply(){
+    const isProject = sel.value === 'Project';
+    document.getElementById('wrap_cost_center').style.display = isProject ? 'none' : '';
+    document.getElementById('wrap_project_name').style.display = isProject ? '' : 'none';
+    if(isProject){
+      const ccHidden = document.getElementById('field_cost_center');
+      const ccDisplay = document.getElementById('field_cost_center_display');
+      const ccChk = document.getElementById('chk_cost_center_notinlist');
+      if(ccHidden) ccHidden.value = '';
+      if(ccDisplay) ccDisplay.value = '';
+      if(ccChk) ccChk.checked = false;
+    }
+  }
+  sel.addEventListener('change', ()=>{ apply(); recalcPreview(); });
+  apply();
+}
+// Product owner change #4 — format the Net Basic Monthly Salary input
+// with thousands separators as the person types; the underlying numeric
+// value (for calc/save) always comes back out through
+// MPCalc.parseMoneyInput(), which strips everything but digits/decimal.
+function wireSalaryInputFormatting(){
+  const el = document.getElementById('field_net_basic_monthly_salary');
+  el.addEventListener('input', ()=>{
+    const raw = MPCalc.parseMoneyInput(el.value);
+    const formatted = raw != null ? MPCalc.formatMoneyInput(raw) : '';
+    if(formatted !== el.value){
+      el.value = formatted;
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+    recalcPreview();
+  });
+}
 function updateCurrencyDisplay(){
   const branchId = document.getElementById('field_branch').value;
   const branch = ALL_BRANCHES.find(b=>String(b.id)===String(branchId));
   const currency = branch ? MPCalc.currencyForCountry(branch.country) : '';
   document.getElementById('field_currency_display').value = currency;
 }
+// Migration 10 (product owner change #9) — policy amounts now resolve
+// via the position's assigned cost_tier_id -> cost_policy_tiers, never
+// read directly off the positions row. No tier assigned -> all-zero.
 function selectedPositionPolicy(){
   const posId = document.getElementById('field_position').value;
   const notInList = document.getElementById('chk_position_notinlist').checked;
-  if(notInList || !posId) return {};
-  return ALL_POSITIONS.find(p=>String(p.id)===String(posId)) || {};
+  if(notInList || !posId) return MPCalc.zeroPolicy();
+  const pos = ALL_POSITIONS.find(p=>String(p.id)===String(posId)) || null;
+  return MPCalc.resolveEffectivePolicy(pos, ALL_COST_POLICY_TIERS);
 }
 function recalcPreview(){
   const branchId = document.getElementById('field_branch').value;
   const branch = ALL_BRANCHES.find(b=>String(b.id)===String(branchId));
-  const net = parseFloat(document.getElementById('field_net_basic_monthly_salary').value);
+  const netEl = document.getElementById('field_net_basic_monthly_salary');
+  const net = netEl ? MPCalc.parseMoneyInput(netEl.value) : null;
   const startDate = document.getElementById('field_position_target_start_date').value;
   const incEl = document.getElementById('field_gross_incentive');
   const grossIncentive = incEl ? parseFloat(incEl.value)||0 : 0;
   const box = document.getElementById('costPreview');
-  if(!branch || isNaN(net) || !startDate){ box.innerHTML = '<p class="hint">Fill in Branch, Net Basic Monthly Salary and Position Target Start Date to see the live cost preview.</p>'; return; }
+  const totalYearEl = document.getElementById('field_total_year_cost_preview');
+  if(!branch || net == null || !startDate){
+    box.innerHTML = '<p class="hint">Fill in Branch, Net Basic Monthly Salary and Position Target Start Date to see the live cost preview.</p>';
+    if(totalYearEl) totalYearEl.value = '';
+    return;
+  }
   const currency = MPCalc.currencyForCountry(branch.country);
   const position = selectedPositionPolicy();
   const calc = MPCalc.calculateCost({
@@ -1276,6 +1369,18 @@ function recalcPreview(){
   });
   window.__LAST_CALC__ = calc; // used at save time
   renderCostPreview(calc);
+  updateAdjacentTotalYearBox(calc);
+}
+// Product owner change #4 — the small Total Year Cost box sits right
+// next to the salary input and ALWAYS shows the number, for every role
+// that can open this editor (BU Head included) — it's not gated by the
+// total-only/full-breakdown cost visibility rule the way the fuller
+// breakdown further down the form is; that rule only governs whether the
+// FULL breakdown table also renders below.
+function updateAdjacentTotalYearBox(calc){
+  const el = document.getElementById('field_total_year_cost_preview');
+  if(!el) return;
+  el.value = calc ? fmtMoney(calc.totalCurrentYearCost, calc.currency) : '';
 }
 function renderCostPreview(calc){
   const level = getCostVisibilityLevel(currentUser.role);
@@ -1318,11 +1423,28 @@ function collectPayloadFromForm(){
   const divisionId = pick('division');
   const departmentId = pick('department');
   const sectionId = pick('section');
-  const costCenterId = pick('cost_center');
   const branchId = document.getElementById('field_branch').value ? Number(document.getElementById('field_branch').value) : null;
   const branch = ALL_BRANCHES.find(b=>b.id===branchId);
   const currency = branch ? MPCalc.currencyForCountry(branch.country) : null;
   const positionTitle = flag.position || (ALL_POSITIONS.find(p=>p.id===positionMasterId)||{}).title || null;
+
+  // Product owner change #6 — Internal keeps the auto-resolved Cost
+  // Center (with its own BR-18 "Not in list?" flag, same as before);
+  // Project clears Cost Center entirely and carries a free-text Project
+  // Name instead. Only one of cost_center_id/project_name is ever set.
+  const internalOrProject = document.getElementById('field_internal_or_project').value || 'Internal';
+  let costCenterId = null;
+  let projectName = null;
+  if(internalOrProject === 'Project'){
+    delete flag.cost_center; // the "not in list" concept doesn't apply once there's no Cost Center to flag
+    const projEl = document.getElementById('field_project_name');
+    projectName = projEl ? projEl.value.trim() : null;
+  } else {
+    costCenterId = pick('cost_center');
+  }
+
+  const netEl = document.getElementById('field_net_basic_monthly_salary');
+  const netSalary = netEl ? MPCalc.parseMoneyInput(netEl.value) : null; // change #4 — strip the comma formatting back to a plain number
 
   const payload = {
     position_master_id: positionMasterId,
@@ -1331,17 +1453,18 @@ function collectPayloadFromForm(){
     department_id: departmentId,
     section_id: sectionId,
     cost_center_id: costCenterId,
+    internal_or_project: internalOrProject,
+    project_name: projectName,
     branch_id: branchId,
     currency,
     master_data_flag: flag,
     employment_type: document.getElementById('field_employment_type').value || null,
-    position_priority: document.getElementById('field_position_priority').value || null,
     position_target_start_date: document.getElementById('field_position_target_start_date').value || null,
     business_need_type: document.getElementById('field_business_need_type').value || null,
     employee_being_replaced: document.getElementById('field_employee_being_replaced') ? document.getElementById('field_employee_being_replaced').value.trim() : null,
     justification: document.getElementById('field_justification') ? document.getElementById('field_justification').value.trim() : null,
     department_utilization: document.getElementById('field_department_utilization').value !== '' ? parseFloat(document.getElementById('field_department_utilization').value) : null,
-    net_basic_monthly_salary: document.getElementById('field_net_basic_monthly_salary').value !== '' ? parseFloat(document.getElementById('field_net_basic_monthly_salary').value) : null,
+    net_basic_monthly_salary: netSalary,
   };
   const tmSel = document.getElementById('field_top_management_approver_id');
   if(tmSel) payload.top_management_approver_id = tmSel.value || null;
@@ -1375,6 +1498,8 @@ async function saveForm(submitNow){
   if(!payload.employment_type){ statusEl.textContent='Employment Type is required.'; statusEl.className='status-msg err'; return; }
   if(!payload.net_basic_monthly_salary){ statusEl.textContent='Net Basic Monthly Salary is required.'; statusEl.className='status-msg err'; return; }
   if(!payload.position_target_start_date){ statusEl.textContent='Position Target Start Date is required.'; statusEl.className='status-msg err'; return; }
+  if(!payload.internal_or_project){ statusEl.textContent='Internal / Project is required.'; statusEl.className='status-msg err'; return; }
+  if(payload.internal_or_project === 'Project' && !payload.project_name){ statusEl.textContent='Project Name is required when Internal / Project is set to Project.'; statusEl.className='status-msg err'; return; }
   if(payload.business_need_type === 'Replacement' && !payload.employee_being_replaced){ statusEl.textContent='Employee Being Replaced is required for a Replacement.'; statusEl.className='status-msg err'; return; }
   if(payload.business_need_type === 'New Position' && !payload.justification){ statusEl.textContent='Justification is required for a New Position.'; statusEl.className='status-msg err'; return; }
 

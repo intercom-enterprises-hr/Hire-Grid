@@ -168,7 +168,8 @@
       <p class="hint">
         The fixed department list used everywhere in the system — Manpower Plan, BU Head requests,
         and the coverage assignments below. Add or remove departments here; assign who covers each
-        one underneath.
+        one underneath. The abbreviation drives the new Position ID format
+        (MP_{Year}_{DeptAbbrev}_{Serial}, product owner change #8) — edit it inline and press Enter or click away to save.
       </p>
       <div id="deptRows"></div>
       <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
@@ -246,9 +247,20 @@
       <div class="status-msg" id="branchStatus" style="margin-top:10px;"></div>
     </div>
 
-    <div class="section-title">Position Cost Policy (§5.1.5)</div>
+    <div class="section-title">Cost Tiers (§5.1.5)</div>
     <div class="card">
-      <p class="hint">The master Position list (111 real titles imported from the org chart, plus any legacy ones), and every per-position cost policy value the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs). Newly-imported positions start at 0/blank on every policy field — fill them in here. Search or filter by Department/Track to find one quickly, then click it to edit its policy values inline.</p>
+      <p class="hint">Every per-position cost amount the salary engine reads (variable salary ratio, allowances, insurance, onboarding costs, etc.) now lives on a small set of reusable Cost Tiers instead of on each of the 111 positions individually. Edit a tier's amounts here — every position assigned to it inherits them exactly (there is no per-position override on top of a tier). Click a tier to expand its amounts.</p>
+      <div id="tierRows"></div>
+      <div class="save-row" style="margin-top:14px;flex-wrap:wrap;">
+        <input type="text" id="newTierName" placeholder="New tier name (e.g. Senior Technical)" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+        <button class="btn btn-secondary" id="addTierBtn">Add tier</button>
+      </div>
+      <div class="status-msg" id="tierStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">Positions &amp; Tiers</div>
+    <div class="card">
+      <p class="hint">The master Position list (111 real titles imported from the org chart, plus any legacy ones). The only thing you set per position here is which Cost Tier it belongs to — a single dropdown, not 15 fields. Search or filter by Department/Track to find one quickly among the 111 rows.</p>
       <div class="save-row" style="margin-bottom:12px;flex-wrap:wrap;">
         <input type="text" id="positionSearchBox" placeholder="Search position title…" style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
         <select id="positionFilterDept" style="font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"><option value="">All departments</option></select>
@@ -491,8 +503,23 @@ function renderDeptRows(){
     row.className = 'dept-row';
     row.innerHTML = `
       <div class="dept-name">${d.name}</div>
-      <button class="btn btn-danger btn-small" data-delete-id="${d.id}">Remove</button>`;
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="text" data-abbrev-id="${d.id}" value="${d.abbreviation||''}" placeholder="Abbrev" style="width:90px;font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;text-transform:uppercase;">
+        <button class="btn btn-danger btn-small" data-delete-id="${d.id}">Remove</button>
+      </div>`;
     container.appendChild(row);
+  });
+  container.querySelectorAll('[data-abbrev-id]').forEach(input=>{
+    async function save(){
+      const statusEl = document.getElementById('deptStatus');
+      const abbreviation = input.value.trim().toUpperCase() || null;
+      const { error } = await sb.from('departments').update({ abbreviation }).eq('id', input.dataset.abbrevId);
+      statusEl.textContent = error ? ('Could not save abbreviation: ' + error.message) : 'Abbreviation saved.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadPeopleAndDepartments();
+    }
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') save(); });
+    input.addEventListener('blur', save);
   });
   container.querySelectorAll('[data-delete-id]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
@@ -619,28 +646,104 @@ function renderBuHeadCoverage(){
 
 /* ====================== ORG HIERARCHY: Divisions / Departments / Sections / Cost Centers / Branches / Positions ====================== */
 let DIVISIONS = [], SECTIONS = [], COST_CENTERS = [], BRANCHES = [], POSITIONS = [];
+// Migration 10 (product owner change #9) — every one of these amount
+// columns now lives on cost_policy_tiers, not on positions directly.
 const POLICY_FIELDS = [
   'variable_salary_ratio','transportation_allowance','mobile_allowance','has_mobile_line_instead','mobile_line_company_cost',
   'has_support_allowance','medical_insurance_monthly','life_insurance_annual','laptop_cost_annual','overhead_capex_annual','training_annual',
   'housing_allowance','gosi_saudization_flat','flight_tickets_biannual','iqama_fees_annual','evisa_cost_3yr','medical_exam_cost_3yr',
   'change_of_status_cost_3yr','contract_fees_3yr','employment_letter_cost_3yr','bank_account_opening_cost_3yr','other_current_year_cost_yearly','onboarding_one_time_cost'
 ];
+let COST_POLICY_TIERS = [];
 
 async function loadOrgHierarchy(){
-  const [{data:divs},{data:secs},{data:ccs},{data:brs},{data:poss}] = await Promise.all([
+  const [{data:divs},{data:secs},{data:ccs},{data:brs},{data:poss},{data:tiers}] = await Promise.all([
     sb.from('divisions').select('*').order('name'),
     sb.from('sections').select('*').order('name'),
     sb.from('cost_centers').select('*').order('name'),
     sb.from('branches').select('*').order('name'),
-    sb.from('positions').select('*').order('title')
+    sb.from('positions').select('*').order('title'),
+    sb.from('cost_policy_tiers').select('*').order('name')
   ]);
   DIVISIONS = divs || []; SECTIONS = secs || []; COST_CENTERS = ccs || []; BRANCHES = brs || []; POSITIONS = poss || [];
+  COST_POLICY_TIERS = tiers || [];
   renderDivisions();
   renderDeptDivisionAssignment();
   renderSectionsAndCostCenters();
   renderBranches();
+  renderTiers();
   renderPositions();
 }
+
+/* ====================== COST TIERS (product owner change #9) ======================
+ * Small table of reusable Cost Tiers — replaces the old "111 positions x
+ * 15 amount columns" grid. A position just points at ONE tier
+ * (positions.cost_tier_id) and inherits its amounts wholesale; there is
+ * no per-position override on top of a tier in this round. */
+function renderTiers(){
+  const el = document.getElementById('tierRows');
+  el.innerHTML = COST_POLICY_TIERS.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No cost tiers yet — add one below.</div>';
+  COST_POLICY_TIERS.forEach(t=>{
+    const row = document.createElement('div'); row.className='position-row'; row.style.flexDirection='column'; row.style.alignItems='stretch';
+    const head = document.createElement('div'); head.style.display='flex'; head.style.justifyContent='space-between'; head.style.alignItems='center';
+    const posCount = POSITIONS.filter(p=>p.cost_tier_id===t.id).length;
+    head.innerHTML = `<div class="dept-name">${t.name} <span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — ${posCount} position(s)</span></div>
+      <div><button class="btn btn-secondary btn-small" data-tier-toggle="${t.id}">Edit amounts</button>
+      <button class="btn btn-danger btn-small" data-tier-del="${t.id}" style="margin-left:6px;">Remove</button></div>`;
+    row.appendChild(head);
+    const grid = document.createElement('div'); grid.className='policy-grid'; grid.id='tier-grid-'+t.id; grid.style.display='none';
+    POLICY_FIELDS.forEach(f=>{
+      const wrap = document.createElement('div');
+      const isBool = f==='has_mobile_line_instead' || f==='has_support_allowance';
+      if(f==='variable_salary_ratio'){
+        wrap.innerHTML = `<label>${f}</label><select data-tier-field="${f}" data-tier-id="${t.id}">
+          ${['none','10_90','20_80','30_70','40_60'].map(v=>`<option value="${v}" ${t[f]===v?'selected':''}>${v}</option>`).join('')}</select>`;
+      } else if(isBool){
+        wrap.innerHTML = `<label><input type="checkbox" data-tier-field="${f}" data-tier-id="${t.id}" ${t[f]?'checked':''}> ${f}</label>`;
+      } else {
+        wrap.innerHTML = `<label>${f}</label><input type="number" step="0.01" data-tier-field="${f}" data-tier-id="${t.id}" value="${t[f]!=null?t[f]:0}">`;
+      }
+      grid.appendChild(wrap);
+    });
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary btn-small'; saveBtn.style.marginTop='10px'; saveBtn.textContent = 'Save tier amounts';
+    saveBtn.addEventListener('click', async ()=>{
+      const updates = {};
+      grid.querySelectorAll('[data-tier-field]').forEach(input=>{
+        const f = input.dataset.tierField;
+        updates[f] = input.type==='checkbox' ? input.checked : (input.tagName==='SELECT' ? input.value : parseFloat(input.value)||0);
+      });
+      const statusEl = document.getElementById('tierStatus');
+      const { error } = await sb.from('cost_policy_tiers').update(updates).eq('id', t.id);
+      statusEl.textContent = error ? ('Could not save: '+error.message) : 'Tier "' + t.name + '" saved.';
+      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+      if(!error) await loadOrgHierarchy();
+    });
+    grid.appendChild(saveBtn);
+    row.appendChild(grid);
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-tier-toggle]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const grid = document.getElementById('tier-grid-'+btn.dataset.tierToggle);
+    grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
+  }));
+  el.querySelectorAll('[data-tier-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    const statusEl = document.getElementById('tierStatus');
+    const { error } = await sb.from('cost_policy_tiers').delete().eq('id', btn.dataset.tierDel);
+    statusEl.textContent = error ? ('Could not remove: '+error.message) : 'Tier removed.';
+    statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+    if(!error) await loadOrgHierarchy();
+  }));
+}
+document.getElementById('addTierBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('newTierName').value.trim();
+  const statusEl = document.getElementById('tierStatus');
+  if(!name){ statusEl.textContent='Enter a tier name.'; statusEl.className='status-msg err'; return; }
+  const { error } = await sb.from('cost_policy_tiers').insert({ name });
+  statusEl.textContent = error ? ('Could not add: '+error.message) : 'Tier added — click Edit amounts to fill in its values.';
+  statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+  if(!error){ document.getElementById('newTierName').value=''; await loadOrgHierarchy(); }
+});
 
 function renderDivisions(){
   const el = document.getElementById('divisionRows');
@@ -780,50 +883,27 @@ function renderPositions(){
 
   const el = document.getElementById('positionRows');
   el.innerHTML = filtered.length ? '' : '<div style="padding:10px 0;color:var(--text-mute);font-size:12.5px;">No positions match.</div>';
+  // Product owner change #9 — the ONLY thing set per position here is
+  // which Cost Tier it belongs to: a single dropdown, not 15 fields.
   filtered.forEach(p=>{
-    const row = document.createElement('div'); row.className='position-row'; row.style.flexDirection='column'; row.style.alignItems='stretch';
-    const head = document.createElement('div'); head.style.display='flex'; head.style.justifyContent='space-between'; head.style.alignItems='center';
+    const row = document.createElement('div'); row.className='position-row';
     const deptName = positionDeptName(p), sectionName = positionSectionName(p);
     const scopeLabel = deptName ? `<span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — ${deptName}${sectionName ? ' / ' + sectionName : ''}</span>` : '<span style="color:var(--text-mute);font-weight:400;font-size:11.5px;"> — global (legacy)</span>';
-    head.innerHTML = `<div class="dept-name">${p.title}${scopeLabel}</div>
-      <div><button class="btn btn-secondary btn-small" data-pos-toggle="${p.id}">Edit policy</button>
-      <button class="btn btn-danger btn-small" data-pos-del="${p.id}" style="margin-left:6px;">Remove</button></div>`;
-    row.appendChild(head);
-    const grid = document.createElement('div'); grid.className='policy-grid'; grid.id='policy-grid-'+p.id; grid.style.display='none';
-    POLICY_FIELDS.forEach(f=>{
-      const wrap = document.createElement('div');
-      const isBool = f==='has_mobile_line_instead' || f==='has_support_allowance';
-      if(f==='variable_salary_ratio'){
-        wrap.innerHTML = `<label>${f}</label><select data-pos-field="${f}" data-pos-id="${p.id}">
-          ${['none','10_90','20_80','30_70','40_60'].map(v=>`<option value="${v}" ${p[f]===v?'selected':''}>${v}</option>`).join('')}</select>`;
-      } else if(isBool){
-        wrap.innerHTML = `<label><input type="checkbox" data-pos-field="${f}" data-pos-id="${p.id}" ${p[f]?'checked':''}> ${f}</label>`;
-      } else {
-        wrap.innerHTML = `<label>${f}</label><input type="number" step="0.01" data-pos-field="${f}" data-pos-id="${p.id}" value="${p[f]!=null?p[f]:0}">`;
-      }
-      grid.appendChild(wrap);
-    });
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'btn btn-primary btn-small'; saveBtn.style.marginTop='10px'; saveBtn.textContent = 'Save policy';
-    saveBtn.addEventListener('click', async ()=>{
-      const updates = {};
-      grid.querySelectorAll('[data-pos-field]').forEach(input=>{
-        const f = input.dataset.posField;
-        updates[f] = input.type==='checkbox' ? input.checked : (input.tagName==='SELECT' ? input.value : parseFloat(input.value)||0);
-      });
-      const statusEl = document.getElementById('positionStatus');
-      const { error } = await sb.from('positions').update(updates).eq('id', p.id);
-      statusEl.textContent = error ? ('Could not save: '+error.message) : 'Policy saved for ' + p.title + '.';
-      statusEl.className = error ? 'status-msg err' : 'status-msg ok';
-      if(!error) await loadOrgHierarchy();
-    });
-    grid.appendChild(saveBtn);
-    row.appendChild(grid);
+    const tierOptions = '<option value="">— No tier (all amounts zero) —</option>' +
+      COST_POLICY_TIERS.map(t=>`<option value="${t.id}" ${p.cost_tier_id===t.id?'selected':''}>${t.name}</option>`).join('');
+    row.innerHTML = `<div class="dept-name">${p.title}${scopeLabel}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <select data-pos-tier-id="${p.id}" style="min-width:180px;font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;">${tierOptions}</select>
+        <button class="btn btn-danger btn-small" data-pos-del="${p.id}">Remove</button>
+      </div>`;
     el.appendChild(row);
   });
-  el.querySelectorAll('[data-pos-toggle]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const grid = document.getElementById('policy-grid-'+btn.dataset.posToggle);
-    grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
+  el.querySelectorAll('[data-pos-tier-id]').forEach(sel=>sel.addEventListener('change', async ()=>{
+    const statusEl = document.getElementById('positionStatus');
+    const { error } = await sb.from('positions').update({ cost_tier_id: sel.value ? Number(sel.value) : null }).eq('id', sel.dataset.posTierId);
+    statusEl.textContent = error ? ('Could not save: '+error.message) : 'Tier assignment saved.';
+    statusEl.className = error ? 'status-msg err' : 'status-msg ok';
+    if(!error) await loadOrgHierarchy();
   }));
   el.querySelectorAll('[data-pos-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
     await sb.from('positions').delete().eq('id', btn.dataset.posDel);

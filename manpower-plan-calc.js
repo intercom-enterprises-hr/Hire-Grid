@@ -113,6 +113,60 @@
     return Object.assign({ grossBasicSalary: mid }, result);
   }
 
+  /* ---------- Migration 10: tier-based policy resolution ----------
+   * The old model read policy/allowance columns directly off the
+   * `positions` row. Migration 10 moves every one of those columns to
+   * a new `cost_policy_tiers` table instead — a position now just
+   * points at ONE tier (positions.cost_tier_id) and inherits 100% of
+   * that tier's amounts. No tier assigned -> every amount is treated
+   * as zero (ZERO_POLICY) rather than reading anything off the
+   * position row itself. This is a deliberate simplification: no
+   * per-position override on top of a tier in this round (see the
+   * migration 10 report) — the tier IS the amounts.
+   */
+  function zeroPolicy() {
+    return {
+      variable_salary_ratio: 'none',
+      transportation_allowance: 0,
+      mobile_allowance: 0,
+      has_mobile_line_instead: false,
+      mobile_line_company_cost: 0,
+      has_support_allowance: false,
+      medical_insurance_monthly: 0,
+      life_insurance_annual: 0,
+      laptop_cost_annual: 0,
+      overhead_capex_annual: 0,
+      training_annual: 0,
+      housing_allowance: 0,
+      gosi_saudization_flat: 0,
+      flight_tickets_biannual: 0,
+      iqama_fees_annual: 0,
+      evisa_cost_3yr: 0,
+      medical_exam_cost_3yr: 0,
+      change_of_status_cost_3yr: 0,
+      contract_fees_3yr: 0,
+      employment_letter_cost_3yr: 0,
+      bank_account_opening_cost_3yr: 0,
+      other_current_year_cost_yearly: 0,
+      onboarding_one_time_cost: 0
+    };
+  }
+  // `position` is a row from the `positions` table (now carrying only
+  // `cost_tier_id`, no amount columns of its own). `tiers` is the full
+  // list of `cost_policy_tiers` rows. Returns a plain object with the
+  // SAME field names computeEgyptCost/computeGulfCost already read
+  // (position.transportation_allowance, etc.) so those two functions
+  // never had to change — only WHERE the numbers come from changed.
+  function resolveEffectivePolicy(position, tiers) {
+    const zero = zeroPolicy();
+    if (!position || position.cost_tier_id == null) return zero;
+    const tier = (tiers || []).find(function (t) {
+      return t.id === position.cost_tier_id || String(t.id) === String(position.cost_tier_id);
+    });
+    if (!tier) return zero;
+    return Object.assign({}, zero, tier);
+  }
+
   const VARIABLE_RATIO_MAP = {
     none: 0,
     '10_90': 10 / 90,
@@ -355,8 +409,31 @@
     return Math.max(0, currentStep - 1);
   }
 
-  function formatPositionId(year, divisionAbbreviation, serial) {
-    return 'MP_' + year + '_' + divisionAbbreviation + '_' + serial;
+  // Migration 10 (product owner change #8): Position ID format is now
+  // MP_{Year}_{DepartmentAbbreviation}_{Serial} — the SAME function
+  // signature as before (year, abbreviation, serial), just fed the
+  // Department's abbreviation instead of the Division's from the
+  // caller (manpower-plan.html), and the serial search there is now
+  // scoped to the same Department instead of the same Division.
+  function formatPositionId(year, deptAbbreviation, serial) {
+    return 'MP_' + year + '_' + deptAbbreviation + '_' + serial;
+  }
+
+  // Simple thousands-separator formatting for the Net Basic Monthly
+  // Salary input (product owner change #4) — format for display,
+  // parse back to a plain number before any math/save. Kept tiny and
+  // dependency-free on purpose (no external library needed).
+  function formatMoneyInput(value) {
+    const n = parseMoneyInput(value);
+    if (n == null) return '';
+    return n.toLocaleString('en-US');
+  }
+  function parseMoneyInput(value) {
+    if (value == null) return null;
+    const stripped = String(value).replace(/[^0-9.]/g, '');
+    if (stripped === '') return null;
+    const n = parseFloat(stripped);
+    return isNaN(n) ? null : n;
   }
 
   return {
@@ -375,6 +452,10 @@
     statusLabelForStep: statusLabelForStep,
     isSelfApprovalBlocked: isSelfApprovalBlocked,
     stepAfterReturn: stepAfterReturn,
-    formatPositionId: formatPositionId
+    formatPositionId: formatPositionId,
+    zeroPolicy: zeroPolicy,
+    resolveEffectivePolicy: resolveEffectivePolicy,
+    formatMoneyInput: formatMoneyInput,
+    parseMoneyInput: parseMoneyInput
   };
 });
