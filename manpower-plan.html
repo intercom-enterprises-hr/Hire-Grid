@@ -59,9 +59,17 @@
   #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
   #appScreen{display:none;}
 
-  .tab-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .tab-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
   .tab-btn{font-family:inherit;font-size:13px;font-weight:600;padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:#fff;color:var(--text-mute);cursor:pointer;}
   .tab-btn.active{background:var(--charcoal);color:#fff;border-color:var(--charcoal);}
+  /* Product-owner change: the default/home view ("All Positions") is a
+     plain heading, not a pill-shaped button like the other tabs — it
+     still switches the view back when clicked (same click handler,
+     just a different look), but it no longer looks like a toggle you
+     have to press. */
+  .tab-btn.tab-heading{font-size:18px;padding:8px 4px;border:none;background:transparent;color:var(--charcoal);border-radius:0;}
+  .tab-btn.tab-heading.active{background:transparent;color:var(--charcoal);border-color:transparent;text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:3px;text-underline-offset:4px;}
+  .tab-btn.tab-heading:not(.active){color:var(--text-mute);text-decoration:none;}
 
   .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;}
   .toolbar input[type=text], .toolbar select{
@@ -218,7 +226,7 @@
   </header>
   <main>
     <div class="tab-row" id="tabRow">
-      <button class="tab-btn active" data-view="worklist" id="tabWorklist">Worklist</button>
+      <button class="tab-btn tab-heading active" data-view="worklist" id="tabWorklist">All Positions</button>
       <button class="tab-btn" data-view="tmsummary" id="tabTmSummary" style="display:none;">Top Management Summary</button>
       <button class="tab-btn" data-view="deleted" id="tabDeleted" style="display:none;">Deleted Lines</button>
     </div>
@@ -377,6 +385,7 @@ let COST_VIS = [];              // cost_visibility_settings rows
 let STATUTORY_EG = null;        // latest EG statutory_parameters.params
 let MY_DELEGATED_ROLES = [];    // roles I can act as, via an active delegation
 let MY_BU_DEPARTMENTS = [];
+let MY_TA_LEADER_DEPARTMENTS = []; // departments this TA Leader covers (ta_leader_departments), same shape as MY_BU_DEPARTMENTS
 let editingRowId = null;
 let duplicatingFromId = null;   // change #3 — set while the inline editor was opened via "Duplicate"
 let inlineEditorOpen = false;   // change #1 — guards renderTable() from ever wiping an open, unsaved inline row
@@ -420,7 +429,7 @@ async function loadCurrentUserAndApp(){
 
   await Promise.all([
     loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadSpecializations(), loadCostCenterScopes(), loadCostCenters(),
-    loadBranches(), loadPositions(), loadCostPolicyTiers(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
+    loadBranches(), loadPositions(), loadCostPolicyTiers(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments(), loadMyTaLeaderDepartments()
   ]);
   document.getElementById('exportExcelBtn').style.display = canExport() ? '' : 'none';
   // Round #12 — same gate as "+ Add Position": whoever can create a
@@ -479,6 +488,18 @@ async function loadMyBuDepartments(){
   const { data } = await sb.from('bu_head_departments').select('department_id').eq('bu_head_id', currentUser.id);
   const ids = (data || []).map(r=>r.department_id);
   MY_BU_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id));
+}
+// Analogous to loadMyBuDepartments() above, but for the TA Team Leader
+// approval-chain step: which departments THIS user (a ta_leader) covers,
+// queried directly by their own id against `ta_leader_departments`. NOT
+// to be confused with myRecruiterDepartmentIds() below, which is a
+// Recruiter looking up their TA Leader's departments via
+// currentUser.ta_leader_id — here currentUser IS the TA Leader.
+async function loadMyTaLeaderDepartments(){
+  if(currentUser.role !== 'ta_leader'){ MY_TA_LEADER_DEPARTMENTS = []; return; }
+  const { data } = await sb.from('ta_leader_departments').select('department_id').eq('ta_leader_id', currentUser.id);
+  const ids = (data || []).map(r=>r.department_id);
+  MY_TA_LEADER_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id));
 }
 async function loadRows(){
   const { data, error } = await sb.from('manpower_plan').select('*').order('created_at', { ascending:false });
@@ -539,7 +560,28 @@ function canActOnRow(row){
   if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) return false;
   const required = requiredRoleFor(row);
   if(!required) return false;
+  // TA Team Leader Review step: like a BU Head creating a line, a TA
+  // Leader may only ACT on a line for a department they actually cover
+  // (ta_leader_departments), not on every ta_leader-step row in the
+  // system. Mirrors loadMyBuDepartments()/MY_BU_DEPARTMENTS above.
+  if(required === 'ta_leader' && currentUser.role === required){
+    return MY_TA_LEADER_DEPARTMENTS.some(d=>d.id === row.department_id);
+  }
   if(currentUser.role === required) return true;
+  // Judgment call: a delegate acting on behalf of a TA Leader is NOT
+  // department-scoped here. Delegation (MY_DELEGATED_ROLES) only records
+  // {role, delegator_id, delegator_name} — it doesn't carry the
+  // delegator's own department coverage, and there's no per-delegation
+  // department list in the schema to check against. Scoping a delegate
+  // correctly would mean looking up ta_leader_departments for the
+  // SPECIFIC delegator_id(s) this user is standing in for (row-by-row,
+  // since a user could hold delegations from multiple TA Leaders with
+  // different coverage) rather than the flat MY_TA_LEADER_DEPARTMENTS
+  // list built for the current user's own id. That's a bigger, separate
+  // change, so — as explicitly allowed by the task — delegated ta_leader
+  // actions are left unscoped-by-department for now (same as every other
+  // delegated step already works today: MY_DELEGATED_ROLES only checks
+  // role, never department).
   return MY_DELEGATED_ROLES.some(d=>d.role === required);
 }
 function canResubmit(row){

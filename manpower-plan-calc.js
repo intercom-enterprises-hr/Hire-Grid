@@ -364,7 +364,16 @@
    * works for all 3 initiation paths in §5.1.2 from one rule.
    */
   const APPROVAL_STEPS = [
-    { role: 'recruiter', label: 'Recruiter Review' },
+    // Chain-role swap: this first step used to be a plain Recruiter
+    // ('recruiter') doing "Recruiter Review". It's now the TA Team
+    // Leader ('ta_leader') instead — a plain Recruiter is no longer a
+    // chain participant at all. Because 'recruiter' no longer appears
+    // anywhere in this array, buildApprovalChain()'s
+    // "drop the initiator's own role" filter has nothing to drop when
+    // a Recruiter initiates a line, so a Recruiter-initiated chain no
+    // longer shrinks the way it used to (now always 4 steps for that
+    // path) — this is intentional, see the task notes.
+    { role: 'ta_leader', label: 'TA Team Leader Review' },
     { role: 'bu_head', label: 'Hiring Manager Approval' },
     { role: 'head_of_hr', label: 'Head of HR Approval' },
     { role: 'top_management', label: 'Top Management Approval' }
@@ -379,7 +388,7 @@
     if (!chain || currentStep >= chain.length) return 'Approved';
     const step = chain[currentStep];
     const labels = {
-      recruiter: 'Pending Recruiter Review',
+      ta_leader: 'Pending TA Team Leader Review',
       bu_head: 'Pending Hiring Manager Approval',
       head_of_hr: 'Pending Head of HR Approval',
       top_management: 'Pending Top Management Approval'
