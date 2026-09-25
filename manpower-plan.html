@@ -382,7 +382,8 @@ let ALL_POSITIONS = [];
 let ALL_COST_POLICY_TIERS = []; // migration 10 — replaces reading policy amounts directly off positions
 let ALL_ROWS = [];
 let COST_VIS = [];              // cost_visibility_settings rows
-let STATUTORY_EG = null;        // latest EG statutory_parameters.params
+let STATUTORY_EG = null;        // latest EG statutory_parameters.params — fallback only, used before any start date is chosen
+let ALL_STATUTORY_EG = [];      // every EG statutory_parameters row ({year, params}), so each calculation can use the row that actually matches the position's own year rather than always the newest one
 let MY_DELEGATED_ROLES = [];    // roles I can act as, via an active delegation
 let MY_BU_DEPARTMENTS = [];
 let MY_TA_LEADER_DEPARTMENTS = []; // departments this TA Leader covers (ta_leader_departments), same shape as MY_BU_DEPARTMENTS
@@ -470,7 +471,34 @@ async function loadCostPolicyTiers(){ const { data } = await sb.from('cost_polic
 async function loadCostVisibility(){ const { data } = await sb.from('cost_visibility_settings').select('*'); COST_VIS = data || []; }
 async function loadStatutory(){
   const { data } = await sb.from('statutory_parameters').select('*').eq('country','EG').order('year', { ascending:false });
+  ALL_STATUTORY_EG = data || [];
   STATUTORY_EG = (data && data[0] && data[0].params) || MPCalc.defaultStatutoryParams();
+}
+// The statutory_parameters table is year+country versioned on purpose —
+// so a future year's constants (e.g. an updated SI Salary min/max for
+// 2027) can be added ahead of time without disturbing this year's own
+// calculations. Every calculation must therefore use the row that
+// actually matches the POSITION's own year (from its Target Start
+// Date), never blindly "whichever row was added most recently":
+//   1. an exact match for that year, if one exists;
+//   2. otherwise the closest earlier year on file (e.g. a 2026 position
+//      calculated before a 2026 row ever existed would fall back to the
+//      most recent year before it);
+//   3. otherwise (every row on file is for a LATER year than this
+//      position — nothing has been entered for this year or earlier
+//      yet) the earliest year on file, as the least-wrong available data;
+//   4. otherwise (no rows at all) the calc engine's own hardcoded defaults.
+function statutoryParamsForYear(year){
+  if(!ALL_STATUTORY_EG.length) return MPCalc.defaultStatutoryParams();
+  const exact = ALL_STATUTORY_EG.find(r=>r.year===year);
+  if(exact) return exact.params;
+  const atOrBefore = ALL_STATUTORY_EG.filter(r=>r.year<=year);
+  if(atOrBefore.length) return atOrBefore.reduce((a,b)=> a.year>b.year?a:b).params;
+  return ALL_STATUTORY_EG.reduce((a,b)=> a.year<b.year?a:b).params;
+}
+function statutoryParamsForDateStr(dateStr){
+  const year = dateStr ? new Date(dateStr).getFullYear() : NaN;
+  return statutoryParamsForYear(isNaN(year) ? new Date().getFullYear() : year);
 }
 async function loadMyDelegations(){
   MY_DELEGATED_ROLES = [];
@@ -1580,7 +1608,7 @@ function recalcPreview(){
   }
   const calc = MPCalc.calculateCost({
     currency, netBasicMonthlySalary: net, position: effectivePosition, grossIncentive,
-    positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
+    positionTargetStartDate: startDate, statutoryParams: statutoryParamsForDateStr(startDate)
   });
   window.__LAST_CALC__ = calc; // used at save time
   renderCostPreview(calc);
@@ -2018,7 +2046,7 @@ function resolveUploadRow(row, rowNum){
     : policy;
   const calc = MPCalc.calculateCost({
     currency, netBasicMonthlySalary: netSalary, position: effectivePolicy, grossIncentive: 0,
-    positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
+    positionTargetStartDate: startDate, statutoryParams: statutoryParamsForDateStr(startDate)
   });
   payload.cost_breakdown = calc;
   payload.total_monthly_cost = calc.totalMonthlyCost;
