@@ -1193,21 +1193,25 @@ function openForm(row, opts){
     grid.appendChild(specWrap);
   }
   // Cost Center — always auto-derived from Department+Section(+Specialization),
-  // never a raw dropdown. Item #8 — ALWAYS visible next to Project Name;
-  // disabled + dimmed (not hidden) when Internal/Project = "Project" —
-  // see wireInternalOrProjectToggle().
+  // never a raw dropdown; disabled + dimmed (not hidden) when
+  // Internal/Project = "Project" — see wireInternalOrProjectToggle().
+  // (Its old neighbor here used to be Project Name — moved down next to
+  // the Internal/Project field itself, per the product owner's layout
+  // request, so it now sits alone in this row.)
   const costCenterField = buildNotInListAutoField('cost_center', 'Cost Center', '', row ? row.cost_center_id : null, flag.cost_center || null);
   costCenterField.id = 'wrap_cost_center';
   grid.appendChild(costCenterField);
-  // Project Name — Item #8 — ALWAYS visible next to Cost Center; disabled
-  // + dimmed (not hidden) when Internal/Project = "Internal".
-  const projWrap = document.createElement('div'); projWrap.className = 'form-field'; projWrap.id = 'wrap_project_name';
-  projWrap.innerHTML = '<label>Project Name *</label><input type="text" id="field_project_name" placeholder="Name of the project this headcount is for" value="'+escapeHtml(row && row.project_name || '')+'">';
-  grid.appendChild(projWrap);
 
   // ---- Employment Type / Internal-Project (change #6) — Position Priority removed (change #5) ----
   addSectionLabel(grid, 'Position details');
   grid.appendChild(buildSelectField('internal_or_project','Internal / Project', INTERNAL_OR_PROJECT_OPTIONS, row ? (row.internal_or_project || 'Internal') : 'Internal'));
+  // Project Name — Item #8 — ALWAYS visible, now right next to Internal /
+  // Project (moved off Cost Center's row per the product owner's layout
+  // request); disabled + dimmed (not hidden) when Internal/Project =
+  // "Internal" — see wireInternalOrProjectToggle().
+  const projWrap = document.createElement('div'); projWrap.className = 'form-field'; projWrap.id = 'wrap_project_name';
+  projWrap.innerHTML = '<label>Project Name *</label><input type="text" id="field_project_name" placeholder="Name of the project this headcount is for" value="'+escapeHtml(row && row.project_name || '')+'">';
+  grid.appendChild(projWrap);
   grid.appendChild(buildSelectField('employment_type','Employment Type', EMPLOYMENT_TYPES, row ? row.employment_type : ''));
 
   const startWrap = document.createElement('div'); startWrap.className='form-field';
@@ -1387,7 +1391,22 @@ function wireOrgCascade(row){
   function refreshDivision(){
     const deptId = currentDeptId();
     const dept = ALL_DEPARTMENTS.find(d=>d.id===deptId);
-    const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    let div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    // No Department chosen/locked in yet (a BU Head or TA Leader who
+    // covers more than one Department has nothing pre-selected here) —
+    // if every Department they cover belongs to the SAME Division, show
+    // that Division right away instead of leaving it blank until they
+    // pick a specific Department; it's already known from their coverage
+    // alone. If their coverage spans more than one Division, there's
+    // genuinely nothing to show yet, so it stays blank as before.
+    if(!div && !dept){
+      const myDepts = currentUser.role === 'bu_head' ? MY_BU_DEPARTMENTS
+        : currentUser.role === 'ta_leader' ? MY_TA_LEADER_DEPARTMENTS : null;
+      if(myDepts && myDepts.length){
+        const divIds = [...new Set(myDepts.map(d=>d.division_id).filter(v=>v!=null))];
+        if(divIds.length === 1) div = ALL_DIVISIONS.find(d=>d.id===divIds[0]) || null;
+      }
+    }
     divHidden.value = div ? div.id : '';
     divDisplay.value = div ? div.name : (dept ? 'No division set for this department yet — see Admin Settings' : '');
   }
