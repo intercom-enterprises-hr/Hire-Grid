@@ -889,7 +889,8 @@ document.getElementById('actionReturnBtn').addEventListener('click', ()=>{
 });
 document.getElementById('actionResubmitBtn').addEventListener('click', async ()=>{
   if(!actionRow) return;
-  await resubmitRow(actionRow);
+  const { error } = await resubmitRow(actionRow);
+  if(error){ showToast('Could not submit: ' + error.message); return; }
   document.getElementById('actionModal').classList.remove('show');
   showToast('Submitted for approval.');
   await loadRows();
@@ -994,7 +995,11 @@ async function applyAction(row, action, reason){
 async function resubmitRow(row){
   const chain = row.approval_chain || [];
   const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0) };
-  await sb.from('manpower_plan').update(payload).eq('id', row.id);
+  // Bug fix: previously this swallowed the update's result entirely, so
+  // if the write was rejected (e.g. by an RLS policy) the button appeared
+  // to do nothing — no error, and the status never actually changed,
+  // since the DB write silently failed. Now the caller checks .error.
+  return await sb.from('manpower_plan').update(payload).eq('id', row.id);
 }
 async function deleteRow(row){
   await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted' }).eq('id', row.id);
