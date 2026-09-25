@@ -250,6 +250,20 @@
         <input type="file" id="uploadExcelInput" accept=".xlsx,.xls" style="display:none;">
         <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
       </div>
+      <!-- Bulk review toolbar — mirrors the Top Management Summary tab's
+           bulk toolbar, but for whichever rows on THIS worklist the
+           current user (or their active delegation) can act on right
+           now. Hidden entirely for a role that can never act on a line
+           (toggled in JS, same pattern as exportExcelBtn/canExport()). -->
+      <div class="toolbar" id="worklistBulkToolbar" style="display:none;">
+        <span class="hint" id="worklistSelectionHint">0 selected</span>
+        <div class="spacer"></div>
+        <button class="btn btn-secondary btn-small" id="worklistSelectAllBtn">Select all actionable</button>
+        <button class="btn btn-secondary btn-small" id="worklistClearSelectionBtn">Clear selection</button>
+        <button class="btn btn-primary btn-small" id="worklistBulkApproveBtn">Approve selected</button>
+        <button class="btn btn-gold btn-small" id="worklistBulkReturnBtn">Return selected</button>
+        <button class="btn btn-danger btn-small" id="worklistBulkRejectBtn">Reject selected</button>
+      </div>
       <!-- Round #12: per-row Upload-from-Excel results — a real inline
            panel (not alert()) so several row errors are all readable at
            once. Hidden whenever there is nothing to show. -->
@@ -259,6 +273,7 @@
         <table>
           <thead>
             <tr id="worklistHeaderRow">
+              <th><input type="checkbox" id="worklistSelectAllCheckbox"></th>
               <th>Branch</th><th>Position ID</th><th>Division</th><th>Department</th><th>Position</th>
               <th>Cost Center</th><th>Business Need</th><th>Net Basic Monthly Salary</th>
               <th id="costColHeader">Total Current Year Cost</th><th>Status</th><th>Submitted By</th><th></th>
@@ -392,9 +407,20 @@ let duplicatingFromId = null;   // change #3 — set while the inline editor was
 let inlineEditorOpen = false;   // change #1 — guards renderTable() from ever wiping an open, unsaved inline row
 let currentView = 'worklist';
 let tmSelectedIds = new Set();
+let worklistSelectedIds = new Set(); // same idea as tmSelectedIds, but for the main Worklist's own bulk toolbar
 let pendingBulkAction = null;   // 'rejected' | 'returned' — awaiting a shared reason
+let pendingBulkIdsSet = null;   // the Set (tmSelectedIds or worklistSelectedIds) the pending bulk action applies to
 let actionRow = null;           // row currently open in the single-row action modal
 let actionKind = null;          // 'approve'|'reject'|'return'|'delete'|'resubmit'
+// Whether this user could EVER act on some line's approval step — gates
+// whether the Worklist's bulk-review toolbar is shown at all. A plain
+// Recruiter, for instance, submits lines but never appears as an
+// approval-chain role, so showing Approve/Reject/Return buttons for them
+// would just be inert clutter.
+function canEverActOnSomeRow(){
+  return ['bu_head','ta_leader','head_of_hr','top_management','admin'].includes(currentUser.role)
+    || MY_DELEGATED_ROLES.length > 0;
+}
 
 /* ====================== AUTH ====================== */
 async function init(){
@@ -617,10 +643,16 @@ function canResubmit(row){
   return row.current_step === -1 && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id) && row.status !== 'Rejected' && !row.deleted_at;
 }
 function canDelete(row){
-  // BR-21: Hiring Manager may delete outright once it's Returned or
-  // Rejected back to them.
+  // BR-21: BU Head may delete outright once it's Returned or Rejected —
+  // for ANY line in one of their own covered departments, not only lines
+  // they personally submitted (product owner change: previously this
+  // required requested_by/submitted_by === them, which meant a BU Head
+  // could never delete a Returned/Rejected line a Recruiter or TA Leader
+  // had submitted for their department — fixed here, and on the DB side
+  // in migration 18, which also widens their read access to the whole
+  // department so those lines are even visible in the first place).
   return currentUser.role === 'bu_head'
-    && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id)
+    && MY_BU_DEPARTMENTS.some(d=>d.id === row.department_id)
     && (row.status === 'Returned for Revision' || row.status === 'Rejected')
     && !row.deleted_at;
 }
@@ -669,20 +701,17 @@ function businessNeedCell(r){ return escapeHtml(r.business_need_type || r.busine
 function visibleRows(){
   return ALL_ROWS.filter(r=>!r.deleted_at);
 }
-function renderTable(){
-  // Change #1: never blow away an open, unsaved inline "Add/Edit/Duplicate
-  // position" row just because a filter/search input fired a re-render —
-  // that's the "obviously safe from accidental data loss" requirement.
-  if(inlineEditorOpen) return;
+// Same search/Division/Department/Status filtering renderTable() applies
+// to the on-screen worklist — pulled out so the bulk toolbar's "select all"
+// can select all CURRENTLY VISIBLE actionable rows, same as the TM
+// Summary tab's own select-all respects its department filter, rather
+// than reaching past whatever the user is currently filtered down to.
+function currentlyFilteredWorklistRows(){
   const search = document.getElementById('searchBox').value.trim().toLowerCase();
   const fDiv = document.getElementById('filterDivision').value;
   const fDept = document.getElementById('filterDepartment').value;
   const fStatus = document.getElementById('filterStatus').value;
-
-  const level = getCostVisibilityLevel(currentUser.role);
-  document.getElementById('costColHeader').textContent = level === 'total_only' ? 'Total Current Year Cost' : 'Total Current Year Cost (full breakdown on row)';
-
-  const rows = visibleRows().filter(r=>{
+  return visibleRows().filter(r=>{
     if(fDiv && r.division !== fDiv) return false;
     if(fDept && r.department !== fDept) return false;
     if(fStatus && r.status !== fStatus) return false;
@@ -692,10 +721,30 @@ function renderTable(){
     }
     return true;
   });
+}
+function renderTable(){
+  // Change #1: never blow away an open, unsaved inline "Add/Edit/Duplicate
+  // position" row just because a filter/search input fired a re-render —
+  // that's the "obviously safe from accidental data loss" requirement.
+  if(inlineEditorOpen) return;
+  const level = getCostVisibilityLevel(currentUser.role);
+  document.getElementById('costColHeader').textContent = level === 'total_only' ? 'Total Current Year Cost' : 'Total Current Year Cost (full breakdown on row)';
+
+  const rows = currentlyFilteredWorklistRows();
 
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = '';
   document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
+
+  // Bulk review toolbar — only ever meaningful for a role that can act on
+  // SOME approval step; wire it up once per render (cheap, and rows can
+  // change which ones are actionable as filters/search change).
+  const bulkToolbarVisible = canEverActOnSomeRow();
+  document.getElementById('worklistBulkToolbar').style.display = bulkToolbarVisible ? '' : 'none';
+  // Selections for rows that just scrolled out of the current filter/search
+  // are dropped — there'd be no way to see or clear them otherwise.
+  const actionableIdsOnScreen = new Set(rows.filter(canActOnRow).map(r=>r.id));
+  [...worklistSelectedIds].forEach(id=>{ if(!actionableIdsOnScreen.has(id)) worklistSelectedIds.delete(id); });
 
   rows.forEach(r=>{
     const tr = document.createElement('tr');
@@ -707,7 +756,9 @@ function renderTable(){
     // each forcing the whole table wider, with a title="" tooltip
     // carrying the full text so nothing is actually lost, just not
     // shown inline.
+    const rowIsActionable = canActOnRow(r);
     tr.innerHTML =
+      '<td>'+(rowIsActionable ? '<input type="checkbox" class="worklist-select-row" data-id="'+r.id+'" '+(worklistSelectedIds.has(r.id)?'checked':'')+'>' : '')+'</td>'+
       '<td>'+escapeHtml(branchName(r.branch_id)||'—')+'</td>'+
       '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
       '<td>'+escapeHtml(r.division||'—')+'</td>'+
@@ -755,6 +806,18 @@ function renderTable(){
     }
     tbody.appendChild(tr);
   });
+  tbody.querySelectorAll('.worklist-select-row').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = Number(cb.dataset.id);
+      if(cb.checked) worklistSelectedIds.add(id); else worklistSelectedIds.delete(id);
+      updateWorklistSelectionUi();
+    });
+  });
+  document.getElementById('worklistSelectAllCheckbox').checked = actionableIdsOnScreen.size > 0 && [...actionableIdsOnScreen].every(id=>worklistSelectedIds.has(id));
+  if(bulkToolbarVisible) updateWorklistSelectionUi();
+}
+function updateWorklistSelectionUi(){
+  document.getElementById('worklistSelectionHint').textContent = worklistSelectedIds.size + ' selected';
 }
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 ['searchBox','filterDivision','filterDepartment','filterStatus'].forEach(id=>{
@@ -821,23 +884,36 @@ document.getElementById('tmSelectAllCheckbox').addEventListener('change', (e)=>{
 });
 document.getElementById('tmClearSelectionBtn').addEventListener('click', ()=>{ tmSelectedIds.clear(); renderTmSummary(); });
 
-document.getElementById('tmBulkApproveBtn').addEventListener('click', async ()=>{
-  const ids = [...tmSelectedIds];
+// Bulk-approve for a given ids Set + its "clear/re-render" callback — the
+// same shape whether the selection came from the TM Summary tab or the
+// main Worklist's own bulk toolbar.
+async function bulkApprove(idsSet, onDone){
+  const ids = [...idsSet];
   if(!ids.length){ showToast('Select at least one line first.'); return; }
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
     if(row) await applyAction(row, 'approved', null);
   }
-  tmSelectedIds.clear();
+  idsSet.clear();
   showToast('Approved ' + ids.length + ' line(s).');
   await loadRows();
-});
-document.getElementById('tmBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned'));
-document.getElementById('tmBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected'));
+  if(onDone) onDone();
+}
+document.getElementById('tmBulkApproveBtn').addEventListener('click', ()=> bulkApprove(tmSelectedIds));
+document.getElementById('tmBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned', tmSelectedIds));
+document.getElementById('tmBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected', tmSelectedIds));
 
-function openBulkReasonModal(action){
-  if(!tmSelectedIds.size){ showToast('Select at least one line first.'); return; }
+document.getElementById('worklistBulkApproveBtn').addEventListener('click', ()=> bulkApprove(worklistSelectedIds, updateWorklistSelectionUi));
+document.getElementById('worklistBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned', worklistSelectedIds));
+document.getElementById('worklistBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected', worklistSelectedIds));
+
+// action: 'rejected' | 'returned'. idsSet: whichever selection (TM Summary
+// or the main Worklist) triggered this — the SAME shared modal serves both,
+// since the reason-required flow (BR-09) is identical either way.
+function openBulkReasonModal(action, idsSet){
+  if(!idsSet.size){ showToast('Select at least one line first.'); return; }
   pendingBulkAction = action;
+  pendingBulkIdsSet = idsSet;
   document.getElementById('bulkReasonTitle').textContent = action === 'rejected' ? 'Reject selected lines' : 'Return selected lines for revision';
   document.getElementById('bulkReasonInput').value = '';
   document.getElementById('bulkReasonStatus').textContent = '';
@@ -848,16 +924,30 @@ document.getElementById('confirmBulkReasonBtn').addEventListener('click', async 
   const reason = document.getElementById('bulkReasonInput').value.trim();
   const statusEl = document.getElementById('bulkReasonStatus');
   if(!reason){ statusEl.textContent = 'A reason is required (BR-09).'; statusEl.className='status-msg err'; return; }
-  const ids = [...tmSelectedIds];
+  const idsSet = pendingBulkIdsSet;
+  const ids = [...idsSet];
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
     if(row) await applyAction(row, pendingBulkAction, reason);
   }
-  tmSelectedIds.clear();
+  idsSet.clear();
   document.getElementById('bulkReasonModal').classList.remove('show');
   showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + ids.length + ' line(s).');
   await loadRows();
 });
+
+/* ---- Worklist bulk toolbar: select-all / clear (mirrors the TM tab's) ---- */
+document.getElementById('worklistSelectAllBtn').addEventListener('click', ()=>{
+  currentlyFilteredWorklistRows().filter(canActOnRow).forEach(r=>worklistSelectedIds.add(r.id));
+  renderTable();
+});
+document.getElementById('worklistSelectAllCheckbox').addEventListener('change', (e)=>{
+  const actionableRows = currentlyFilteredWorklistRows().filter(canActOnRow);
+  if(e.target.checked) actionableRows.forEach(r=>worklistSelectedIds.add(r.id));
+  else actionableRows.forEach(r=>worklistSelectedIds.delete(r.id));
+  renderTable();
+});
+document.getElementById('worklistClearSelectionBtn').addEventListener('click', ()=>{ worklistSelectedIds.clear(); renderTable(); });
 
 /* ====================== SINGLE-ROW ACTION MODAL ====================== */
 function openActionModal(row){
@@ -1850,18 +1940,35 @@ document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
   XLSX.writeFile(wb, 'manpower-plan-export.xlsx');
 });
 
-/* ====================== DOWNLOAD TEMPLATE (round #12) ======================
- * Generates a .xlsx with one header row plus a short NOTE row and two
- * clearly-marked EXAMPLE rows, covering exactly the mandatory §5.1.4
- * fields the inline editor collects for a new line (minus the fields
- * that are auto-derived — Division/Cost Center/Currency — or system-
- * generated — Status/Position ID/approval fields — which the template
- * deliberately leaves out). Limitation: the "Top Management (approver)"
- * field the inline editor shows a Recruiter/Head of HR is also left off
- * the template entirely for now, for every role — see the report. */
+/* ====================== DOWNLOAD TEMPLATE (round #12; reworked per
+ * product owner feedback below) ======================
+ * Generates a .xlsx covering EVERY field the inline editor can collect
+ * for a new line (minus the fields that are auto-derived — Division/
+ * Cost Center/Currency — or system-generated — Status/Position ID/
+ * approval fields — which the template still leaves out, since there's
+ * nothing for the manager to type into them). Product owner change:
+ * previously "Top Management (Approver)", "Department Utilization (%)"
+ * and "Gross Incentive" were left off entirely; now every column the
+ * system's own box can collect is here, and NOTE_TEXT spells out the
+ * exact same mandatory-field rules saveForm()/resolveUploadRow() below
+ * enforce, "as if filling the system box" — including which fields are
+ * only conditionally required. The instructional note is written as the
+ * sheet's literal first row (not a data row after the header) — see the
+ * download handler below, which builds the sheet as a raw
+ * row-by-row array (aoa_to_sheet) instead of json_to_sheet for exactly
+ * this reason. */
 const TEMPLATE_COLUMNS = ['Branch','Department','Section','Specialization','Position','Employment Type',
   'Business Need','Employee Being Replaced','Justification','Position Target Start Date',
-  'Internal / Project','Project Name','Net Basic Monthly Salary','Support Allowance Applicable'];
+  'Internal / Project','Project Name','Net Basic Monthly Salary','Support Allowance Applicable',
+  'Top Management (Approver)','Department Utilization (%)','Gross Incentive'];
+const TEMPLATE_NOTE_TEXT = 'NOTE — read before filling in, then delete this row: fill every column exactly as you would fill the matching box in the system — ' +
+  'Branch / Department / Section / Position / Employment Type / Business Need / Internal / Project must match an existing option\'s spelling exactly (case-insensitive). ' +
+  'ALWAYS REQUIRED: Branch, Department, Section, Position, Employment Type, Business Need, Position Target Start Date, Internal / Project, Net Basic Monthly Salary. ' +
+  'CONDITIONALLY REQUIRED: Specialization only if your Department/Section has more than one specialization; Employee Being Replaced only if Business Need is Replacement; ' +
+  'Justification only if Business Need is New Position; Project Name only if Internal / Project is Project; ' +
+  'Top Management (Approver) — full name of a Top Management user — only if you are a Recruiter or Head of HR; Department Utilization (%) only if you are a Recruiter (0-100), otherwise leave blank. ' +
+  'OPTIONAL: Support Allowance Applicable (Yes/No — only ever applies when Internal / Project is Project), Gross Incentive (a number; blank = 0). ' +
+  'Delete the two EXAMPLE rows below before uploading.';
 function buildTemplateRows(){
   // BU Head covering exactly one Department: lock the example rows to
   // it (same "single covered department" convenience as the inline
@@ -1871,13 +1978,11 @@ function buildTemplateRows(){
   const exampleDept = lockedDept || ALL_DEPARTMENTS[0] || null;
   const exampleSection = exampleDept ? sectionsForDepartment(exampleDept.id)[0] : null;
   const exampleBranch = ALL_BRANCHES.find(b=>b.active !== false) || ALL_BRANCHES[0] || null;
+  const isTmOrHr = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
+  const exampleApprover = isTmOrHr ? (ALL_PROFILES.find(p=>p.role==='top_management') || null) : null;
   const nextMonth = new Date(); nextMonth.setMonth(nextMonth.getMonth()+1); nextMonth.setDate(1);
   const nextMonthStr = nextMonth.toISOString().slice(0,10);
 
-  // A plain instructional row — only its first cell is filled, so it
-  // reads as an obvious note rather than a data row; skipped on upload
-  // by isExampleOrNoteRow() below.
-  const noteRow = { 'Branch': 'NOTE — read before filling in: leave Specialization blank unless your Department/Section has more than one specialization; delete the two EXAMPLE rows below before uploading.' };
   const example1 = {
     'Branch': exampleBranch ? exampleBranch.name : '',
     'Department': exampleDept ? exampleDept.name : '',
@@ -1892,7 +1997,10 @@ function buildTemplateRows(){
     'Internal / Project': 'Internal',
     'Project Name': '',
     'Net Basic Monthly Salary': '10,000',
-    'Support Allowance Applicable': 'No'
+    'Support Allowance Applicable': 'No',
+    'Top Management (Approver)': exampleApprover ? exampleApprover.full_name : '',
+    'Department Utilization (%)': currentUser.role === 'recruiter' ? '80' : '',
+    'Gross Incentive': ''
   };
   const example2 = Object.assign({}, example1, {
     'Position': 'EXAMPLE — delete this row (Technical Engineer)',
@@ -1901,11 +2009,17 @@ function buildTemplateRows(){
     'Justification': '',
     'Net Basic Monthly Salary': '12,500'
   });
-  return [noteRow, example1, example2];
+  return [example1, example2];
 }
 document.getElementById('downloadTemplateBtn').addEventListener('click', ()=>{
   const rows = buildTemplateRows();
-  const ws = XLSX.utils.json_to_sheet(rows, { header: TEMPLATE_COLUMNS });
+  // Built as a plain row-by-row array (not json_to_sheet) specifically so
+  // the instructional note can be the sheet's literal first row, with the
+  // real column header as row 2 — product owner change (previously the
+  // note was a data-shaped row AFTER the header, i.e. row 2, not row 1).
+  const dataRows = rows.map(obj => TEMPLATE_COLUMNS.map(col => obj[col] != null ? obj[col] : ''));
+  const aoa = [[TEMPLATE_NOTE_TEXT], TEMPLATE_COLUMNS, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Positions Template');
   XLSX.writeFile(wb, 'manpower-plan-template.xlsx');
@@ -2011,6 +2125,42 @@ function resolveUploadRow(row, rowNum){
   // when Internal/Project is Internal.
   const supportAllowanceApplicable = internalOrProject === 'Project' && /^y/i.test(String(row['Support Allowance Applicable']||'').trim());
 
+  // Top Management (Approver) — required for Recruiter/Head of HR
+  // uploads, matching the inline editor's own "Top Management (approver) *"
+  // field (isTmOrHrSubmitter); resolved by exact full-name match against
+  // ALL_PROFILES the same way Branch/Department/etc. are resolved.
+  const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
+  const approverName = String(row['Top Management (Approver)']||'').trim();
+  let topManagementApproverId = null;
+  if(isTmOrHrSubmitter){
+    if(!approverName) return fail('Top Management (Approver) is required when you are submitting as Recruiter or Head of HR.');
+    const approver = findByNameCI(ALL_PROFILES.filter(p=>p.role==='top_management'), approverName, 'full_name');
+    if(!approver) return fail('Top Management (Approver) "' + approverName + '" not found among Top Management users.');
+    topManagementApproverId = approver.id;
+  }
+
+  // Department Utilization (%) — required only for a Recruiter upload
+  // (mirrors the inline editor's field, which is editable only for
+  // currentUser.role === 'recruiter' and disabled/"(set by Recruiter)"
+  // for everyone else — so for every other role this is simply left null,
+  // same as a manually-typed line would leave it for them to set later).
+  const utilRaw = String(row['Department Utilization (%)']||'').trim();
+  let departmentUtilization = null;
+  if(currentUser.role === 'recruiter'){
+    const util = utilRaw === '' ? NaN : parseFloat(utilRaw);
+    if(isNaN(util) || util < 0 || util > 100) return fail('Department Utilization (%) is required (0-100) when you are submitting as Recruiter.');
+    departmentUtilization = util;
+  }
+
+  // Gross Incentive — optional, defaults to 0 if left blank (matches the
+  // inline editor's field, which itself defaults to 0 and is only ever
+  // shown to Recruiter/Head of HR — for other roles it's simply never
+  // collected either way, so an uploaded value from another role is
+  // still honored here rather than silently dropped, since there's no
+  // reason to be stricter on the bulk path than the single-line one).
+  const incRaw = String(row['Gross Incentive']||'').trim();
+  const grossIncentive = incRaw === '' ? 0 : (MPCalc.parseMoneyInput(incRaw) || 0);
+
   const specializationName = String(row['Specialization']||'').trim();
   let specializationId = null;
   let costCenterId = null;
@@ -2052,11 +2202,12 @@ function resolveUploadRow(row, rowNum){
     business_need_type: businessNeedType,
     employee_being_replaced: businessNeedType === 'Replacement' ? employeeBeingReplaced : null,
     justification: businessNeedType === 'New Position' ? justification : null,
-    department_utilization: null,
+    department_utilization: departmentUtilization,
     net_basic_monthly_salary: netSalary,
-    gross_incentive: 0,
+    gross_incentive: grossIncentive,
     support_allowance_applicable: supportAllowanceApplicable
   };
+  if(isTmOrHrSubmitter) payload.top_management_approver_id = topManagementApproverId;
 
   // Same cost calculation the inline editor's live preview runs
   // (recalcPreview() -> MPCalc.calculateCost()), just fed the parsed
@@ -2069,7 +2220,7 @@ function resolveUploadRow(row, rowNum){
     ? Object.assign({}, policy, { has_support_allowance: supportAllowanceApplicable })
     : policy;
   const calc = MPCalc.calculateCost({
-    currency, netBasicMonthlySalary: netSalary, position: effectivePolicy, grossIncentive: 0,
+    currency, netBasicMonthlySalary: netSalary, position: effectivePolicy, grossIncentive,
     positionTargetStartDate: startDate, statutoryParams: statutoryParamsForDateStr(startDate)
   });
   payload.cost_breakdown = calc;
@@ -2123,6 +2274,29 @@ function showImportResultsPanel(result){
     '</div>';
   document.getElementById('dismissImportResultsBtn').addEventListener('click', ()=>{ panel.style.display = 'none'; });
 }
+// The template's own NOTE text is now the sheet's literal first row
+// (product owner change — see DOWNLOAD TEMPLATE above), with the real
+// column header as row 2. Rather than hard-coding "header is row 2" (and
+// breaking if someone deletes the note row before uploading, or leaves a
+// stray blank row above it), this finds the header row BY CONTENT: the
+// first row whose cells contain most of TEMPLATE_COLUMNS' exact names.
+// Falls back to treating row 1 as the header if nothing matches well
+// enough (keeps old-format template downloads/uploads working too).
+function looksLikeTemplateHeaderRow(arr){
+  const cells = (arr||[]).map(v=>String(v==null?'':v).trim());
+  const matches = TEMPLATE_COLUMNS.filter(col=>cells.includes(col)).length;
+  return matches >= Math.min(6, TEMPLATE_COLUMNS.length); // most columns present, not just one or two by coincidence
+}
+function rowObjectsFromAoa(aoa){
+  let headerIdx = (aoa||[]).findIndex(looksLikeTemplateHeaderRow);
+  if(headerIdx === -1) headerIdx = 0;
+  const header = (aoa[headerIdx]||[]).map(v=>String(v==null?'':v).trim());
+  return (aoa.slice(headerIdx+1)||[]).map(arr=>{
+    const obj = {};
+    header.forEach((h,i)=>{ if(h) obj[h] = (arr && arr[i] != null) ? arr[i] : ''; });
+    return obj;
+  });
+}
 async function handleExcelUpload(file){
   let rawRows = [];
   try {
@@ -2130,7 +2304,8 @@ async function handleExcelUpload(file){
     const wb = XLSX.read(buf, { type: 'array' });
     const sheetName = wb.SheetNames && wb.SheetNames[0];
     const sheet = sheetName ? wb.Sheets[sheetName] : null;
-    rawRows = sheet ? XLSX.utils.sheet_to_json(sheet, { defval: '' }) : [];
+    const aoa = sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) : [];
+    rawRows = rowObjectsFromAoa(aoa);
   } catch(e){
     showImportResultsPanel({ successCount:0, errorCount:1, errors:['Could not read that file: ' + e.message] });
     return;
