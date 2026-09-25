@@ -85,18 +85,29 @@
    * Salary" — we bisection-search for the Gross Basic Salary that,
    * once run back through Steps 1-6, reproduces the net salary the
    * user typed, to within 1 EGP (BRD explicitly allows bisection).
+   *
+   * CONFIRMED (2026-09-25, against the user's own Goal-Seek test):
+   * Net Basic Monthly Salary is grossed up on its OWN — Social
+   * Insurance Salary, the SI deduction and the tax base are all
+   * computed from Basic Salary alone. Transportation Allowance,
+   * Mobile Allowance, Support Allowance, etc. are NOT part of this
+   * equation at all; they're added on top afterward, in
+   * computeEgyptCost(), as pure extra cost lines that never feed
+   * back into SI/tax. (Previously this function folded Transportation
+   * + Mobile into the same net-target equation as Basic — that was
+   * wrong; a tier's allowances used to silently change how much
+   * Gross Basic Salary a given Net Basic Salary produced.)
    */
   function netFromGrossBasic(grossBasic, opts) {
-    const transportationAllowance = opts.transportationAllowance || 0;
-    const mobileAllowance = opts.mobileAllowance || 0;
-    const grossTotalPackage = grossBasic + transportationAllowance + mobileAllowance;
-    const sis = Math.min(Math.max(grossTotalPackage, opts.sisMin), opts.sisMax);
+    const sis = Math.min(Math.max(grossBasic, opts.sisMin), opts.sisMax);
     const employeeSiMonthly = sis * opts.employeeSiRate;
-    const annualTaxableIncome = Math.max(0, (grossTotalPackage * 12) - (employeeSiMonthly * 12) - opts.personalExemptionAnnual);
+    const annualTaxableIncome = Math.max(0, (grossBasic * 12) - (employeeSiMonthly * 12) - opts.personalExemptionAnnual);
     const annualTax = egyptAnnualTax(annualTaxableIncome, opts.brackets);
     const monthlyTax = annualTax / 12;
-    const netSalary = grossTotalPackage - employeeSiMonthly - monthlyTax;
-    return { netSalary, grossTotalPackage, sis, employeeSiMonthly, annualTaxableIncome, annualTax, monthlyTax };
+    const netSalary = grossBasic - employeeSiMonthly - monthlyTax;
+    // grossTotalPackage kept (= grossBasic here) so existing callers/output
+    // shape don't break; it no longer includes Transportation/Mobile.
+    return { netSalary, grossTotalPackage: grossBasic, sis, employeeSiMonthly, annualTaxableIncome, annualTax, monthlyTax };
   }
 
   function egyptGrossUp(netTarget, opts) {
@@ -204,14 +215,15 @@
     const hasMobileLine = !!position.has_mobile_line_instead;
     const mobileAllowanceForGrossUp = hasMobileLine ? 0 : (Number(position.mobile_allowance) || 0);
 
+    // Basic Salary is grossed up entirely on its own — Transportation and
+    // Mobile Allowance are NOT passed in here (confirmed 2026-09-25); they
+    // get added as pure extra cost lines below, after the gross-up.
     const grossUp = egyptGrossUp(Number(input.netBasicMonthlySalary) || 0, {
       sisMin: p.sis_min,
       sisMax: p.sis_max,
       employeeSiRate: p.employee_si_rate,
       personalExemptionAnnual: p.personal_exemption_annual,
-      brackets: p.brackets,
-      transportationAllowance: Number(position.transportation_allowance) || 0,
-      mobileAllowance: mobileAllowanceForGrossUp
+      brackets: p.brackets
     });
 
     const grossBasicSalary = grossUp.grossBasicSalary;
