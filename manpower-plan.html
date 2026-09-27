@@ -784,6 +784,19 @@ async function notifyLifecycleEvent(type, manpowerPlanId, extra){
     console.warn('mp-lifecycle-notify failed (non-blocking):', e);
   }
 }
+// Called directly by the app right after a BU Head's Submit succeeds,
+// instead of a Supabase Database Webhook on insert (this project is
+// missing the internal "supabase_functions" schema webhooks need, so a
+// webhook fails outright — calling the function directly sidesteps that
+// and matches the same pattern used for the lifecycle emails above).
+async function notifyNewPositionRequest(manpowerPlanId){
+  try {
+    const { error } = await sb.functions.invoke('notify-new-request', { body: { manpower_plan_id: manpowerPlanId } });
+    if(error) console.warn('notify-new-request returned an error (non-blocking):', error.message);
+  } catch(e){
+    console.warn('notify-new-request failed (non-blocking):', e);
+  }
+}
 let lifecycleRow = null;
 function collectLifecycleFieldPayload(){
   const numOrNull = (id)=>{ const v = document.getElementById(id).value; return v !== '' ? parseFloat(v) : null; };
@@ -1509,7 +1522,12 @@ async function resubmitRow(row){
   // if the write was rejected (e.g. by an RLS policy) the button appeared
   // to do nothing — no error, and the status never actually changed,
   // since the DB write silently failed. Now the caller checks .error.
-  return await sb.from('manpower_plan').update(payload).eq('id', row.id);
+  const result = await sb.from('manpower_plan').update(payload).eq('id', row.id);
+  // A resubmit (Draft or Returned-for-Revision going back to step 0) is
+  // just as much "a BU Head submitting a position request" as a brand
+  // new one — notify the same reviewers.
+  if(!result.error) notifyNewPositionRequest(row.id);
+  return result;
 }
 async function deleteRow(row){
   await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted' }).eq('id', row.id);
@@ -2330,6 +2348,10 @@ async function saveForm(submitNow){
   }
   if(result.error){ fail('Could not save: ' + result.error.message); return; }
   if(Object.keys(payload.master_data_flag||{}).length) await logMasterDataExceptions(mpId, payload.master_data_flag);
+  // Only a real Submit (not a Draft save) should notify reviewers — the
+  // notify-new-request function itself also checks that the requester is
+  // a BU Head, so this is safe to call for any submitted line.
+  if(submitNow && mpId) notifyNewPositionRequest(mpId);
   closeForm();
   showToast(submitNow ? 'Submitted for approval.' : 'Saved as Draft.');
   await loadRows();
