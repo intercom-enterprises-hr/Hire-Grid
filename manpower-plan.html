@@ -258,11 +258,18 @@
       <div class="toolbar" id="worklistBulkToolbar" style="display:none;">
         <span class="hint" id="worklistSelectionHint">0 selected</span>
         <div class="spacer"></div>
-        <button class="btn btn-secondary btn-small" id="worklistSelectAllBtn">Select all actionable</button>
+        <button class="btn btn-secondary btn-small" id="worklistSelectAllBtn">Select all</button>
         <button class="btn btn-secondary btn-small" id="worklistClearSelectionBtn">Clear selection</button>
+        <!-- Approve/Return/Reject — head_of_hr, ta_leader, top_management, admin, and active delegates. -->
         <button class="btn btn-primary btn-small" id="worklistBulkApproveBtn">Approve selected</button>
         <button class="btn btn-gold btn-small" id="worklistBulkReturnBtn">Return selected</button>
         <button class="btn btn-danger btn-small" id="worklistBulkRejectBtn">Reject selected</button>
+        <!-- Edit — head_of_hr, ta_leader, admin only; only ever acts on exactly one selected line. -->
+        <button class="btn btn-secondary btn-small" id="worklistBulkEditBtn">Edit</button>
+        <!-- Submit / Duplicate / Delete — bu_head's own bulk action set (product owner spec: BU Head never gets Approve/Return/Reject/Edit in bulk, only these three). -->
+        <button class="btn btn-gold btn-small" id="worklistBulkSubmitBtn">Submit selected</button>
+        <button class="btn btn-secondary btn-small" id="worklistBulkDuplicateBtn">Duplicate selected</button>
+        <button class="btn btn-danger btn-small" id="worklistBulkDeleteBtn">Delete selected</button>
       </div>
       <!-- Round #12: per-row Upload-from-Excel results — a real inline
            panel (not alert()) so several row errors are all readable at
@@ -365,6 +372,53 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" id="cancelBulkReasonBtn">Cancel</button>
       <button class="btn btn-primary" id="confirmBulkReasonBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Position Lifecycle modal (item 2): TA Owner assignment, closing
+     fields, Put On Hold / Reactivate / Revoke Closure. Shown for any line
+     that has fully cleared approval (position_status is set). Which
+     sections/buttons are visible is toggled in JS by openLifecycleModal()
+     based on the line's current position_status (Open / On Hold / Closed). -->
+<div class="modal-overlay" id="lifecycleModal">
+  <div class="modal">
+    <h2 id="lifecycleModalTitle">Manage position</h2>
+    <p class="sub" id="lifecycleModalSub"></p>
+    <div class="form-grid">
+      <div class="form-field full">
+        <label>TA Owner</label>
+        <select id="field_lifecycle_ta_owner"><option value="">— Unassigned —</option></select>
+      </div>
+      <div class="form-field"><label>Employee Code</label><input type="text" id="field_lifecycle_employee_code"></div>
+      <div class="form-field"><label>Employee Name</label><input type="text" id="field_lifecycle_employee_name"></div>
+      <div class="form-field"><label>Job Offer Issuance Date</label><input type="date" id="field_lifecycle_job_issuance_date"></div>
+      <div class="form-field"><label>Employee Hiring Date</label><input type="date" id="field_lifecycle_hiring_date"></div>
+      <div class="form-field"><label>Offered Gross Basic Salary</label><input type="number" step="0.01" id="field_lifecycle_offered_gross_basic_salary"></div>
+      <div class="form-field"><label>Offered Transportation Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_transportation_allowance"></div>
+      <div class="form-field"><label>Offered Mobile Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_mobile_allowance"></div>
+      <div class="form-field"><label>Offered Support Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_support_allowance"></div>
+      <div class="form-field full" id="lifecycleHoldDateWrap" style="display:none;">
+        <label>On Hold Date</label>
+        <input type="date" id="field_lifecycle_on_hold_date">
+      </div>
+      <div class="form-field full" id="lifecycleReactivateWrap" style="display:none;">
+        <label>New Expected Joining Date</label>
+        <input type="date" id="field_lifecycle_new_joining_date">
+      </div>
+      <div class="form-field full" id="lifecycleRevokeWrap" style="display:none;">
+        <label>Reason (candidate accepted, then didn't join)</label>
+        <textarea id="field_lifecycle_revoke_reason"></textarea>
+      </div>
+    </div>
+    <div class="status-msg" id="lifecycleStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelLifecycleBtn">Cancel</button>
+      <button class="btn btn-secondary" id="lifecycleSaveBtn">Save</button>
+      <button class="btn btn-gold" id="lifecycleHoldBtn">Put On Hold</button>
+      <button class="btn btn-primary" id="lifecycleReactivateBtn">Reactivate</button>
+      <button class="btn btn-primary" id="lifecycleCloseBtn">Mark Position Closed</button>
+      <button class="btn btn-danger" id="lifecycleRevokeBtn">Revoke Closure</button>
     </div>
   </div>
 </div>
@@ -582,7 +636,15 @@ function fillSelect(id, values){
 }
 
 /* ====================== ROLE / PERMISSION HELPERS ====================== */
-function canCreate(){ return ['bu_head','recruiter','head_of_hr','ta_leader'].includes(currentUser.role); }
+// Product owner change (round #17): Recruiter is now view-only across the
+// whole Manpower Plan request/approval workflow — they never create,
+// duplicate, edit, or submit a line themselves any more (removed from
+// this list). They keep a SEPARATE, narrow editing right on the
+// post-approval "position lifecycle" fields (employee code, hiring date,
+// etc.) once a TA Team Leader assigns them as that specific line's TA
+// Owner — see canEditLifecycleFields() below; that's a different field
+// set and a different RLS policy, not this one.
+function canCreate(){ return ['bu_head','head_of_hr','ta_leader'].includes(currentUser.role); }
 // Round #12: BU Head also gets Export to Excel now — the cost-visibility
 // rule (getCostVisibilityLevel) still governs WHICH columns are exported
 // for them (see the export click handler below), so this addition alone
@@ -640,6 +702,10 @@ function canActOnRow(row){
 }
 function canResubmit(row){
   // Draft, or Returned-to-initiator: current_step === -1, and I'm the submitter.
+  // Recruiter is explicitly excluded — they're view-only for the request/
+  // approval workflow now, even on a line that (from before this change)
+  // still lists them as requested_by/submitted_by.
+  if(currentUser.role === 'recruiter') return false;
   return row.current_step === -1 && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id) && row.status !== 'Rejected' && !row.deleted_at;
 }
 function canDelete(row){
@@ -656,6 +722,228 @@ function canDelete(row){
     && (row.status === 'Returned for Revision' || row.status === 'Rejected')
     && !row.deleted_at;
 }
+
+/* ====================== POSITION LIFECYCLE (item 2) ======================
+ * Once a line has fully cleared approval, position_status stops being
+ * null (the front-end already sets it to 'Open' at final approval — see
+ * applyAction()) and the line enters its own separate lifecycle: TA Owner
+ * assignment, the post-hire closing fields, On Hold / Reactivate / Revoke
+ * Closure. Who can manage it:
+ *  - head_of_hr / admin: any line (matches their existing "update any
+ *    line" DB rights).
+ *  - ta_leader: any line in one of their own covered departments
+ *    (migration 20's new RLS policy mirrors this exactly).
+ *  - recruiter: ONLY a line where they are already the assigned TA Owner
+ *    (their pre-existing "own assigned recruiting line" DB right) — they
+ *    can fill in the closing fields for their own assignment, but cannot
+ *    assign/reassign the TA Owner themselves (see taOwnerCandidates()
+ *    and the disabled dropdown in openLifecycleModal() below).
+ *  - bu_head / top_management: no access (not part of this workflow). */
+function canManageLifecycle(row){
+  // Gate on row.status === 'Approved' — the authoritative "fully cleared
+  // approval" signal from THIS workflow (applyAction() sets it, together
+  // with position_status = 'Open', at the final approval step) — not on
+  // position_status alone. position_status is a much older field that
+  // predates the current approval_chain/current_step workflow entirely;
+  // on any row that was never actually run through applyAction (i.e.
+  // pre-existing data from before this workflow existed) it can hold a
+  // stale, unrelated leftover value that has nothing to do with whether
+  // the line is really approved. effectiveLifecycleStatus() below is what
+  // heals that — treating a missing/stale value as 'Open' once status
+  // really is 'Approved'.
+  if(!row || row.status !== 'Approved' || row.deleted_at) return false;
+  if(['head_of_hr','admin'].includes(currentUser.role)) return true;
+  if(currentUser.role === 'ta_leader') return MY_TA_LEADER_DEPARTMENTS.some(d=>d.id === row.department_id);
+  if(currentUser.role === 'recruiter') return row.ta_owner === currentUser.id;
+  return false;
+}
+// The position_status value to actually treat this Approved row as being
+// at — see the comment on canManageLifecycle() above for why this isn't
+// just "row.position_status".
+function effectiveLifecycleStatus(row){
+  return (row.position_status === 'On Hold' || row.position_status === 'Closed') ? row.position_status : 'Open';
+}
+// Who a TA Owner can be assigned to: for a TA Leader, themself or one of
+// their own Recruiters (ta_leader_id === them) — "whether the TA TL or
+// Recruiter" — not the whole company's recruiters. head_of_hr/admin get
+// the full list since they oversee every team.
+function taOwnerCandidates(){
+  if(['head_of_hr','admin'].includes(currentUser.role)) return ALL_PROFILES.filter(p=>['ta_leader','recruiter'].includes(p.role));
+  if(currentUser.role === 'ta_leader') return ALL_PROFILES.filter(p=>p.id === currentUser.id || (p.role === 'recruiter' && p.ta_leader_id === currentUser.id));
+  return [];
+}
+// Fire-and-forget: the position lifecycle emails (item 2.5/2.6) are
+// informational, never a reason to block or roll back a save that has
+// already succeeded — so a failure here is logged, not surfaced as an
+// error to the user.
+async function notifyLifecycleEvent(type, manpowerPlanId, extra){
+  try {
+    const { error } = await sb.functions.invoke('mp-lifecycle-notify', { body: { type, manpower_plan_id: manpowerPlanId, extra: extra || null } });
+    if(error) console.warn('mp-lifecycle-notify returned an error (non-blocking):', error.message);
+  } catch(e){
+    console.warn('mp-lifecycle-notify failed (non-blocking):', e);
+  }
+}
+let lifecycleRow = null;
+function collectLifecycleFieldPayload(){
+  const numOrNull = (id)=>{ const v = document.getElementById(id).value; return v !== '' ? parseFloat(v) : null; };
+  const numOrZero = (id)=>{ const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; };
+  return {
+    ta_owner: document.getElementById('field_lifecycle_ta_owner').value || null,
+    employee_code: document.getElementById('field_lifecycle_employee_code').value.trim() || null,
+    employee_name: document.getElementById('field_lifecycle_employee_name').value.trim() || null,
+    job_issuance_date: document.getElementById('field_lifecycle_job_issuance_date').value || null,
+    hiring_date: document.getElementById('field_lifecycle_hiring_date').value || null,
+    offered_gross_basic_salary: numOrNull('field_lifecycle_offered_gross_basic_salary'),
+    offered_transportation_allowance: numOrZero('field_lifecycle_offered_transportation_allowance'),
+    offered_mobile_allowance: numOrZero('field_lifecycle_offered_mobile_allowance'),
+    offered_support_allowance: numOrZero('field_lifecycle_offered_support_allowance')
+  };
+}
+function openLifecycleModal(row){
+  lifecycleRow = row;
+  document.getElementById('lifecycleModalTitle').textContent = 'Manage position — ' + (row.position_title || '');
+  document.getElementById('lifecycleModalSub').textContent = 'Position ID ' + (row.position_code || '—') + ' · Currently: ' + effectiveLifecycleStatus(row);
+
+  const taOwnerSelect = document.getElementById('field_lifecycle_ta_owner');
+  taOwnerSelect.innerHTML = '<option value="">— Unassigned —</option>';
+  taOwnerCandidates().forEach(p=>{
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.full_name + (p.role === 'ta_leader' ? ' (TA Team Leader)' : ' (Recruiter)');
+    taOwnerSelect.appendChild(o);
+  });
+  // If the currently-assigned TA Owner isn't in this viewer's own
+  // candidate list (e.g. a head_of_hr viewing a line already assigned to
+  // some other team's recruiter), still show who it is rather than
+  // silently blanking the field.
+  if(row.ta_owner && !taOwnerSelect.querySelector('option[value="'+row.ta_owner+'"]')){
+    const existing = ALL_PROFILES.find(p=>p.id === row.ta_owner);
+    const o = document.createElement('option'); o.value = row.ta_owner; o.textContent = existing ? existing.full_name : row.ta_owner;
+    taOwnerSelect.appendChild(o);
+  }
+  taOwnerSelect.value = row.ta_owner || '';
+  // Only a TA Leader (or HR/admin) assigns/reassigns the TA Owner — a
+  // Recruiter viewing their own assigned line sees it, but can't change it.
+  taOwnerSelect.disabled = !['ta_leader','head_of_hr','admin'].includes(currentUser.role);
+
+  document.getElementById('field_lifecycle_employee_code').value = row.employee_code || '';
+  document.getElementById('field_lifecycle_employee_name').value = row.employee_name || '';
+  document.getElementById('field_lifecycle_job_issuance_date').value = row.job_issuance_date || '';
+  document.getElementById('field_lifecycle_hiring_date').value = row.hiring_date || '';
+  document.getElementById('field_lifecycle_offered_gross_basic_salary').value = row.offered_gross_basic_salary != null ? row.offered_gross_basic_salary : '';
+  document.getElementById('field_lifecycle_offered_transportation_allowance').value = row.offered_transportation_allowance != null ? row.offered_transportation_allowance : '';
+  document.getElementById('field_lifecycle_offered_mobile_allowance').value = row.offered_mobile_allowance != null ? row.offered_mobile_allowance : '';
+  document.getElementById('field_lifecycle_offered_support_allowance').value = row.offered_support_allowance != null ? row.offered_support_allowance : '';
+  document.getElementById('field_lifecycle_on_hold_date').value = row.on_hold_date || new Date().toISOString().slice(0,10);
+  document.getElementById('field_lifecycle_new_joining_date').value = row.expected_candidate_joining_date || '';
+  document.getElementById('field_lifecycle_revoke_reason').value = '';
+  document.getElementById('lifecycleStatus').textContent = '';
+
+  const status = effectiveLifecycleStatus(row);
+  document.getElementById('lifecycleHoldDateWrap').style.display = status === 'Open' ? '' : 'none';
+  document.getElementById('lifecycleReactivateWrap').style.display = status === 'On Hold' ? '' : 'none';
+  document.getElementById('lifecycleRevokeWrap').style.display = status === 'Closed' ? '' : 'none';
+  document.getElementById('lifecycleHoldBtn').style.display = status === 'Open' ? '' : 'none';
+  document.getElementById('lifecycleCloseBtn').style.display = status === 'Open' ? '' : 'none';
+  document.getElementById('lifecycleReactivateBtn').style.display = status === 'On Hold' ? '' : 'none';
+  document.getElementById('lifecycleRevokeBtn').style.display = status === 'Closed' ? '' : 'none';
+
+  document.getElementById('lifecycleModal').classList.add('show');
+}
+document.getElementById('cancelLifecycleBtn').addEventListener('click', ()=> document.getElementById('lifecycleModal').classList.remove('show'));
+// Save — persists whatever's filled in (e.g. just the TA Owner
+// assignment, ahead of the closing fields being ready) without changing
+// position_status. Fires the "you've been assigned" email (2.5) whenever
+// the TA Owner actually changed to someone new.
+document.getElementById('lifecycleSaveBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const payload = collectLifecycleFieldPayload();
+  payload.updated_by = currentUser.id;
+  const prevTaOwner = lifecycleRow.ta_owner;
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Saved.');
+  if(payload.ta_owner && payload.ta_owner !== prevTaOwner) await notifyLifecycleEvent('ta_owner_assigned', lifecycleRow.id);
+  await loadRows();
+});
+// Mark Position Closed (2.1) — requires the minimum info that actually
+// makes it a closure (who got hired, and when), not just an empty status
+// flip. Fires the closure email (2.6).
+document.getElementById('lifecycleCloseBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const payload = collectLifecycleFieldPayload();
+  if(!payload.employee_code || !payload.employee_name || !payload.hiring_date){
+    statusEl.textContent = 'Employee Code, Employee Name, and Employee Hiring Date are required to mark a position Closed.';
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  payload.position_status = 'Closed';
+  payload.closed_at = new Date().toISOString();
+  payload.closed_by = currentUser.id;
+  payload.updated_by = currentUser.id;
+  const prevTaOwner = lifecycleRow.ta_owner;
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Position marked Closed.');
+  if(payload.ta_owner && payload.ta_owner !== prevTaOwner) await notifyLifecycleEvent('ta_owner_assigned', lifecycleRow.id);
+  await notifyLifecycleEvent('position_closed', lifecycleRow.id);
+  await loadRows();
+});
+// Put On Hold (2.2).
+document.getElementById('lifecycleHoldBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const holdDate = document.getElementById('field_lifecycle_on_hold_date').value;
+  if(!holdDate){ statusEl.textContent = 'A hold date is required to put this position on hold.'; statusEl.className = 'status-msg err'; return; }
+  const payload = collectLifecycleFieldPayload();
+  payload.position_status = 'On Hold';
+  payload.on_hold_date = holdDate;
+  payload.updated_by = currentUser.id;
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Position put on hold.');
+  await loadRows();
+});
+// Reactivate an On-Hold position back to Open (2.3) — requires the new
+// expected joining date the product owner specifically called for.
+document.getElementById('lifecycleReactivateBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const newJoinDate = document.getElementById('field_lifecycle_new_joining_date').value;
+  if(!newJoinDate){ statusEl.textContent = 'A new expected joining date is required to reactivate this position.'; statusEl.className = 'status-msg err'; return; }
+  const payload = { position_status: 'Open', expected_candidate_joining_date: newJoinDate, on_hold_date: null, updated_by: currentUser.id };
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Position reactivated.');
+  await loadRows();
+});
+// Revoke Closure (2.4) — candidate accepted the offer, then didn't join;
+// back to Open, with a reason, and an email to the BU Head (2.4/2.6).
+document.getElementById('lifecycleRevokeBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const reason = document.getElementById('field_lifecycle_revoke_reason').value.trim();
+  if(!reason){ statusEl.textContent = 'A reason is required to revoke this closure.'; statusEl.className = 'status-msg err'; return; }
+  const payload = {
+    position_status: 'Open',
+    closed_at: null, closed_by: null,
+    revoked_at: new Date().toISOString(), revoked_by: currentUser.id, revoke_reason: reason,
+    updated_by: currentUser.id
+  };
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Closure revoked — position reopened.');
+  await notifyLifecycleEvent('closure_revoked', lifecycleRow.id, reason);
+  await loadRows();
+});
 
 /* ====================== VIEW SWITCHING ====================== */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -736,15 +1024,37 @@ function renderTable(){
   tbody.innerHTML = '';
   document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
 
-  // Bulk review toolbar — only ever meaningful for a role that can act on
-  // SOME approval step; wire it up once per render (cheap, and rows can
-  // change which ones are actionable as filters/search change).
+  // Bulk review toolbar — hidden entirely for a Recruiter (view-only) or
+  // anyone else who could never act on ANY line. Product owner change
+  // (round #17): every role that DOES get the toolbar can now select ANY
+  // row, not just ones awaiting their approval — "select any row or
+  // select all" — and each bulk button applies only to the rows it's
+  // actually valid for, silently skipping (and reporting) the rest. Which
+  // BUTTONS show is role-specific: BU Head gets Submit/Duplicate/Delete;
+  // Head of HR/TA Leader/admin get Approve/Return/Reject + Edit;
+  // Top Management (and a delegate standing in for one of these roles)
+  // gets Approve/Return/Reject only.
   const bulkToolbarVisible = canEverActOnSomeRow();
   document.getElementById('worklistBulkToolbar').style.display = bulkToolbarVisible ? '' : 'none';
+  if(bulkToolbarVisible){
+    const role = currentUser.role;
+    const isDelegate = MY_DELEGATED_ROLES.length > 0;
+    const showApprovalActions = ['head_of_hr','ta_leader','top_management','admin'].includes(role) || isDelegate;
+    const showBuHeadActions = role === 'bu_head';
+    const showEdit = ['head_of_hr','ta_leader','admin'].includes(role); // not top_management or a delegate, per spec
+    document.getElementById('worklistBulkApproveBtn').style.display = showApprovalActions ? '' : 'none';
+    document.getElementById('worklistBulkReturnBtn').style.display = showApprovalActions ? '' : 'none';
+    document.getElementById('worklistBulkRejectBtn').style.display = showApprovalActions ? '' : 'none';
+    document.getElementById('worklistBulkEditBtn').style.display = showEdit ? '' : 'none';
+    document.getElementById('worklistBulkSubmitBtn').style.display = showBuHeadActions ? '' : 'none';
+    document.getElementById('worklistBulkDuplicateBtn').style.display = showBuHeadActions ? '' : 'none';
+    document.getElementById('worklistBulkDeleteBtn').style.display = showBuHeadActions ? '' : 'none';
+  }
   // Selections for rows that just scrolled out of the current filter/search
-  // are dropped — there'd be no way to see or clear them otherwise.
-  const actionableIdsOnScreen = new Set(rows.filter(canActOnRow).map(r=>r.id));
-  [...worklistSelectedIds].forEach(id=>{ if(!actionableIdsOnScreen.has(id)) worklistSelectedIds.delete(id); });
+  // are dropped — there'd be no way to see or clear them otherwise. (No
+  // longer limited to canActOnRow rows — any visible row can be selected.)
+  const idsOnScreen = new Set(rows.map(r=>r.id));
+  [...worklistSelectedIds].forEach(id=>{ if(!idsOnScreen.has(id)) worklistSelectedIds.delete(id); });
 
   rows.forEach(r=>{
     const tr = document.createElement('tr');
@@ -756,9 +1066,11 @@ function renderTable(){
     // each forcing the whole table wider, with a title="" tooltip
     // carrying the full text so nothing is actually lost, just not
     // shown inline.
-    const rowIsActionable = canActOnRow(r);
+    // Every row is selectable once the toolbar itself is visible for this
+    // role (see above) — selection is universal now; it's the bulk
+    // ACTIONS that are each scoped to whichever rows they're valid for.
     tr.innerHTML =
-      '<td>'+(rowIsActionable ? '<input type="checkbox" class="worklist-select-row" data-id="'+r.id+'" '+(worklistSelectedIds.has(r.id)?'checked':'')+'>' : '')+'</td>'+
+      '<td>'+(bulkToolbarVisible ? '<input type="checkbox" class="worklist-select-row" data-id="'+r.id+'" '+(worklistSelectedIds.has(r.id)?'checked':'')+'>' : '')+'</td>'+
       '<td>'+escapeHtml(branchName(r.branch_id)||'—')+'</td>'+
       '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
       '<td>'+escapeHtml(r.division||'—')+'</td>'+
@@ -790,7 +1102,7 @@ function renderTable(){
       btn.addEventListener('click', ()=> openActionModal(r));
       actionCell.appendChild(btn);
     }
-    if((r.requested_by === currentUser.id || r.submitted_by === currentUser.id) && (r.status === 'Draft')){
+    if(currentUser.role !== 'recruiter' && (r.requested_by === currentUser.id || r.submitted_by === currentUser.id) && (r.status === 'Draft')){
       const btn = document.createElement('button');
       btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Edit';
       btn.addEventListener('click', ()=> openForm(r));
@@ -804,6 +1116,15 @@ function renderTable(){
       btn.addEventListener('click', ()=> openForm(r, { duplicate: true }));
       actionCell.appendChild(btn);
     }
+    // Item #2 — Position Lifecycle: TA Owner assignment, closing fields,
+    // On Hold / Reactivate / Revoke Closure. Only ever shown once a line
+    // has fully cleared approval (position_status is set).
+    if(canManageLifecycle(r)){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Manage Position';
+      btn.addEventListener('click', ()=> openLifecycleModal(r));
+      actionCell.appendChild(btn);
+    }
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll('.worklist-select-row').forEach(cb=>{
@@ -813,7 +1134,7 @@ function renderTable(){
       updateWorklistSelectionUi();
     });
   });
-  document.getElementById('worklistSelectAllCheckbox').checked = actionableIdsOnScreen.size > 0 && [...actionableIdsOnScreen].every(id=>worklistSelectedIds.has(id));
+  document.getElementById('worklistSelectAllCheckbox').checked = idsOnScreen.size > 0 && [...idsOnScreen].every(id=>worklistSelectedIds.has(id));
   if(bulkToolbarVisible) updateWorklistSelectionUi();
 }
 function updateWorklistSelectionUi(){
@@ -886,16 +1207,23 @@ document.getElementById('tmClearSelectionBtn').addEventListener('click', ()=>{ t
 
 // Bulk-approve for a given ids Set + its "clear/re-render" callback — the
 // same shape whether the selection came from the TM Summary tab or the
-// main Worklist's own bulk toolbar.
+// main Worklist's own bulk toolbar. Product owner change (round #17): the
+// Worklist's own selection can now include ANY row (not just ones
+// awaiting this user's action), so this filters to canActOnRow(row) itself
+// and reports how many were skipped, rather than assuming every selected
+// id is eligible (the TM Summary tab's selection was always
+// actionable-only anyway, so this is a no-op there).
 async function bulkApprove(idsSet, onDone){
   const ids = [...idsSet];
   if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let applied = 0, skipped = 0;
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
-    if(row) await applyAction(row, 'approved', null);
+    if(row && canActOnRow(row)){ await applyAction(row, 'approved', null); applied++; }
+    else skipped++;
   }
   idsSet.clear();
-  showToast('Approved ' + ids.length + ' line(s).');
+  showToast('Approved ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not awaiting your action)' : '') + '.');
   await loadRows();
   if(onDone) onDone();
 }
@@ -926,25 +1254,117 @@ document.getElementById('confirmBulkReasonBtn').addEventListener('click', async 
   if(!reason){ statusEl.textContent = 'A reason is required (BR-09).'; statusEl.className='status-msg err'; return; }
   const idsSet = pendingBulkIdsSet;
   const ids = [...idsSet];
+  let applied = 0, skipped = 0;
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
-    if(row) await applyAction(row, pendingBulkAction, reason);
+    if(row && canActOnRow(row)){ await applyAction(row, pendingBulkAction, reason); applied++; }
+    else skipped++;
   }
   idsSet.clear();
   document.getElementById('bulkReasonModal').classList.remove('show');
-  showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + ids.length + ' line(s).');
+  showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not awaiting your action)' : '') + '.');
   await loadRows();
 });
 
-/* ---- Worklist bulk toolbar: select-all / clear (mirrors the TM tab's) ---- */
+/* ====================== BU HEAD'S BULK ACTIONS: Submit / Duplicate / Delete ======================
+ * Each of these can be handed a mixed selection (any row is selectable
+ * now) and only ever applies to the rows it's actually valid for,
+ * silently skipping — and reporting — the rest, the same pattern as
+ * bulkApprove()/the reject-return modal above. */
+async function bulkSubmit(idsSet){
+  const ids = [...idsSet];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let applied = 0, skipped = 0;
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(!row || !canResubmit(row)){ skipped++; continue; }
+    const { error } = await resubmitRow(row);
+    if(error) skipped++; else applied++;
+  }
+  idsSet.clear();
+  showToast('Submitted ' + applied + ' line(s) for approval' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + '.');
+  await loadRows();
+}
+async function bulkDelete(idsSet){
+  const ids = [...idsSet];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let applied = 0, skipped = 0;
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(!row || !canDelete(row)){ skipped++; continue; }
+    await deleteRow(row);
+    applied++;
+  }
+  idsSet.clear();
+  showToast('Deleted ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + '.');
+  await loadRows();
+}
+// Builds an INSERT payload for a fresh Draft copy of `row` — the exact
+// same field set and reset rules (status/current_step/approval_chain/
+// position_code/requested_by/submitted_by) the single-row "Duplicate"
+// button's inline-editor prefill uses, just applied directly without the
+// interactive review step (opening N inline editors for a bulk selection
+// isn't practical from one click).
+function buildDuplicatePayloadFromRow(row){
+  const carry = ['position_master_id','position_title','division_id','department_id','section_id',
+    'cost_center_id','internal_or_project','project_name','branch_id','currency','master_data_flag',
+    'employment_type','position_target_start_date','business_need_type','employee_being_replaced',
+    'justification','department_utilization','net_basic_monthly_salary','support_allowance_applicable',
+    'top_management_approver_id','gross_incentive','cost_breakdown','total_monthly_cost',
+    'total_current_year_cost','onboarding_one_time_cost'];
+  const payload = {};
+  carry.forEach(f=>{ payload[f] = row[f] !== undefined ? row[f] : null; });
+  payload.created_by = currentUser.id;
+  payload.updated_by = currentUser.id;
+  payload.requested_by = currentUser.id;
+  payload.submitted_by = currentUser.id;
+  payload.position_status = 'Requested';
+  payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
+  payload.current_step = -1;
+  payload.status = 'Draft';
+  return payload;
+}
+async function bulkDuplicate(idsSet){
+  const ids = [...idsSet];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let created = 0;
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(!row) continue;
+    const { error } = await sb.from('manpower_plan').insert(buildDuplicatePayloadFromRow(row));
+    if(!error) created++;
+  }
+  idsSet.clear();
+  showToast('Created ' + created + ' duplicate draft(s)' + (created<ids.length ? ' (' + (ids.length-created) + ' failed)' : '') + '.');
+  await loadRows();
+}
+document.getElementById('worklistBulkSubmitBtn').addEventListener('click', ()=> bulkSubmit(worklistSelectedIds));
+document.getElementById('worklistBulkDuplicateBtn').addEventListener('click', ()=> bulkDuplicate(worklistSelectedIds));
+document.getElementById('worklistBulkDeleteBtn').addEventListener('click', ()=> bulkDelete(worklistSelectedIds));
+// Edit is single-row only — bulk-editing several different lines' full
+// content at once isn't a coherent action — so this just requires
+// exactly one line selected and opens the normal inline editor for it,
+// same as the per-row Edit button, but usable on ANY line (not only
+// one's own Draft), matching HR/TA Leaders' existing "update any line"
+// database rights.
+document.getElementById('worklistBulkEditBtn').addEventListener('click', ()=>{
+  if(worklistSelectedIds.size !== 1){ showToast('Select exactly one line to edit.'); return; }
+  const row = ALL_ROWS.find(r=>r.id===[...worklistSelectedIds][0]);
+  if(row) openForm(row);
+});
+
+/* ---- Worklist bulk toolbar: select-all / clear (mirrors the TM tab's) ----
+ * Product owner change (round #17): selects EVERY currently-filtered row,
+ * not just "actionable" ones — matches the new "select any row or select
+ * all" selection model above. */
 document.getElementById('worklistSelectAllBtn').addEventListener('click', ()=>{
-  currentlyFilteredWorklistRows().filter(canActOnRow).forEach(r=>worklistSelectedIds.add(r.id));
+  currentlyFilteredWorklistRows().forEach(r=>worklistSelectedIds.add(r.id));
   renderTable();
 });
 document.getElementById('worklistSelectAllCheckbox').addEventListener('change', (e)=>{
-  const actionableRows = currentlyFilteredWorklistRows().filter(canActOnRow);
-  if(e.target.checked) actionableRows.forEach(r=>worklistSelectedIds.add(r.id));
-  else actionableRows.forEach(r=>worklistSelectedIds.delete(r.id));
+  const filteredRows = currentlyFilteredWorklistRows();
+  if(e.target.checked) filteredRows.forEach(r=>worklistSelectedIds.add(r.id));
+  else filteredRows.forEach(r=>worklistSelectedIds.delete(r.id));
   renderTable();
 });
 document.getElementById('worklistClearSelectionBtn').addEventListener('click', ()=>{ worklistSelectedIds.clear(); renderTable(); });
