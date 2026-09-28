@@ -2989,18 +2989,21 @@ function showToast(msg){
 }
 
 /* ====================== FLOATING HORIZONTAL SCROLLBAR ("All system"
- * item #1, round #23) ======================
+ * item #1, round #23; fixed round #25) ======================
  * Product owner request: "I want the bar that allows me go right and
  * left to be visible anywhere i am in the page, i don't have to go to
  * the bottom of the page to be able to go right and left." The
  * worklist table has its own horizontal scrollbar (.table-scroll,
  * overflow-x:auto), but it only shows up at the very bottom edge of
- * that table — which can be well below the fold once there are many
- * rows. This adds a second, floating scrollbar pinned to the bottom of
- * the *browser window* (position:fixed) that mirrors whichever wide
- * table is currently on screen, and only appears while that table's
- * OWN scrollbar isn't already visible/reachable — so scrolling left and
- * right is always possible without first scrolling all the way down.
+ * that table — which can be below the fold, OR (for a short worklist)
+ * simply below whatever else sits under the table on the page. This
+ * adds a second, floating scrollbar pinned to the bottom of the
+ * *browser window* (position:fixed) that mirrors whichever wide table
+ * is currently on screen. Round #23's first version also tried to hide
+ * itself whenever the table's own native scrollbar was already
+ * "reachable" — that heuristic backfired (report: "not working unless
+ * i went to the bottom of the page") and is gone now: this simply shows
+ * any time a wide table is visible at all, full stop.
  */
 (function setUpFloatingHScrollbar(){
   const bar = document.createElement('div');
@@ -3028,15 +3031,18 @@ function showToast(msg){
   function refresh(){
     const el = findActiveScroller();
     if(!el){ activeScroller = null; bar.style.display = 'none'; return; }
-    const rect = el.getBoundingClientRect();
-    const viewportH = window.innerHeight;
-    // The table's own scrollbar lives right at its bottom edge — if
-    // that edge is already within the viewport, the native scrollbar
-    // is reachable and the floating one would just duplicate it.
-    const nativeReachable = rect.bottom <= viewportH;
-    // Only relevant while some part of the table is actually on screen.
-    const onScreen = rect.bottom > 0 && rect.top < viewportH;
-    if(!onScreen || nativeReachable){ bar.style.display = 'none'; activeScroller = el; return; }
+    // Bug fix (round #25): this used to also hide the floating bar
+    // whenever the table's own native scrollbar happened to already be
+    // "reachable" (its bottom edge within the viewport) — the idea being
+    // it would be redundant then. In practice that meant the floating
+    // bar often never showed at all for a shorter worklist (one whose
+    // full height already fits within a tall viewport), which is
+    // exactly the "not working unless I scroll to the bottom" report —
+    // the ONE place a person could actually reach a horizontal
+    // scrollbar was still the table's own, at the very bottom of
+    // whatever content sat below it. Simplified: show the floating bar
+    // any time a wide table is on screen at all, full stop — matching
+    // the literal ask ("visible anywhere in the page").
     activeScroller = el;
     bar.style.display = '';
     inner.style.width = el.scrollWidth + 'px';
