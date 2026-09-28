@@ -287,7 +287,7 @@
               <th><input type="checkbox" id="worklistSelectAllCheckbox"></th>
               <th>Branch</th><th>Position ID</th><th>Division</th><th>Department</th><th>Position</th>
               <th>Cost Center</th><th>Business Need</th><th>Net Basic Monthly Salary</th>
-              <th id="costColHeader">Total Current Year Cost</th><th>Status</th><th>Submitted By</th><th></th>
+              <th id="costColHeader">Total Current Year Cost</th><th>Status</th><th>Status Date</th><th>Submitted By</th><th></th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -359,6 +359,20 @@
       <button class="btn btn-primary" id="actionApproveBtn">Approve</button>
       <button class="btn btn-danger" id="actionDeleteBtn" style="display:none;">Delete (BR-21)</button>
       <button class="btn btn-gold" id="actionResubmitBtn" style="display:none;">Submit for Approval</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full-details view (item #2, round #23) — read-only, opened by
+     clicking anywhere on a worklist row. Available to every role,
+     including Recruiter (who has no action buttons on the row at all). -->
+<div class="modal-overlay" id="detailsModal">
+  <div class="modal">
+    <h2 id="detailsModalTitle">Position details</h2>
+    <p class="sub">Every field on file for this position — view only.</p>
+    <div class="form-grid" id="detailsModalGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="closeDetailsBtn">Close</button>
     </div>
   </div>
 </div>
@@ -1012,6 +1026,77 @@ function fmtMoney(v, currency){
   if(v == null || isNaN(v)) return '—';
   return Math.round(v).toLocaleString() + ' ' + (currency||'');
 }
+// Item #1 (round #23) — a human-readable date for the new "Status Date"
+// column and the full-details view. status_changed_at is stamped by the
+// DB trigger (migration 22) AND set client-side wherever `status` is
+// set (saveForm/applyAction/resubmitRow/deleteRow below), so it's always
+// present even against a stub/test environment that has no triggers.
+function fmtDate(v){
+  if(!v) return '—';
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+}
+// Item #3 (round #23) — the single source of truth for "every field in
+// the box we fill with each position", shared by the Excel export and
+// the click-to-view full-details modal (item #2) so the two can never
+// drift apart. Respects the same cost-visibility rule the on-screen
+// worklist already applies (getCostVisibilityLevel) — a 'total_only'
+// role (e.g. BU Head) still never sees the finer Total Monthly Cost
+// breakdown here either.
+function fieldsForRow(r, level){
+  const rows = [
+    ['Position ID', r.position_code || '—'],
+    ['Position', r.position_title || '—'],
+    ['Division', r.division || '—'],
+    ['Department', r.department || '—'],
+    ['Section', sectionName(r.section_id) || '—'],
+    ['Branch', branchName(r.branch_id) || '—'],
+    ['Employment Type', r.employment_type || '—'],
+    ['Internal / Project', r.internal_or_project || '—'],
+    ['Project Name', r.project_name || '—'],
+    ['Cost Center', costCenterName(r.cost_center_id) || '—'],
+    ['Business Need', r.business_need_type || r.business_need || '—'],
+    ['Employee Being Replaced', r.employee_being_replaced || '—'],
+    ['Justification', r.justification || '—'],
+    ['Position Target Start Date', r.position_target_start_date || '—'],
+    ['Department Utilization (%)', r.department_utilization != null ? r.department_utilization : '—'],
+    ['Net Basic Monthly Salary', fmtMoney(r.net_basic_monthly_salary, r.currency)],
+    ['Currency', r.currency || '—'],
+    ['Support Allowance Applicable', r.support_allowance_applicable ? 'Yes' : 'No'],
+    ['Gross Incentive', r.gross_incentive != null ? r.gross_incentive : '—'],
+    ['Top Management Approver', r.top_management_approver_id ? profileName(r.top_management_approver_id) : '—'],
+  ];
+  if(level !== 'total_only') rows.push(['Total Monthly Cost', fmtMoney(r.total_monthly_cost, r.currency)]);
+  rows.push(['Total Current Year Cost', fmtMoney(r.total_current_year_cost, r.currency)]);
+  rows.push(['Onboarding One-Time Cost', fmtMoney(r.onboarding_one_time_cost, r.currency)]);
+  rows.push(
+    ['Status', r.status || 'Draft'],
+    ['Status Date', fmtDate(r.status_changed_at)],
+    ['Approval Note', r.approval_note || '—'],
+    ['Submitted By', profileName(r.submitted_by||r.requested_by)],
+    ['Requested By', profileName(r.requested_by)],
+    ['Created By', profileName(r.created_by)],
+    ['Updated By', profileName(r.updated_by)],
+    ['Created At', fmtDate(r.created_at)],
+    ['Updated At', fmtDate(r.updated_at)],
+    ['Position Status', r.position_status || '—'],
+    ['TA Owner', r.ta_owner ? profileName(r.ta_owner) : '—'],
+    ['Employee Code', r.employee_code || '—'],
+    ['Employee Name', r.employee_name || '—'],
+    ['Hiring Date', r.hiring_date || '—'],
+    ['Expected Candidate Joining Date', r.expected_candidate_joining_date || '—'],
+    ['On Hold Date', r.on_hold_date || '—'],
+    ['Closed At', fmtDate(r.closed_at)],
+    ['Closed By', r.closed_by ? profileName(r.closed_by) : '—'],
+    ['Offer Outcome', r.offer_outcome || '—'],
+    ['Retention Status', r.retention_status || '—']
+  );
+  if(r.deleted_at){
+    rows.push(['Deleted At', fmtDate(r.deleted_at)], ['Deleted By', r.deleted_by ? profileName(r.deleted_by) : '—']);
+  }
+  return rows;
+}
 function branchName(id){ const b = ALL_BRANCHES.find(b=>b.id===id); return b ? b.name : null; }
 function costCenterName(id){ const c = ALL_COST_CENTERS.find(c=>c.id===id); return c ? c.name : null; }
 // Product owner change #6 — a Project line has no Cost Center at all;
@@ -1145,25 +1230,35 @@ function renderTable(){
       '<td>'+fmtMoney(r.net_basic_monthly_salary, r.currency)+'</td>'+
       '<td>'+costCell+'</td>'+
       '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
+      '<td>'+escapeHtml(fmtDate(r.status_changed_at))+'</td>'+
       '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
       '<td></td>';
     const actionCell = tr.lastElementChild;
+    // Item #2 (round #23) — click anywhere on the row (except an action
+    // button, a checkbox, or while the row IS the inline editor) opens
+    // the read-only full-details view. Available to every role,
+    // including Recruiter, who has no action buttons on this row at all.
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', (e)=>{
+      if(e.target.closest('button') || e.target.closest('input')) return;
+      openDetailsModal(r);
+    });
     if(canActOnRow(r)){
       const btn = document.createElement('button');
       btn.className = 'btn btn-primary btn-small'; btn.textContent = 'Review';
-      btn.addEventListener('click', ()=> openActionModal(r));
+      btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'review'); });
       actionCell.appendChild(btn);
     }
     if(canResubmit(r)){
       const btn = document.createElement('button');
       btn.className = 'btn btn-gold btn-small'; btn.style.marginLeft='6px'; btn.textContent = r.current_step === -1 && r.status === 'Draft' ? 'Submit' : 'Resubmit';
-      btn.addEventListener('click', ()=> openActionModal(r));
+      btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'resubmit'); });
       actionCell.appendChild(btn);
     }
     if(canDelete(r)){
       const btn = document.createElement('button');
       btn.className = 'btn btn-danger btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Delete';
-      btn.addEventListener('click', ()=> openActionModal(r));
+      btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'delete'); });
       actionCell.appendChild(btn);
     }
     if(currentUser.role !== 'recruiter' && (r.requested_by === currentUser.id || r.submitted_by === currentUser.id) && (r.status === 'Draft')){
@@ -1352,15 +1447,18 @@ async function bulkSubmit(idsSet){
 async function bulkDelete(idsSet){
   const ids = [...idsSet];
   if(!ids.length){ showToast('Select at least one line first.'); return; }
-  let applied = 0, skipped = 0;
+  let applied = 0, skipped = 0, failed = 0;
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
     if(!row || !canDelete(row)){ skipped++; continue; }
-    await deleteRow(row);
-    applied++;
+    // Bug fix (item #4, round #23) — same as the single-row Delete
+    // button: check the write's result instead of assuming it always
+    // succeeds just because canDelete() allowed it on the client.
+    const { error } = await deleteRow(row);
+    if(error) failed++; else applied++;
   }
   idsSet.clear();
-  showToast('Deleted ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + '.');
+  showToast('Deleted ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + (failed ? ' (' + failed + ' failed — could not delete)' : '') + '.');
   await loadRows();
 }
 // Builds an INSERT payload for a fresh Draft copy of `row` — the exact
@@ -1386,6 +1484,7 @@ function buildDuplicatePayloadFromRow(row){
   payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
   payload.current_step = -1;
   payload.status = 'Draft';
+  payload.status_changed_at = new Date().toISOString();
   return payload;
 }
 async function bulkDuplicate(idsSet){
@@ -1433,19 +1532,39 @@ document.getElementById('worklistSelectAllCheckbox').addEventListener('change', 
 });
 document.getElementById('worklistClearSelectionBtn').addEventListener('click', ()=>{ worklistSelectedIds.clear(); renderTable(); });
 
-/* ====================== SINGLE-ROW ACTION MODAL ====================== */
-function openActionModal(row){
+/* ====================== FULL-DETAILS VIEW (item #2, round #23) ====================== */
+function openDetailsModal(row){
+  const level = getCostVisibilityLevel(currentUser.role);
+  document.getElementById('detailsModalTitle').textContent = row.position_title || 'Position';
+  const grid = document.getElementById('detailsModalGrid');
+  grid.innerHTML = fieldsForRow(row, level).map(([label, value])=>
+    '<div class="form-field"><label>'+escapeHtml(label)+'</label>'+
+    '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#f4f4f5;font-size:13px;min-height:16px;">'+escapeHtml(value)+'</div></div>'
+  ).join('');
+  document.getElementById('detailsModal').classList.add('show');
+}
+document.getElementById('closeDetailsBtn').addEventListener('click', ()=>{ document.getElementById('detailsModal').classList.remove('show'); });
+
+/* ====================== SINGLE-ROW ACTION MODAL ======================
+ * Item #5 (round #23) — `mode` scopes which button(s) show to exactly
+ * the ones relevant to whichever button the person actually clicked
+ * ('review' / 'resubmit' / 'delete'), instead of showing every action
+ * the row happens to independently qualify for all at once (which is
+ * why clicking Delete used to also show a Submit button alongside it). */
+function openActionModal(row, mode){
   actionRow = row;
   document.getElementById('actionReasonInput').value = '';
   document.getElementById('actionStatus').textContent = '';
   document.getElementById('actionModalTitle').textContent = row.position_title || 'Position';
   document.getElementById('actionModalSub').textContent = 'Status: ' + (row.status||'Draft') + (row.total_current_year_cost ? ' — Total Current Year Cost: ' + fmtMoney(row.total_current_year_cost, row.currency) : '');
-  const canAct = canActOnRow(row);
+  const canAct = mode === 'review' && canActOnRow(row);
+  const canRes = mode === 'resubmit' && canResubmit(row);
+  const canDel = mode === 'delete' && canDelete(row);
   document.getElementById('actionApproveBtn').style.display = canAct ? '' : 'none';
   document.getElementById('actionRejectBtn').style.display = canAct ? '' : 'none';
   document.getElementById('actionReturnBtn').style.display = canAct ? '' : 'none';
-  document.getElementById('actionResubmitBtn').style.display = canResubmit(row) ? '' : 'none';
-  document.getElementById('actionDeleteBtn').style.display = canDelete(row) ? '' : 'none';
+  document.getElementById('actionResubmitBtn').style.display = canRes ? '' : 'none';
+  document.getElementById('actionDeleteBtn').style.display = canDel ? '' : 'none';
   document.getElementById('actionReasonWrap').style.display = 'none';
   document.getElementById('actionModal').classList.add('show');
 }
@@ -1471,7 +1590,15 @@ document.getElementById('actionResubmitBtn').addEventListener('click', async ()=
 });
 document.getElementById('actionDeleteBtn').addEventListener('click', async ()=>{
   if(!actionRow) return;
-  await deleteRow(actionRow);
+  // Bug fix (item #4, round #23): previously this never checked the
+  // update's result at all, so a delete blocked by RLS (e.g. a line at
+  // "Pending TA Team Leader Review" — current_step === 0 — before
+  // migration 22 widened the bu_head delete policy to match) silently
+  // did nothing at the database level while still showing the success
+  // toast and the line reappeared after loadRows() refetched. Same fix
+  // pattern already applied to resubmitRow()'s caller above.
+  const { error } = await deleteRow(actionRow);
+  if(error){ showToast('Could not delete: ' + error.message); return; }
   document.getElementById('actionModal').classList.remove('show');
   showToast('Line deleted — logged for audit.');
   await loadRows();
@@ -1555,6 +1682,10 @@ async function applyAction(row, action, reason){
     payload.status = 'Returned for Revision';
     payload.approval_note = reason;
   }
+  // Item #1 (round #23) — stamp the new "Status Date" column client-side
+  // too (mirrors the DB trigger from migration 22), so it's correct
+  // immediately and even against a stub/test environment with no triggers.
+  if(payload.status) payload.status_changed_at = new Date().toISOString();
   const { error } = await sb.from('manpower_plan').update(payload).eq('id', row.id);
   if(error){ showToast('Could not save: ' + error.message); return; }
   await sb.from('approval_log').insert({
@@ -1581,7 +1712,7 @@ async function applyAction(row, action, reason){
 }
 async function resubmitRow(row){
   const chain = row.approval_chain || [];
-  const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0) };
+  const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0), status_changed_at: new Date().toISOString() };
   // Bug fix: previously this swallowed the update's result entirely, so
   // if the write was rejected (e.g. by an RLS policy) the button appeared
   // to do nothing — no error, and the status never actually changed,
@@ -1593,8 +1724,16 @@ async function resubmitRow(row){
   if(!result.error) notifyNewPositionRequest(row.id);
   return result;
 }
+// Bug fix (item #4, round #23): this used to fire the DB write and
+// throw the result away entirely, so a delete an RLS policy actually
+// rejected (e.g. a "Pending TA Team Leader Review" line — current_step
+// === 0 — before migration 22 widened the bu_head delete policy to
+// match the client-side canDelete() fix from round #20) looked exactly
+// like a successful one: no error, but the row was never actually
+// updated, and it simply reappeared once loadRows() refetched. The
+// caller (actionDeleteBtn's click handler above) now checks .error.
 async function deleteRow(row){
-  await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted' }).eq('id', row.id);
+  return await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted', status_changed_at: new Date().toISOString() }).eq('id', row.id);
 }
 
 /* ====================== ADD / EDIT / DUPLICATE FORM ======================
@@ -2398,6 +2537,7 @@ async function saveForm(submitNow){
     payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
     payload.current_step = submitNow ? 0 : -1;
     payload.status = submitNow ? MPCalc.statusLabelForStep(payload.approval_chain, 0) : 'Draft';
+    payload.status_changed_at = new Date().toISOString();
     result = await sb.from('manpower_plan').insert(payload);
     mpId = result.data && result.data[0] && result.data[0].id;
   } else {
@@ -2406,6 +2546,7 @@ async function saveForm(submitNow){
       const row = ALL_ROWS.find(r=>r.id===editingRowId);
       payload.current_step = 0;
       payload.status = MPCalc.statusLabelForStep(row.approval_chain, 0);
+      payload.status_changed_at = new Date().toISOString();
     }
     result = await sb.from('manpower_plan').update(payload).eq('id', editingRowId);
     mpId = editingRowId;
@@ -2421,23 +2562,20 @@ async function saveForm(submitNow){
   await loadRows();
 }
 
-/* ====================== EXCEL EXPORT (BR-22) ====================== */
-// Round #12: BU Head now also has this button (canExport()), but their
-// cost-visibility level is 'total_only' (same rule that governs the
-// on-screen worklist column and the inline editor's cost preview) — so
-// the exported "Total Monthly Cost" column (the finer-grained breakdown
-// figure they never see on screen either) is left OUT for them. Every
-// full-breakdown role keeps getting both cost columns, unchanged.
+/* ====================== EXCEL EXPORT (BR-22) ======================
+ * Item #3 (round #23) — the export now includes EVERY field on file for
+ * each position (built from the same fieldsForRow() the click-to-view
+ * full-details modal uses — item #2 — so the two can never drift
+ * apart), not just the small subset of columns from before. Round #12's
+ * cost-visibility rule is still respected: a 'total_only' role (e.g. BU
+ * Head) still never gets the finer Total Monthly Cost breakdown column,
+ * same as on screen — fieldsForRow() itself leaves that column out for
+ * them. */
 document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
   const level = getCostVisibilityLevel(currentUser.role);
   const rows = visibleRows().map(r=>{
-    const row = {
-      'Position ID': r.position_code, 'Position': r.position_title, 'Division': r.division, 'Department': r.department,
-      'Status': r.status, 'Net Basic Monthly Salary': r.net_basic_monthly_salary, 'Currency': r.currency
-    };
-    if(level !== 'total_only') row['Total Monthly Cost'] = r.total_monthly_cost;
-    row['Total Current Year Cost'] = r.total_current_year_cost;
-    row['Submitted By'] = profileName(r.submitted_by||r.requested_by);
+    const row = {};
+    fieldsForRow(r, level).forEach(([label, value])=>{ row[label] = value; });
     return row;
   });
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -2760,6 +2898,7 @@ async function importRowsFromExcel(rawRows){
     payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
     payload.current_step = -1;
     payload.status = 'Draft';
+    payload.status_changed_at = new Date().toISOString();
     const result = await sb.from('manpower_plan').insert(payload);
     if(result.error){ errors.push('Row ' + rowNum + ': could not save — ' + result.error.message); continue; }
     successCount++;
@@ -2837,6 +2976,83 @@ function showToast(msg){
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=> t.classList.remove('show'), 2600);
 }
+
+/* ====================== FLOATING HORIZONTAL SCROLLBAR ("All system"
+ * item #1, round #23) ======================
+ * Product owner request: "I want the bar that allows me go right and
+ * left to be visible anywhere i am in the page, i don't have to go to
+ * the bottom of the page to be able to go right and left." The
+ * worklist table has its own horizontal scrollbar (.table-scroll,
+ * overflow-x:auto), but it only shows up at the very bottom edge of
+ * that table — which can be well below the fold once there are many
+ * rows. This adds a second, floating scrollbar pinned to the bottom of
+ * the *browser window* (position:fixed) that mirrors whichever wide
+ * table is currently on screen, and only appears while that table's
+ * OWN scrollbar isn't already visible/reachable — so scrolling left and
+ * right is always possible without first scrolling all the way down.
+ */
+(function setUpFloatingHScrollbar(){
+  const bar = document.createElement('div');
+  bar.id = 'floatingHScrollBar';
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:14px;overflow-x:auto;overflow-y:hidden;background:#fff;border-top:1px solid #e5e5e8;box-shadow:0 -2px 6px rgba(0,0,0,0.06);z-index:150;display:none;';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'height:1px;';
+  bar.appendChild(inner);
+  document.body.appendChild(bar);
+
+  let activeScroller = null;
+  let syncing = false;
+
+  function findActiveScroller(){
+    // Whichever .table-scroll is currently visible (not inside a
+    // display:none view) AND actually overflows horizontally.
+    const scrollers = Array.from(document.querySelectorAll('.table-scroll'));
+    for(const el of scrollers){
+      if(el.offsetParent === null) continue; // hidden view
+      if(el.scrollWidth > el.clientWidth + 2) return el;
+    }
+    return null;
+  }
+
+  function refresh(){
+    const el = findActiveScroller();
+    if(!el){ activeScroller = null; bar.style.display = 'none'; return; }
+    const rect = el.getBoundingClientRect();
+    const viewportH = window.innerHeight;
+    // The table's own scrollbar lives right at its bottom edge — if
+    // that edge is already within the viewport, the native scrollbar
+    // is reachable and the floating one would just duplicate it.
+    const nativeReachable = rect.bottom <= viewportH;
+    // Only relevant while some part of the table is actually on screen.
+    const onScreen = rect.bottom > 0 && rect.top < viewportH;
+    if(!onScreen || nativeReachable){ bar.style.display = 'none'; activeScroller = el; return; }
+    activeScroller = el;
+    bar.style.display = '';
+    inner.style.width = el.scrollWidth + 'px';
+    if(!syncing){ syncing = true; bar.scrollLeft = el.scrollLeft; syncing = false; }
+  }
+
+  bar.addEventListener('scroll', ()=>{
+    if(!activeScroller || syncing) return;
+    syncing = true;
+    activeScroller.scrollLeft = bar.scrollLeft;
+    syncing = false;
+  });
+  // Keep the floating bar in sync if the person scrolls the table
+  // itself (e.g. via trackpad) instead of the floating bar.
+  document.addEventListener('scroll', (e)=>{
+    if(e.target === activeScroller && !syncing){
+      syncing = true; bar.scrollLeft = activeScroller.scrollLeft; syncing = false;
+    }
+  }, true);
+  window.addEventListener('resize', refresh);
+  window.addEventListener('scroll', refresh, true);
+  // Table contents re-render often (filters, actions, loadRows) without
+  // a single call site to hook into — a light poll catches width/view
+  // changes cheaply enough for a table this size.
+  setInterval(refresh, 700);
+  refresh();
+})();
 
 init();
 </script>
