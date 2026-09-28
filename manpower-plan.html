@@ -214,10 +214,10 @@
       <h1>HireGrid <span class="hg-divider">·</span> Manpower Plan<span>Intercom Enterprises — Talent Acquisition</span></h1>
     </div>
     <div class="header-actions">
-      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
-      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
-      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="achievements.html" class="btn btn-ghost" id="navAchieveLink" style="text-decoration:none;">Achievements</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
       <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
@@ -278,7 +278,7 @@
       <!-- Product owner request (round #20): a running total of Total
            Current Year Cost across whatever's currently filtered/shown
            below — updates with search/division/department/status filters. -->
-      <div class="hint" id="worklistCostSummary" style="margin-bottom:10px;font-weight:600;"></div>
+      <div id="worklistCostSummary" style="margin-bottom:10px;font-weight:700;font-size:18px;color:var(--text);"></div>
       <div class="card">
         <div class="table-scroll">
         <table>
@@ -507,6 +507,13 @@ async function loadCurrentUserAndApp(){
   if(currentUser.role === 'admin'){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
+  }
+  // Product owner request (round #21) — Recruiter KPIs/Achievements are
+  // recruiter-performance pages, not something BU Head/Top Management/
+  // Company VP need in their nav.
+  if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
+    const kpiLink = document.getElementById('navKpiLink'); if(kpiLink) kpiLink.style.display = 'none';
+    const achieveLink = document.getElementById('navAchieveLink'); if(achieveLink) achieveLink.style.display = 'none';
   }
   document.getElementById('addOpenBtn').style.display = canCreate() ? '' : 'none';
   document.getElementById('tabTmSummary').style.display = currentUser.role === 'top_management' ? '' : 'none';
@@ -1017,7 +1024,16 @@ function costCenterOrProjectCell(r){
 }
 function businessNeedCell(r){ return escapeHtml(r.business_need_type || r.business_need || '—'); }
 function visibleRows(){
-  return ALL_ROWS.filter(r=>!r.deleted_at);
+  return ALL_ROWS.filter(r=>{
+    if(r.deleted_at) return false;
+    // Product owner request (round #21) — a TA Team Leader's worklist
+    // should only show positions that have actually been Submitted, not
+    // other people's Drafts sitting unfinished. They still see their OWN
+    // draft (so they can get back to it), just not anyone else's.
+    if(currentUser.role === 'ta_leader' && r.status === 'Draft'
+      && r.requested_by !== currentUser.id && r.submitted_by !== currentUser.id) return false;
+    return true;
+  });
 }
 // Same search/Division/Department/Status filtering renderTable() applies
 // to the on-screen worklist — pulled out so the bulk toolbar's "select all"

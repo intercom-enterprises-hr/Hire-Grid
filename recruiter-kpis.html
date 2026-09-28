@@ -122,10 +122,10 @@
     </div>
     <div class="header-actions">
       <select id="yearSelect" class="btn-ghost"></select>
-      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
-      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="achievements.html" class="btn btn-ghost" id="navAchieveLink" style="text-decoration:none;">Achievements</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
       <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
@@ -254,6 +254,11 @@ async function loadCurrentUserAndApp(){
   if(currentUser.role === 'admin'){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
+  }
+  // Product owner request (round #21) — hide the recruiter-performance
+  // nav links for roles that don't need them.
+  if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
+    const achieveLink = document.getElementById('navAchieveLink'); if(achieveLink) achieveLink.style.display = 'none';
   }
   await loadData();
 }

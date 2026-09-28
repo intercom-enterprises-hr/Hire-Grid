@@ -118,10 +118,10 @@
       <h1>HireGrid <span class="hg-divider">·</span> Celebrate Achievements<span>Intercom Enterprises — Talent Acquisition wins</span></h1>
     </div>
     <div class="header-actions">
-      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
-      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruiter KPIs</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
       <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
@@ -214,6 +214,11 @@ async function loadCurrentUserAndApp(){
   if(currentUser.role === 'admin'){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
+  }
+  // Product owner request (round #21) — hide the recruiter-performance
+  // nav link for roles that don't need it.
+  if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
+    const kpiLink = document.getElementById('navKpiLink'); if(kpiLink) kpiLink.style.display = 'none';
   }
   await loadData();
 }
