@@ -430,14 +430,14 @@
     return Math.max(0, currentStep - 1);
   }
 
-  // Migration 10 (product owner change #8): Position ID format is now
-  // MP_{Year}_{DepartmentAbbreviation}_{Serial} — the SAME function
-  // signature as before (year, abbreviation, serial), just fed the
-  // Department's abbreviation instead of the Division's from the
-  // caller (manpower-plan.html), and the serial search there is now
-  // scoped to the same Department instead of the same Division.
+  // Round #26 (product owner change #8): Position ID format is now
+  // MP_{DepartmentAbbreviation}_{Serial} — e.g. "MP_S&IO_1" — with the
+  // year dropped entirely (it used to be
+  // MP_{Year}_{DepartmentAbbreviation}_{Serial}, from migration 10).
+  // The `year` parameter is kept (unused) so the call site in
+  // manpower-plan.html doesn't need to change its argument count.
   function formatPositionId(year, deptAbbreviation, serial) {
-    return 'MP_' + year + '_' + deptAbbreviation + '_' + serial;
+    return 'MP_' + deptAbbreviation + '_' + serial;
   }
 
   // Simple thousands-separator formatting for the Net Basic Monthly

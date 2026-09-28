@@ -835,6 +835,23 @@ async function notifyNewPositionRequest(manpowerPlanId, type){
     console.warn('notify-new-request failed (non-blocking):', e);
   }
 }
+// Round #26 (item #7): "if one of the roles selects several lines
+// together and submits or approves them, the next step person shall
+// receive one email with all positions" — the bulk-action call sites
+// (bulkSubmit/bulkApprove/the bulk reject-return handler) collect the
+// ids that ended up needing the SAME notification kind and send them
+// here together, instead of calling notifyNewPositionRequest() once
+// per line. The Edge Function sends one consolidated email per
+// audience listing every position, not one email per line.
+async function notifyNewPositionRequestBatch(manpowerPlanIds, type){
+  if(!manpowerPlanIds || !manpowerPlanIds.length) return;
+  try {
+    const { error } = await sb.functions.invoke('notify-new-request', { body: { manpower_plan_ids: manpowerPlanIds, type: type || 'new_request' } });
+    if(error) console.warn('notify-new-request (batch) returned an error (non-blocking):', error.message);
+  } catch(e){
+    console.warn('notify-new-request (batch) failed (non-blocking):', e);
+  }
+}
 let lifecycleRow = null;
 function collectLifecycleFieldPayload(){
   const numOrNull = (id)=>{ const v = document.getElementById(id).value; return v !== '' ? parseFloat(v) : null; };
@@ -959,6 +976,10 @@ document.getElementById('lifecycleHoldBtn').addEventListener('click', async ()=>
   if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
   document.getElementById('lifecycleModal').classList.remove('show');
   showToast('Position put on hold.');
+  // Round #26 (item #6) — Head of HR wants to know when a TA Team
+  // Leader puts a position on hold (previously silent, per the
+  // original spec — the product owner has now asked for this).
+  await notifyLifecycleEvent('position_on_hold', lifecycleRow.id, holdDate);
   await loadRows();
 });
 // Reactivate an On-Hold position back to Open (2.3) — requires the new
@@ -973,6 +994,9 @@ document.getElementById('lifecycleReactivateBtn').addEventListener('click', asyn
   if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
   document.getElementById('lifecycleModal').classList.remove('show');
   showToast('Position reactivated.');
+  // Round #26 (item #6) — and again when it's reactivated, including
+  // the new expected candidate joining date that was just set above.
+  await notifyLifecycleEvent('position_reactivated', lifecycleRow.id, newJoinDate);
   await loadRows();
 });
 // Revoke Closure (2.4) — candidate accepted the offer, then didn't join;
@@ -1376,13 +1400,25 @@ async function bulkApprove(idsSet, onDone){
   const ids = [...idsSet];
   if(!ids.length){ showToast('Select at least one line first.'); return; }
   let applied = 0, skipped = 0;
+  // Round #26 (item #7): group by which notification kind each line's
+  // approval triggers (usually the same for every line in one bulk
+  // action, but see the comment on applyAction() — it can genuinely
+  // differ line-to-line, e.g. a mix of BU-Head-initiated and
+  // Recruiter-initiated lines), then send ONE consolidated email per
+  // kind instead of one per line.
+  const notifyGroups = {};
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
-    if(row && canActOnRow(row)){ await applyAction(row, 'approved', null); applied++; }
+    if(row && canActOnRow(row)){
+      const kind = await applyAction(row, 'approved', null, { suppressNotify: true });
+      applied++;
+      if(kind){ (notifyGroups[kind] = notifyGroups[kind] || []).push(id); }
+    }
     else skipped++;
   }
   idsSet.clear();
   showToast('Approved ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not awaiting your action)' : '') + '.');
+  for(const kind of Object.keys(notifyGroups)) notifyNewPositionRequestBatch(notifyGroups[kind], kind);
   await loadRows();
   if(onDone) onDone();
 }
@@ -1414,14 +1450,22 @@ document.getElementById('confirmBulkReasonBtn').addEventListener('click', async 
   const idsSet = pendingBulkIdsSet;
   const ids = [...idsSet];
   let applied = 0, skipped = 0;
+  // Round #26 (item #7) — same consolidation as bulkApprove() above:
+  // one email per notification kind, not one per line.
+  const notifyGroups = {};
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
-    if(row && canActOnRow(row)){ await applyAction(row, pendingBulkAction, reason); applied++; }
+    if(row && canActOnRow(row)){
+      const kind = await applyAction(row, pendingBulkAction, reason, { suppressNotify: true });
+      applied++;
+      if(kind){ (notifyGroups[kind] = notifyGroups[kind] || []).push(id); }
+    }
     else skipped++;
   }
   idsSet.clear();
   document.getElementById('bulkReasonModal').classList.remove('show');
   showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not awaiting your action)' : '') + '.');
+  for(const kind of Object.keys(notifyGroups)) notifyNewPositionRequestBatch(notifyGroups[kind], kind);
   await loadRows();
 });
 
@@ -1434,13 +1478,17 @@ async function bulkSubmit(idsSet){
   const ids = [...idsSet];
   if(!ids.length){ showToast('Select at least one line first.'); return; }
   let applied = 0, skipped = 0;
+  // Round #26 (item #7) — one consolidated "new position request(s)"
+  // email to TA Team Leader(s)/Head of HR instead of one per line.
+  const notifiedIds = [];
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
     if(!row || !canResubmit(row)){ skipped++; continue; }
-    const { error } = await resubmitRow(row);
-    if(error) skipped++; else applied++;
+    const { error } = await resubmitRow(row, { suppressNotify: true });
+    if(error) skipped++; else { applied++; notifiedIds.push(id); }
   }
   idsSet.clear();
+  if(notifiedIds.length) notifyNewPositionRequestBatch(notifiedIds, 'new_request');
   showToast('Submitted ' + applied + ' line(s) for approval' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + '.');
   await loadRows();
 }
@@ -1637,32 +1685,50 @@ wireConfirmOnSecondClick('actionRejectBtn', 'rejected');
 wireConfirmOnSecondClick('actionReturnBtn', 'returned');
 
 /* ====================== APPLY AN ACTION (shared by single + bulk) ====================== */
-// Product owner change #8 — Position ID now reads the DEPARTMENT's
-// abbreviation (not the Division's), and the sequential serial is
-// scoped to lines in the SAME DEPARTMENT within the same calendar
-// year (not the same Division). Falls back to a derived abbreviation
-// from the department name if Admin hasn't set one yet.
+// Product owner change #8 (round #26) — Position ID now reads the
+// DEPARTMENT's abbreviation (not the Division's), format
+// MP_{DepartmentAbbreviation}_{Serial} — e.g. "MP_S&IO_1" — with NO
+// year in it at all (the previous MP_{Year}_{Abbrev}_{Serial} format
+// is retired). The serial is a straight running count per department,
+// never resetting. Falls back to a derived abbreviation from the
+// department name if Admin hasn't set one yet.
+// Note: existing rows already carrying an old MP_{Year}_..._{n}
+// position_code won't match this new prefix, so numbering for each
+// department starts fresh at 1 under the new format — their old codes
+// are untouched, only NEWLY approved positions get the new format.
 function computeNextPositionId(departmentId){
   const dept = ALL_DEPARTMENTS.find(d=>d.id===departmentId);
   const abbrev = (dept && (dept.abbreviation || dept.name.slice(0,3).toUpperCase())) || 'NA';
-  const year = new Date().getFullYear();
-  const prefix = 'MP_' + year + '_' + abbrev + '_';
+  const prefix = 'MP_' + abbrev + '_';
   const serials = ALL_ROWS
     .filter(r=>r.department_id === departmentId && r.position_code && r.position_code.indexOf(prefix)===0)
     .map(r=>parseInt(r.position_code.slice(prefix.length),10))
     .filter(n=>!isNaN(n));
   const next = (serials.length ? Math.max(...serials) : 0) + 1;
-  return MPCalc.formatPositionId(year, abbrev, next);
+  return MPCalc.formatPositionId(null, abbrev, next);
 }
-async function applyAction(row, action, reason){
-  if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) { showToast('Blocked by BR-15a — you cannot act on your own submission.'); return; }
+// `opts.suppressNotify` (round #26, item #7): when true, the caller is
+// doing a bulk action and wants to collect the notification kind this
+// call WOULD have fired (returned below) instead of sending it right
+// away, so it can batch every line that needs the SAME kind into one
+// consolidated email afterward. A normal single-row call (the button
+// handlers below) never passes this, so it keeps notifying immediately.
+async function applyAction(row, action, reason, opts){
+  opts = opts || {};
+  if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) { showToast('Blocked by BR-15a — you cannot act on your own submission.'); return null; }
   const required = requiredRoleFor(row);
-  if(!required) return;
+  if(!required) return null;
   const isDelegate = currentUser.role !== required;
   const delegateInfo = isDelegate ? MY_DELEGATED_ROLES.find(d=>d.role===required) : null;
 
   const chain = row.approval_chain || [];
   const payload = {};
+  // Round #26 (items #3/#4/#5) — which audience needs telling, and
+  // about what. Keyed by the role that just acted (`required`), not by
+  // fixed chain position, since which roles are even IN the chain
+  // varies by who initiated the line (BR-15a drops the initiator's own
+  // role from their own chain).
+  let notifyKind = null;
   if(action === 'approved'){
     const nextStep = row.current_step + 1;
     payload.current_step = nextStep;
@@ -1670,12 +1736,19 @@ async function applyAction(row, action, reason){
       payload.status = 'Approved';
       payload.position_status = 'Open';
       payload.position_code = computeNextPositionId(row.department_id);
+      notifyKind = 'position_approved'; // item #5 (approve case): HOH, TA TL(s), BU Head
     } else {
       payload.status = MPCalc.statusLabelForStep(chain, nextStep);
+      const nextRole = chain[nextStep].role;
+      if(nextRole === 'head_of_hr') notifyKind = 'pending_head_of_hr'; // item #3 (approve case)
+      else if(nextRole === 'top_management') notifyKind = 'pending_top_management'; // item #4 (approve case)
     }
   } else if(action === 'rejected'){
     payload.status = 'Rejected';
     payload.approval_note = reason;
+    if(required === 'ta_leader') notifyKind = 'rejected_by_ta_leader'; // item #3 (reject case): notify HOH
+    else if(required === 'head_of_hr') notifyKind = 'rejected_by_head_of_hr'; // item #4 (reject case): notify Top Management
+    else if(required === 'top_management') notifyKind = 'rejected_by_top_management'; // item #5 (reject case): HOH, TA TL(s), BU Head
   } else if(action === 'returned'){
     const backStep = MPCalc.stepAfterReturn(row.current_step);
     payload.current_step = backStep;
@@ -1687,7 +1760,7 @@ async function applyAction(row, action, reason){
   // immediately and even against a stub/test environment with no triggers.
   if(payload.status) payload.status_changed_at = new Date().toISOString();
   const { error } = await sb.from('manpower_plan').update(payload).eq('id', row.id);
-  if(error){ showToast('Could not save: ' + error.message); return; }
+  if(error){ showToast('Could not save: ' + error.message); return null; }
   await sb.from('approval_log').insert({
     manpower_plan_id: row.id,
     step: required,
@@ -1696,21 +1769,11 @@ async function applyAction(row, action, reason){
     acted_as_delegate_for: delegateInfo ? delegateInfo.delegator_id : null,
     reason: reason || null
   });
-  // Product owner request (round #20) — let whoever's turn it is next
-  // know a position is waiting on them, and let everyone who was
-  // involved know once it clears Top Management for good.
-  if(action === 'approved'){
-    const nextStep = payload.current_step;
-    if(nextStep >= chain.length){
-      notifyNewPositionRequest(row.id, 'position_approved');
-    } else {
-      const nextRole = chain[nextStep].role;
-      if(nextRole === 'head_of_hr') notifyNewPositionRequest(row.id, 'pending_head_of_hr');
-      else if(nextRole === 'top_management') notifyNewPositionRequest(row.id, 'pending_top_management');
-    }
-  }
+  if(notifyKind && !opts.suppressNotify) notifyNewPositionRequest(row.id, notifyKind);
+  return notifyKind;
 }
-async function resubmitRow(row){
+async function resubmitRow(row, opts){
+  opts = opts || {};
   const chain = row.approval_chain || [];
   const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0), status_changed_at: new Date().toISOString() };
   // Bug fix: previously this swallowed the update's result entirely, so
@@ -1720,8 +1783,9 @@ async function resubmitRow(row){
   const result = await sb.from('manpower_plan').update(payload).eq('id', row.id);
   // A resubmit (Draft or Returned-for-Revision going back to step 0) is
   // just as much "a BU Head submitting a position request" as a brand
-  // new one — notify the same reviewers.
-  if(!result.error) notifyNewPositionRequest(row.id);
+  // new one — notify the same reviewers. `opts.suppressNotify`: see the
+  // comment on applyAction() above — bulkSubmit() batches these instead.
+  if(!result.error && !opts.suppressNotify) notifyNewPositionRequest(row.id);
   return result;
 }
 // Bug fix (item #4, round #23): this used to fire the DB write and
@@ -2989,33 +3053,40 @@ function showToast(msg){
 }
 
 /* ====================== FLOATING HORIZONTAL SCROLLBAR ("All system"
- * item #1, round #23; fixed round #25) ======================
- * Product owner request: "I want the bar that allows me go right and
- * left to be visible anywhere i am in the page, i don't have to go to
- * the bottom of the page to be able to go right and left." The
- * worklist table has its own horizontal scrollbar (.table-scroll,
- * overflow-x:auto), but it only shows up at the very bottom edge of
- * that table — which can be below the fold, OR (for a short worklist)
- * simply below whatever else sits under the table on the page. This
- * adds a second, floating scrollbar pinned to the bottom of the
- * *browser window* (position:fixed) that mirrors whichever wide table
- * is currently on screen. Round #23's first version also tried to hide
- * itself whenever the table's own native scrollbar was already
- * "reachable" — that heuristic backfired (report: "not working unless
- * i went to the bottom of the page") and is gone now: this simply shows
- * any time a wide table is visible at all, full stop.
+ * item #1, round #23; fixed round #25; REBUILT round #26) ======================
+ * Round #26 bug report: "I have 2 horizontal scroll bars — the upward
+ * one [the table's own native scrollbar] works, the downward one
+ * [this floating bar] is not working independently — you should make
+ * moving the 1st move the other." In plain terms: the table's own
+ * native scrollbar scrolled fine, but this floating bar — previously
+ * just a plain overflow-x:auto div only 14px tall — could NOT be
+ * dragged on its own; it only ever passively followed the table's
+ * native scrollbar; dragging IT directly did nothing. A 14px native
+ * scrollbar thumb is small and its exact hit-area/behavior varies a lot
+ * across browsers and operating systems, and it evidently wasn't
+ * reliably grabbable for her at all.
+ *
+ * Rebuilt from scratch as a fully custom track + thumb widget (plain
+ * <div>s, driven entirely by our own pointer-event handlers) instead
+ * of relying on the browser's own tiny native scrollbar widget. This
+ * is now something we fully control end to end, so dragging it
+ * definitely scrolls the table — independently, in both directions —
+ * and it stays in sync no matter which of the two bars the person
+ * actually moves.
  */
 (function setUpFloatingHScrollbar(){
   const bar = document.createElement('div');
   bar.id = 'floatingHScrollBar';
-  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:14px;overflow-x:auto;overflow-y:hidden;background:#fff;border-top:1px solid #e5e5e8;box-shadow:0 -2px 6px rgba(0,0,0,0.06);z-index:150;display:none;';
-  const inner = document.createElement('div');
-  inner.style.cssText = 'height:1px;';
-  bar.appendChild(inner);
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:18px;background:#eceef1;border-top:1px solid #d7d8dc;box-shadow:0 -2px 6px rgba(0,0,0,0.06);z-index:150;display:none;cursor:pointer;touch-action:none;';
+  const thumb = document.createElement('div');
+  thumb.id = 'floatingHScrollBarThumb';
+  thumb.style.cssText = 'position:absolute;top:2px;bottom:2px;left:0;background:var(--gold);border-radius:6px;cursor:grab;min-width:30px;touch-action:none;';
+  bar.appendChild(thumb);
   document.body.appendChild(bar);
 
   let activeScroller = null;
-  let syncing = false;
+  let dragging = false;
+  let dragStartX = 0, dragStartScrollLeft = 0, dragThumbW = 0, dragTrackW = 0;
 
   function findActiveScroller(){
     // Whichever .table-scroll is currently visible (not inside a
@@ -3028,39 +3099,79 @@ function showToast(msg){
     return null;
   }
 
+  // Sizes and positions the thumb to reflect activeScroller's current
+  // scrollLeft and how much of its width is visible at once — this is
+  // the ONLY thing that moves the thumb when the table itself is
+  // scrolled some other way (trackpad, keyboard, its own native bar).
+  function positionThumb(){
+    if(!activeScroller) return;
+    const trackW = bar.clientWidth;
+    const visibleRatio = activeScroller.clientWidth / activeScroller.scrollWidth;
+    const thumbW = Math.max(30, trackW * visibleRatio);
+    const maxScroll = activeScroller.scrollWidth - activeScroller.clientWidth;
+    const scrollRatio = maxScroll > 0 ? activeScroller.scrollLeft / maxScroll : 0;
+    const thumbX = scrollRatio * (trackW - thumbW);
+    thumb.style.width = thumbW + 'px';
+    thumb.style.left = thumbX + 'px';
+  }
+
   function refresh(){
     const el = findActiveScroller();
     if(!el){ activeScroller = null; bar.style.display = 'none'; return; }
-    // Bug fix (round #25): this used to also hide the floating bar
-    // whenever the table's own native scrollbar happened to already be
-    // "reachable" (its bottom edge within the viewport) — the idea being
-    // it would be redundant then. In practice that meant the floating
-    // bar often never showed at all for a shorter worklist (one whose
-    // full height already fits within a tall viewport), which is
-    // exactly the "not working unless I scroll to the bottom" report —
-    // the ONE place a person could actually reach a horizontal
-    // scrollbar was still the table's own, at the very bottom of
-    // whatever content sat below it. Simplified: show the floating bar
-    // any time a wide table is on screen at all, full stop — matching
-    // the literal ask ("visible anywhere in the page").
     activeScroller = el;
     bar.style.display = '';
-    inner.style.width = el.scrollWidth + 'px';
-    if(!syncing){ syncing = true; bar.scrollLeft = el.scrollLeft; syncing = false; }
+    positionThumb();
   }
 
-  bar.addEventListener('scroll', ()=>{
-    if(!activeScroller || syncing) return;
-    syncing = true;
-    activeScroller.scrollLeft = bar.scrollLeft;
-    syncing = false;
+  // Dragging the thumb itself — the main, direct way this bar is meant
+  // to be used. Pointer Events (not plain mouse events) so this works
+  // the same with a mouse, a trackpad, or a touchscreen.
+  thumb.addEventListener('pointerdown', (e)=>{
+    if(!activeScroller) return;
+    dragging = true;
+    thumb.setPointerCapture(e.pointerId);
+    thumb.style.cursor = 'grabbing';
+    dragStartX = e.clientX;
+    dragStartScrollLeft = activeScroller.scrollLeft;
+    dragTrackW = bar.clientWidth;
+    dragThumbW = thumb.offsetWidth;
+    e.preventDefault();
   });
-  // Keep the floating bar in sync if the person scrolls the table
-  // itself (e.g. via trackpad) instead of the floating bar.
+  thumb.addEventListener('pointermove', (e)=>{
+    if(!dragging || !activeScroller) return;
+    const deltaX = e.clientX - dragStartX;
+    const maxScroll = activeScroller.scrollWidth - activeScroller.clientWidth;
+    const maxThumbTravel = dragTrackW - dragThumbW;
+    const scrollDelta = maxThumbTravel > 0 ? (deltaX / maxThumbTravel) * maxScroll : 0;
+    activeScroller.scrollLeft = Math.max(0, Math.min(maxScroll, dragStartScrollLeft + scrollDelta));
+  });
+  function endDrag(e){
+    if(!dragging) return;
+    dragging = false;
+    thumb.style.cursor = 'grab';
+    try{ thumb.releasePointerCapture(e.pointerId); }catch(_e){}
+  }
+  thumb.addEventListener('pointerup', endDrag);
+  thumb.addEventListener('pointercancel', endDrag);
+
+  // Clicking the track itself (not the thumb) jumps straight to that
+  // position — standard scrollbar-track behavior.
+  bar.addEventListener('pointerdown', (e)=>{
+    if(e.target === thumb || !activeScroller) return;
+    const trackW = bar.clientWidth;
+    const thumbW = thumb.offsetWidth;
+    const maxScroll = activeScroller.scrollWidth - activeScroller.clientWidth;
+    const clickRatio = Math.max(0, Math.min(1, (e.clientX - thumbW/2) / (trackW - thumbW)));
+    activeScroller.scrollLeft = clickRatio * maxScroll;
+  });
+
+  // Keep the thumb in sync if the person scrolls the table itself
+  // (trackpad, keyboard, or its own native scrollbar) instead of
+  // dragging this floating thumb — this is the "1st bar moves the
+  // 2nd" direction, which already worked; the fix above is what makes
+  // the reverse direction (dragging this bar) actually work too.
   document.addEventListener('scroll', (e)=>{
-    if(e.target === activeScroller && !syncing){
-      syncing = true; bar.scrollLeft = activeScroller.scrollLeft; syncing = false;
-    }
+    if(e.target === activeScroller && !dragging) positionThumb();
   }, true);
   window.addEventListener('resize', refresh);
   window.addEventListener('scroll', refresh, true);
