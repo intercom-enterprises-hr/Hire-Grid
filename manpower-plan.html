@@ -2538,7 +2538,18 @@ async function saveForm(submitNow){
     payload.current_step = submitNow ? 0 : -1;
     payload.status = submitNow ? MPCalc.statusLabelForStep(payload.approval_chain, 0) : 'Draft';
     payload.status_changed_at = new Date().toISOString();
-    result = await sb.from('manpower_plan').insert(payload);
+    // Bug fix (round #24): PostgREST/supabase-js does NOT return the
+    // inserted row by default — without .select() here, result.data was
+    // always null, so mpId below was always undefined. That meant the
+    // notify-new-request email (to Head of HR AND every TA Leader
+    // covering the department) never fired for a BRAND NEW position
+    // submitted straight from the inline editor (the `if(submitNow &&
+    // mpId)` guard a few lines down silently skipped it) — this is
+    // exactly the "TA Team Leader didn't get an email" report. It also
+    // meant a Not-in-list master-data exception (logMasterDataExceptions
+    // below) was silently logged against a null manpower_plan_id for the
+    // same submissions. .select() fixes both.
+    result = await sb.from('manpower_plan').insert(payload).select();
     mpId = result.data && result.data[0] && result.data[0].id;
   } else {
     payload.updated_by = currentUser.id;
