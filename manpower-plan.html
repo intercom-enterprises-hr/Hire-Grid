@@ -275,6 +275,10 @@
            panel (not alert()) so several row errors are all readable at
            once. Hidden whenever there is nothing to show. -->
       <div class="card" id="importResultsPanel" style="display:none;margin-bottom:16px;"></div>
+      <!-- Product owner request (round #20): a running total of Total
+           Current Year Cost across whatever's currently filtered/shown
+           below — updates with search/division/department/status filters. -->
+      <div class="hint" id="worklistCostSummary" style="margin-bottom:10px;font-weight:600;"></div>
       <div class="card">
         <div class="table-scroll">
         <table>
@@ -717,10 +721,18 @@ function canDelete(row){
   // had submitted for their department — fixed here, and on the DB side
   // in migration 18, which also widens their read access to the whole
   // department so those lines are even visible in the first place).
-  return currentUser.role === 'bu_head'
-    && MY_BU_DEPARTMENTS.some(d=>d.id === row.department_id)
-    && (row.status === 'Returned for Revision' || row.status === 'Rejected')
-    && !row.deleted_at;
+  //
+  // Product owner fix (round #20): a BU Head may ALSO delete a line while
+  // it's still a Draft, or has been Submitted but not yet acted on by
+  // anyone (current_step === 0 — i.e. it hasn't cleared the TA Team
+  // Leader review step yet). Once that first approval happens and the
+  // line moves past step 0, it can no longer be deleted this way — only
+  // Returned/Rejected lines can, per BR-21 above.
+  if(currentUser.role !== 'bu_head') return false;
+  if(!MY_BU_DEPARTMENTS.some(d=>d.id === row.department_id)) return false;
+  if(row.deleted_at) return false;
+  return row.status === 'Returned for Revision' || row.status === 'Rejected'
+    || row.status === 'Draft' || row.current_step === 0;
 }
 
 /* ====================== POSITION LIFECYCLE (item 2) ======================
@@ -789,9 +801,14 @@ async function notifyLifecycleEvent(type, manpowerPlanId, extra){
 // missing the internal "supabase_functions" schema webhooks need, so a
 // webhook fails outright — calling the function directly sidesteps that
 // and matches the same pattern used for the lifecycle emails above).
-async function notifyNewPositionRequest(manpowerPlanId){
+// `type` covers every stage of the approval workflow this function
+// knows about, not just the original new-request email — see
+// edge-functions/notify-new-request/index.ts for the full list.
+// Defaults to 'new_request' so the existing call sites (a fresh Submit,
+// or a Resubmit in resubmitRow()) don't need to change.
+async function notifyNewPositionRequest(manpowerPlanId, type){
   try {
-    const { error } = await sb.functions.invoke('notify-new-request', { body: { manpower_plan_id: manpowerPlanId } });
+    const { error } = await sb.functions.invoke('notify-new-request', { body: { manpower_plan_id: manpowerPlanId, type: type || 'new_request' } });
     if(error) console.warn('notify-new-request returned an error (non-blocking):', error.message);
   } catch(e){
     console.warn('notify-new-request failed (non-blocking):', e);
@@ -1023,6 +1040,23 @@ function currentlyFilteredWorklistRows(){
     return true;
   });
 }
+// Sums Total Current Year Cost across whatever's currently shown in the
+// worklist (same filters as the table itself). Grouped by currency
+// rather than added together across currencies, since a straight sum of
+// EGP + SAR + AED figures would be meaningless.
+function renderWorklistCostSummary(rows){
+  const el = document.getElementById('worklistCostSummary');
+  if(!el) return;
+  const totals = {};
+  rows.forEach(r=>{
+    if(r.total_current_year_cost == null) return;
+    const cur = r.currency || '';
+    totals[cur] = (totals[cur]||0) + r.total_current_year_cost;
+  });
+  const currencies = Object.keys(totals);
+  if(!currencies.length){ el.textContent = 'Sum of Total Year Cost: —'; return; }
+  el.textContent = 'Sum of Total Year Cost: ' + currencies.map(cur=>fmtMoney(totals[cur], cur)).join('  ·  ');
+}
 function renderTable(){
   // Change #1: never blow away an open, unsaved inline "Add/Edit/Duplicate
   // position" row just because a filter/search input fired a re-render —
@@ -1036,6 +1070,7 @@ function renderTable(){
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = '';
   document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
+  renderWorklistCostSummary(rows);
 
   // Bulk review toolbar — hidden entirely for a Recruiter (view-only) or
   // anyone else who could never act on ANY line. Product owner change
@@ -1514,6 +1549,19 @@ async function applyAction(row, action, reason){
     acted_as_delegate_for: delegateInfo ? delegateInfo.delegator_id : null,
     reason: reason || null
   });
+  // Product owner request (round #20) — let whoever's turn it is next
+  // know a position is waiting on them, and let everyone who was
+  // involved know once it clears Top Management for good.
+  if(action === 'approved'){
+    const nextStep = payload.current_step;
+    if(nextStep >= chain.length){
+      notifyNewPositionRequest(row.id, 'position_approved');
+    } else {
+      const nextRole = chain[nextStep].role;
+      if(nextRole === 'head_of_hr') notifyNewPositionRequest(row.id, 'pending_head_of_hr');
+      else if(nextRole === 'top_management') notifyNewPositionRequest(row.id, 'pending_top_management');
+    }
+  }
 }
 async function resubmitRow(row){
   const chain = row.approval_chain || [];
