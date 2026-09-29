@@ -1132,9 +1132,32 @@ function costCenterOrProjectCell(r){
   return escapeHtml(costCenterName(r.cost_center_id) || '—');
 }
 function businessNeedCell(r){ return escapeHtml(r.business_need_type || r.business_need || '—'); }
+// Round #27 — has the given approval-chain role already cleared this row
+// (i.e. approved it, whatever happens further down the chain afterwards)?
+// The chain's role order is always ta_leader → bu_head → head_of_hr →
+// top_management, minus whichever role initiated the line (BR-15a), so a
+// role that isn't in the chain at all means that role WAS the initiator —
+// treated as "cleared" automatically, since they created the line
+// themselves. Otherwise the row has cleared that role's step once
+// current_step has moved past that step's index in ITS chain (a Rejected
+// line whose current_step never advanced past that step was never
+// actually approved by it, so it stays excluded).
+function hasClearedApprovalStep(row, roleName){
+  const chain = row.approval_chain || [];
+  const idx = chain.findIndex(c=>c.role === roleName);
+  if(idx === -1) return true; // that role wasn't part of this row's chain — they were the initiator
+  return row.current_step > idx;
+}
 function visibleRows(){
   return ALL_ROWS.filter(r=>{
     if(r.deleted_at) return false;
+    // Round #27 (product owner request) — Head of HR's worklist should
+    // only show positions the TA Team Leader has already approved, not
+    // every position system-wide (e.g. still pending/rejected at the TA
+    // Team Leader step). Same idea for Top Management, gated one step
+    // later on Head of HR's own approval.
+    if(currentUser.role === 'head_of_hr' && !hasClearedApprovalStep(r, 'ta_leader')) return false;
+    if(currentUser.role === 'top_management' && !hasClearedApprovalStep(r, 'head_of_hr')) return false;
     // Product owner request (round #21) — a TA Team Leader's worklist
     // should only show positions that have actually been Submitted, not
     // other people's Drafts sitting unfinished. They still see their OWN
