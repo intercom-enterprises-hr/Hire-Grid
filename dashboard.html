@@ -258,7 +258,7 @@
     <div class="table-card">
       <table>
         <thead>
-          <tr><th>Position Title</th><th>Division</th><th>Department</th><th>Sub-department</th><th>Business Need</th><th>Detailed Business Need</th><th>Candidate Expected Joining Date</th></tr>
+          <tr><th>Position Title</th><th>Division</th><th>Department</th><th>Sub-department</th><th>Business Need</th><th>Detailed Business Need</th><th>Position Target Start Date</th></tr>
         </thead>
         <tbody id="openRegisterTableBody"></tbody>
       </table>
@@ -630,8 +630,8 @@ function renderOpenPositionsRegister(filtered){
     <td>${escapeHtml(r.department || '—')}</td>
     <td>${escapeHtml(sectionName(r.section_id) || '—')}</td>
     <td>${escapeHtml(needOf(r) || '—')}</td>
-    <td>${escapeHtml(r.detailed_business_need || '—')}</td>
-    <td>${escapeHtml(fmtDate(r.expected_candidate_joining_date))}</td>
+    <td>${escapeHtml(r.justification || '—')}</td>
+    <td>${escapeHtml(fmtDate(r.position_target_start_date))}</td>
   </tr>`).join('');
 }
 
