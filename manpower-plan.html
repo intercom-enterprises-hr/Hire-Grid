@@ -1308,7 +1308,14 @@ function renderTable(){
       btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'delete'); });
       actionCell.appendChild(btn);
     }
-    if(currentUser.role !== 'recruiter' && (r.requested_by === currentUser.id || r.submitted_by === currentUser.id) && (r.status === 'Draft')){
+    // Round #27 fix — a line the submitter can already Resubmit (Draft,
+    // or Returned-for-Revision now that it's actually back with them —
+    // current_step === -1, see applyAction()'s 'returned' branch above)
+    // should also offer Edit, so they can fix whatever the reviewer
+    // flagged before resubmitting it. Previously this only fired for
+    // 'Draft', so a Returned line never got an Edit button at all.
+    if(currentUser.role !== 'recruiter' && (r.requested_by === currentUser.id || r.submitted_by === currentUser.id)
+      && r.current_step === -1 && (r.status === 'Draft' || r.status === 'Returned for Revision')){
       const btn = document.createElement('button');
       btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Edit';
       btn.addEventListener('click', ()=> openForm(r));
@@ -1773,8 +1780,18 @@ async function applyAction(row, action, reason, opts){
     else if(required === 'head_of_hr') notifyKind = 'rejected_by_head_of_hr'; // item #4 (reject case): notify Top Management
     else if(required === 'top_management') notifyKind = 'rejected_by_top_management'; // item #5 (reject case): HOH, TA TL(s), BU Head
   } else if(action === 'returned'){
-    const backStep = MPCalc.stepAfterReturn(row.current_step);
-    payload.current_step = backStep;
+    // Round #27 fix — a Return-for-Revision now always goes all the way
+    // back to whoever originally submitted the line (current_step -1,
+    // same as a fresh Draft — canResubmit()'s own comment already
+    // documented this as the intended behavior: "Draft, or
+    // Returned-to-initiator: current_step === -1"). Previously
+    // MPCalc.stepAfterReturn() only stepped back ONE index and clamped
+    // at 0, so a Return from the very first approval step (the most
+    // common case) left current_step at 0 instead of -1 — meaning the
+    // line silently stayed queued for the SAME approver to act on again,
+    // and the submitter never got an Edit button or a way to resubmit it
+    // (canResubmit()/the Edit button both key off current_step === -1).
+    payload.current_step = -1;
     payload.status = 'Returned for Revision';
     payload.approval_note = reason;
   }

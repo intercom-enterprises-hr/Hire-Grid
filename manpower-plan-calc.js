@@ -425,9 +425,18 @@
     return false;
   }
 
-  // BR-09a: Return-for-Revision goes back exactly one step.
+  // Round #27 fix — no longer used by manpower-plan.html. This used to
+  // step a Returned-for-Revision line back exactly one index (clamped at
+  // 0), but that clamp meant a Return from the very first approval step
+  // (the most common case) left the line at current_step 0 — still
+  // queued for the SAME approver, instead of actually going back to
+  // whoever submitted it. Returns now always reset current_step to -1
+  // (see applyAction()'s 'returned' branch in manpower-plan.html), matching
+  // canResubmit()'s own long-standing "Draft, or Returned-to-initiator:
+  // current_step === -1" comment. Kept here, unused, only so nothing
+  // breaks if some other caller still references it.
   function stepAfterReturn(currentStep) {
-    return Math.max(0, currentStep - 1);
+    return -1;
   }
 
   // Round #26 (product owner change #8): Position ID format is now
