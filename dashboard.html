@@ -21,7 +21,7 @@
   .brand-logo-chip:hover{transform:scale(1.06) rotate(-1deg);}
   .brand-logo{height:22px;width:auto;display:block;}
   .login-logo{display:block;height:44px;margin:0 auto 18px;animation:popIn .6s ease both;}
-  .kpi-card, .chart-card, .module-card, .risk-card, .card{animation:fadeInUp .45s ease both;}
+  .kpi-card, .chart-card, .module-card, .table-card, .card{animation:fadeInUp .45s ease both;}
   .kpi-grid .kpi-card:nth-child(1), .module-grid .module-card:nth-child(1){animation-delay:.02s;}
   .kpi-grid .kpi-card:nth-child(2), .module-grid .module-card:nth-child(2){animation-delay:.08s;}
   .kpi-grid .kpi-card:nth-child(3), .module-grid .module-card:nth-child(3){animation-delay:.14s;}
@@ -80,15 +80,19 @@
   .chart-holder canvas{width:100% !important;height:100% !important;}
   .card-unavailable{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-mute);font-size:12.5px;text-align:center;padding:20px;}
 
-  .risk-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
-  .risk-card table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  .risk-card th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.02em;padding:9px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
-  .risk-card td{padding:9px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
-  .risk-card tr:last-child td{border-bottom:none;}
-  .risk-pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;}
-  .risk-pill.high{background:#fef2f2;color:#b91c1c;}
-  .risk-pill.medium{background:#fff7ed;color:#c2410c;}
-  .risk-empty{padding:30px;text-align:center;color:var(--text-mute);font-size:12.5px;}
+  .table-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .table-card table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .table-card th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.02em;padding:9px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .table-card td{padding:9px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  .table-card tr:last-child td{border-bottom:none;}
+  .table-empty{padding:30px;text-align:center;color:var(--text-mute);font-size:12.5px;}
+
+  .chart-flex-row{display:flex;gap:16px;align-items:stretch;height:230px;}
+  .chart-flex-row .chart-holder{flex:1.4;height:auto;}
+  .side-list{flex:1;min-width:120px;max-width:220px;overflow-y:auto;border-left:1px solid var(--border);padding-left:14px;}
+  .side-list-title{font-size:11px;font-weight:700;color:var(--text-mute);margin-bottom:6px;text-transform:uppercase;letter-spacing:.02em;}
+  .side-list-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0;border-bottom:1px solid #f0f0f2;}
+  .side-list-row span:last-child{font-weight:700;color:var(--charcoal);}
 
   @media (max-width:1000px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
@@ -114,7 +118,7 @@
     .chart-grid, .chart-grid.secondary{grid-template-columns:1fr 1fr !important;}
     .chart-holder canvas{display:none !important;}
     .chart-holder .print-chart-img{display:block !important;width:100%;height:100%;object-fit:contain;}
-    .chart-card, .kpi-card, .risk-card{break-inside:avoid;}
+    .chart-card, .kpi-card, .table-card{break-inside:avoid;}
   }
   .print-chart-img{display:none;}
 </style>
@@ -179,82 +183,52 @@
 
     <div class="section-title"><span class="chip"></span>Overview</div>
     <div class="kpi-grid">
-      <div class="kpi-card charcoal">
-        <div class="kpi-label">Open pipeline now</div>
-        <div class="kpi-value" id="kpiOpen">—</div>
-        <div class="kpi-foot">Approved, Open, Interviewing or Offer stage</div>
+      <div class="kpi-card">
+        <div class="kpi-label">Hires year-to-date</div>
+        <div class="kpi-value" id="kpiClosedYTD">—</div>
+        <div class="kpi-foot" id="kpiYTDFoot">Since 1st of Jan</div>
       </div>
       <div class="kpi-card gold">
         <div class="kpi-label">Hires in selected period</div>
         <div class="kpi-value" id="kpiHires">—</div>
         <div class="kpi-foot" id="kpiHiresFoot">Matches period above</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Closed year-to-date</div>
-        <div class="kpi-value" id="kpiClosedYTD">—</div>
-        <div class="kpi-foot" id="kpiYTDFoot">Since Jan 1</div>
+      <div class="kpi-card charcoal">
+        <div class="kpi-label">Open positions now</div>
+        <div class="kpi-value" id="kpiOpen">—</div>
+        <div class="kpi-foot">Approved, Open, Interviewing or Offer stage</div>
       </div>
       <div class="kpi-card red">
-        <div class="kpi-label">Requested, not yet approved</div>
+        <div class="kpi-label">Positions Requested, not yet approved</div>
         <div class="kpi-value" id="kpiRequested">—</div>
-        <div class="kpi-foot">Awaiting Head of HR / TA Leader approval</div>
+        <div class="kpi-foot">In the approvals cycle</div>
       </div>
-    </div>
-
-    <div class="section-title red"><span class="chip"></span>Strategic view</div>
-    <div class="kpi-grid">
-      <div class="kpi-card red">
-        <div class="kpi-label">At-risk positions</div>
-        <div class="kpi-value" id="kpiAtRisk">—</div>
-        <div class="kpi-foot">Sitting longer than the threshold for their stage — set in Admin Settings</div>
-      </div>
-      <div class="kpi-card gold">
-        <div class="kpi-label">Avg. time-to-fill (YTD)</div>
-        <div class="kpi-value" id="kpiTTF">—</div>
-        <div class="kpi-foot">Days from Job Opening Date to Hiring Date, closed positions this year</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Fulfillment rate (YTD)</div>
-        <div class="kpi-value" id="kpiFulfillment">—</div>
-        <div class="kpi-foot">Closed vs. requested so far this year</div>
-      </div>
-    </div>
-    <div class="risk-card" style="margin-top:14px;">
-      <table>
-        <thead>
-          <tr><th>Position</th><th>Department</th><th>Status</th><th>Days in status</th><th>TA Owner</th></tr>
-        </thead>
-        <tbody id="riskTableBody"></tbody>
-      </table>
-      <div class="risk-empty" id="riskEmpty" style="display:none;">No stalled positions right now — nice.</div>
     </div>
 
     <div class="section-title red"><span class="chip"></span>Positions &amp; hiring trends</div>
     <div class="chart-grid secondary">
       <div class="chart-card" id="card-dept">
-        <h3>Open pipeline by department</h3>
+        <h3 id="card-dept-title">Open positions by department</h3>
         <p class="hint">Approved / Open / Interviewing / Offer positions, with counts</p>
         <div class="chart-holder"><canvas id="chartByDept"></canvas><img class="print-chart-img" id="printImgByDept" alt=""></div>
       </div>
       <div class="chart-card" id="card-need">
-        <h3>Open HC Business Need</h3>
+        <h3>Open positions Business Need</h3>
         <p class="hint">Why each open position exists, with counts</p>
-        <div class="chart-holder"><canvas id="chartNeed"></canvas><img class="print-chart-img" id="printImgNeed" alt=""></div>
+        <div class="chart-flex-row">
+          <div class="chart-holder"><canvas id="chartNeed"></canvas><img class="print-chart-img" id="printImgNeed" alt=""></div>
+          <div class="side-list" id="needSideList"></div>
+        </div>
       </div>
     </div>
-    <div class="chart-grid secondary" style="margin-top:14px;">
+    <div class="chart-grid" style="margin-top:14px;grid-template-columns:1fr;">
       <div class="chart-card" id="card-hiresbydept">
-        <h3>Hires by department</h3>
+        <h3 id="card-hiresbydept-title">Hires by department</h3>
         <p class="hint">Closed positions in the selected period, with counts</p>
         <div class="chart-holder"><canvas id="chartHiresByDept"></canvas><img class="print-chart-img" id="printImgHiresByDept" alt=""></div>
       </div>
-      <div class="chart-card" id="card-hiredneed">
-        <h3>Hired HC Business Need</h3>
-        <p class="hint">Why each filled position was needed, with counts</p>
-        <div class="chart-holder"><canvas id="chartHiredNeed"></canvas><img class="print-chart-img" id="printImgHiredNeed" alt=""></div>
-      </div>
     </div>
-    <div class="chart-grid" style="margin-top:14px;">
+    <div class="chart-grid" style="margin-top:14px;grid-template-columns:1fr 1.3fr;">
       <div class="chart-card" id="card-trend">
         <h3>Hires &amp; closures by month</h3>
         <p class="hint">Positions closed with a hire, over time</p>
@@ -262,9 +236,33 @@
       </div>
       <div class="chart-card" id="card-quartercompare">
         <h3>Requested vs. closed by quarter</h3>
-        <p class="hint" id="quarterCompareHint">Real Job Opening Date vs. real Hiring Date — no placeholder needed anymore</p>
-        <div class="chart-holder"><canvas id="chartQuarterCompare"></canvas><img class="print-chart-img" id="printImgQuarterCompare" alt=""></div>
+        <p class="hint" id="quarterCompareHint">Real Job Opening Date vs. real Hiring Date, split by department</p>
+        <div class="chart-holder" style="height:280px;"><canvas id="chartQuarterCompare"></canvas><img class="print-chart-img" id="printImgQuarterCompare" alt=""></div>
       </div>
+    </div>
+
+    <div class="section-title"><span class="chip"></span>New hires</div>
+    <p class="hint" style="margin:-4px 0 10px;">Filters and reporting period above apply.</p>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr><th>Employee Name</th><th>Position</th><th>Division</th><th>Department</th><th>Hire Date</th></tr>
+        </thead>
+        <tbody id="newHiresTableBody"></tbody>
+      </table>
+      <div class="table-empty" id="newHiresEmpty" style="display:none;">No hires match the current filters/period.</div>
+    </div>
+
+    <div class="section-title"><span class="chip"></span>Open positions register</div>
+    <p class="hint" style="margin:-4px 0 10px;">Positions approved by Top Management. Department/Business Need filters above apply.</p>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr><th>Position Title</th><th>Division</th><th>Department</th><th>Sub-department</th><th>Business Need</th><th>Detailed Business Need</th><th>Candidate Expected Joining Date</th></tr>
+        </thead>
+        <tbody id="openRegisterTableBody"></tbody>
+      </table>
+      <div class="table-empty" id="openRegisterEmpty" style="display:none;">No approved open positions match the current filters.</div>
     </div>
   </main>
   <footer>HireGrid — Intercom Enterprises — internal use only. Data reflects live Manpower Plan entries.</footer>
@@ -285,12 +283,12 @@ const QUARTER_MONTHS = { q1:0, q2:3, q3:6, q4:9 };
 /* ====================== STATE ====================== */
 let currentUser = null;
 let ALL_ROWS = [];
+let ALL_SECTIONS = [];
 let PROFILES_BY_ID = {};
-let STALL_THRESHOLDS = { Requested:7, Approved:7, Open:30, Interviewing:21, Offer:14 };
 let selectedYear = new Date().getFullYear();
 let activePeriod = 'allyear';
 let charts = {};
-const ACTIVE_STATUSES = ['Requested','Approved','Open','Interviewing','Offer'];
+const DASHBOARD_YEARS = [2026, 2027];
 
 /* ====================== AUTH ====================== */
 async function init(){
@@ -332,12 +330,10 @@ async function loadCurrentUserAndApp(){
   await loadRows();
 }
 async function loadSettingsAndProfiles(){
-  const { data: settingsData } = await sb.from('dashboard_settings').select('*');
-  if(settingsData && settingsData.length){
-    settingsData.forEach(r=>{ STALL_THRESHOLDS[r.status] = r.stall_days; });
-  }
   const { data: profilesData } = await sb.from('profiles').select('*');
   (profilesData || []).forEach(p=>{ PROFILES_BY_ID[p.id] = p.full_name; });
+  const { data: sectionsData } = await sb.from('sections').select('*');
+  ALL_SECTIONS = sectionsData || [];
 }
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
   const email = document.getElementById('loginEmail').value.trim();
@@ -365,20 +361,45 @@ async function loadRows(){
   render();
 }
 function populateYearSelect(){
-  const years = uniqueSorted(ALL_ROWS.flatMap(r=>[r.job_opening_date, r.hiring_date]).filter(Boolean).map(d=>new Date(d).getFullYear()));
-  if(!years.length) years.push(new Date().getFullYear());
-  years.sort((a,b)=>b-a);
   const sel = document.getElementById('yearSelect');
   const prev = selectedYear;
-  sel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
-  selectedYear = years.includes(prev) ? prev : years[0];
+  sel.innerHTML = DASHBOARD_YEARS.map(y=>`<option value="${y}">${y}</option>`).join('');
+  selectedYear = DASHBOARD_YEARS.includes(prev) ? prev : DASHBOARD_YEARS[0];
   sel.value = String(selectedYear);
 }
 function populateFilterOptions(){
   fillSelect('f-department', uniqueSorted(ALL_ROWS.map(r=>r.department)));
-  fillSelect('f-need', uniqueSorted(ALL_ROWS.map(r=>r.business_need)));
+  fillSelect('f-need', uniqueSorted(ALL_ROWS.map(needOf)));
 }
 function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fmtDate(v){
+  if(!v) return '—';
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+}
+// Business Need — same fallback the main Manpower Plan app uses
+// (business_need_type is the current field; business_need is the older,
+// legacy one some existing rows may still only have).
+function needOf(r){ return r.business_need_type || r.business_need || null; }
+function sectionName(id){ const s = ALL_SECTIONS.find(s=>s.id===id); return s ? s.name : null; }
+// Round #29 (product owner request) — a BU Head's department-oriented
+// charts should break down by Sub-department (the existing "Section"
+// field — Backend, Frontend, Technical, etc. — one level below
+// Department) instead of by Department itself, since a BU Head's whole
+// view is already scoped to their own department(s). Every other role
+// keeps the plain Department breakdown.
+function groupFieldName(){ return currentUser.role === 'bu_head' ? 'Sub-department' : 'Department'; }
+function groupKeyOf(r){
+  if(currentUser.role === 'bu_head') return sectionName(r.section_id) || 'Not specified';
+  return r.department || 'Not specified';
+}
+function groupCountBy(rows, keyFn){
+  const map = {};
+  rows.forEach(r=>{ const k = keyFn(r) || 'Not specified'; map[k] = (map[k]||0)+1; });
+  return map;
+}
 const _countUpFrom = {};
 function animateCountUp(elId, target){
   const el = document.getElementById(elId);
@@ -411,7 +432,7 @@ function getFilters(){
   return { department: document.getElementById('f-department').value, businessNeed: document.getElementById('f-need').value };
 }
 function matchesFilters(r, f){
-  return (!f.department || r.department===f.department) && (!f.businessNeed || r.business_need===f.businessNeed);
+  return (!f.department || r.department===f.department) && (!f.businessNeed || needOf(r)===f.businessNeed);
 }
 function periodRange(period){
   const y = selectedYear;
@@ -453,83 +474,31 @@ function render(){
   const hiresInPeriod = filtered.filter(r=>r.position_status==='Closed' && inRange(r.hiring_date, from, to));
   const closedYTD = filtered.filter(r=>r.position_status==='Closed' && r.hiring_date && new Date(r.hiring_date) >= new Date(selectedYear,0,1) && new Date(r.hiring_date) < new Date(selectedYear+1,0,1));
 
-  animateCountUp('kpiOpen', openPipeline.length);
+  animateCountUp('kpiClosedYTD', closedYTD.length);
+  document.getElementById('kpiYTDFoot').textContent = `Since 1st of Jan, ${selectedYear}`;
   animateCountUp('kpiHires', hiresInPeriod.length);
   document.getElementById('kpiHiresFoot').textContent = activePeriod==='allyear' ? `All of ${selectedYear}` : `${activePeriod.toUpperCase()} ${selectedYear}`;
-  animateCountUp('kpiClosedYTD', closedYTD.length);
-  document.getElementById('kpiYTDFoot').textContent = `Since Jan 1, ${selectedYear}`;
+  animateCountUp('kpiOpen', openPipeline.length);
   animateCountUp('kpiRequested', requestedOnly.length);
 
-  renderStrategicView(filtered, closedYTD);
+  document.getElementById('card-dept-title').textContent = `Open positions by ${groupFieldName().toLowerCase()}`;
+  document.getElementById('card-hiresbydept-title').textContent = `Hires by ${groupFieldName().toLowerCase()}`;
 
-  renderBarChart('dept', 'chartByDept', 'card-dept', groupCount(openPipeline,'department'), '#FCAF17', 'open');
-  renderPieChart('need', 'chartNeed', 'card-need', groupCount(openPipeline,'business_need'));
-  renderPieChart('hiresByDept', 'chartHiresByDept', 'card-hiresbydept', groupCount(hiresInPeriod,'department'));
-  renderPieChart('hiredNeed', 'chartHiredNeed', 'card-hiredneed', groupCount(hiresInPeriod,'business_need'));
+  renderBarChart('dept', 'chartByDept', 'card-dept', groupCountBy(openPipeline, groupKeyOf), '#FCAF17');
+  renderNeedChart(openPipeline);
+  renderPieChart('hiresByDept', 'chartHiresByDept', 'card-hiresbydept', groupCountBy(hiresInPeriod, groupKeyOf));
   renderTrendChart(filtered);
   renderQuarterChart(filtered);
-}
-function daysBetween(a, b){ return Math.floor((a - b) / (1000*60*60*24)); }
-function riskLevel(days, threshold){
-  const ratio = days / threshold;
-  if(ratio >= 2) return 'high';
-  return 'medium';
-}
-function renderStrategicView(filtered, closedYTD){
-  const now = new Date();
-
-  // At-risk positions: active-stage rows past their stage's threshold.
-  const atRisk = filtered
-    .filter(r => ACTIVE_STATUSES.includes(r.position_status) && r.status_since)
-    .map(r => ({ row:r, days: daysBetween(now, new Date(r.status_since)) }))
-    .filter(x => x.days > (STALL_THRESHOLDS[x.row.position_status] || 9999))
-    .sort((a,b) => b.days - a.days);
-
-  animateCountUp('kpiAtRisk', atRisk.length);
-
-  const tbody = document.getElementById('riskTableBody');
-  const emptyEl = document.getElementById('riskEmpty');
-  if(!atRisk.length){
-    tbody.innerHTML = '';
-    emptyEl.style.display = 'block';
-  } else {
-    emptyEl.style.display = 'none';
-    tbody.innerHTML = atRisk.map(x => {
-      const level = riskLevel(x.days, STALL_THRESHOLDS[x.row.position_status] || 1);
-      const owner = PROFILES_BY_ID[x.row.ta_owner] || '—';
-      return `<tr>
-        <td>${x.row.position_title || '—'}</td>
-        <td>${x.row.department || '—'}</td>
-        <td><span class="risk-pill ${level}">${x.row.position_status}</span></td>
-        <td>${x.days} days</td>
-        <td>${owner}</td>
-      </tr>`;
-    }).join('');
-  }
-
-  // Avg time-to-fill (YTD): Closed rows this year with both dates.
-  const withDates = closedYTD.filter(r => r.job_opening_date && r.hiring_date);
-  const ttfDays = withDates.map(r => daysBetween(new Date(r.hiring_date), new Date(r.job_opening_date)));
-  const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0) / ttfDays.length) : null;
-  document.getElementById('kpiTTF').textContent = avgTTF===null ? '—' : `${avgTTF}d`;
-
-  // Fulfillment rate (YTD): closed this year / requested this year (by job_opening_date).
-  const requestedThisYear = filtered.filter(r => r.job_opening_date && new Date(r.job_opening_date).getFullYear() === selectedYear);
-  const fulfillment = requestedThisYear.length ? Math.round((closedYTD.length / requestedThisYear.length) * 100) : null;
-  document.getElementById('kpiFulfillment').textContent = fulfillment===null ? '—' : `${fulfillment}%`;
-}
-function groupCount(rows, key){
-  const map = {};
-  rows.forEach(r=>{ const k = r[key] || 'Not specified'; map[k] = (map[k]||0)+1; });
-  return map;
+  renderNewHiresTable(hiresInPeriod);
+  renderOpenPositionsRegister(filtered);
 }
 function setCardAvailable(cardId, available, message){
   const card = document.getElementById(cardId);
   let overlay = card.querySelector('.card-unavailable');
-  const holder = card.querySelector('.chart-holder');
-  if(available){ if(overlay) overlay.remove(); holder.style.display=''; }
+  const holder = card.querySelector('.chart-holder, .chart-flex-row');
+  if(available){ if(overlay) overlay.remove(); if(holder) holder.style.display=''; }
   else{
-    holder.style.display='none';
+    if(holder) holder.style.display='none';
     if(!overlay){ overlay = document.createElement('div'); overlay.className='card-unavailable'; card.appendChild(overlay); }
     overlay.textContent = message || 'No data for this selection.';
   }
@@ -571,27 +540,103 @@ function renderTrendChart(filtered){
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
   });
 }
+// Round #29 — Business Need pie chart, plus a plain department (or
+// Sub-department, for a BU Head) count list on the side of the SAME
+// white card, per the product owner's explicit request that the
+// department counts NOT become pie slices themselves.
+function renderNeedChart(rows){
+  renderPieChart('need', 'chartNeed', 'card-need', groupCountBy(rows, needOf));
+  const sideEl = document.getElementById('needSideList');
+  const deptMap = groupCountBy(rows, groupKeyOf);
+  const names = Object.keys(deptMap).sort((a,b)=>deptMap[b]-deptMap[a]);
+  const label = groupFieldName();
+  if(!names.length){
+    sideEl.innerHTML = `<div class="side-list-title">By ${label}</div><div style="color:var(--text-mute);font-size:11.5px;">No data</div>`;
+  } else {
+    sideEl.innerHTML = `<div class="side-list-title">By ${label}</div>` +
+      names.map(n=>`<div class="side-list-row"><span>${escapeHtml(n)}</span><span>${deptMap[n]}</span></div>`).join('');
+  }
+}
+// Round #29 — "Requested vs. closed by quarter" now breaks each of the
+// two bars per quarter (Requested / Closed) down by department (or
+// Sub-department for a BU Head), stacked, with a department legend —
+// implemented as 8 x-axis categories ("Q1 Requested", "Q1 Closed", "Q2
+// Requested", ...) rather than a nested/grouped axis, since Chart.js has
+// no native support for a second category level, and this reads
+// identically to the requested "2 stacked bars per quarter" layout.
 function renderQuarterChart(filtered){
-  const requestedByQuarter=[0,0,0,0], closedByQuarter=[0,0,0,0];
-  filtered.forEach(r=>{
-    if(r.job_opening_date){ const d=new Date(r.job_opening_date); if(d.getFullYear()===selectedYear) requestedByQuarter[Math.floor(d.getMonth()/3)]++; }
-    if(r.position_status==='Closed' && r.hiring_date){ const d=new Date(r.hiring_date); if(d.getFullYear()===selectedYear) closedByQuarter[Math.floor(d.getMonth()/3)]++; }
+  const cardId = 'card-quartercompare';
+  const groupNames = uniqueSorted(filtered.map(groupKeyOf));
+  if(!groupNames.length){ setCardAvailable(cardId, false); destroyChart('quarterCompare'); return; }
+  setCardAvailable(cardId, true);
+  const categories = [];
+  ['Q1','Q2','Q3','Q4'].forEach(q=>{ categories.push(q+' Requested'); categories.push(q+' Closed'); });
+  const datasets = groupNames.map((name, i)=>{
+    const data = new Array(8).fill(0);
+    filtered.forEach(r=>{
+      if(groupKeyOf(r) !== name) return;
+      if(r.job_opening_date){
+        const d = new Date(r.job_opening_date);
+        if(d.getFullYear() === selectedYear) data[Math.floor(d.getMonth()/3) * 2] += 1;
+      }
+      if(r.position_status === 'Closed' && r.hiring_date){
+        const d = new Date(r.hiring_date);
+        if(d.getFullYear() === selectedYear) data[Math.floor(d.getMonth()/3) * 2 + 1] += 1;
+      }
+    });
+    return { label:name, data, backgroundColor:CHART_COLORS[i % CHART_COLORS.length], stack:'total', maxBarThickness:40 };
   });
-  setCardAvailable('card-quartercompare', true);
   destroyChart('quarterCompare');
   charts.quarterCompare = new Chart(document.getElementById('chartQuarterCompare'), {
     type:'bar',
-    data:{ labels:['Q1','Q2','Q3','Q4'], datasets:[
-      { label:'Requested', data:requestedByQuarter, backgroundColor:'#7FA8D9', borderRadius:4, maxBarThickness:34 },
-      { label:'Closed', data:closedByQuarter, backgroundColor:'#065BAB', borderRadius:4, maxBarThickness:34 }
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{boxWidth:10, font:{size:11}}}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+    data:{ labels:categories, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{size:11} } } },
+      scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks:{precision:0} } }
+    }
   });
-  document.getElementById('quarterCompareHint').textContent = `Both counts are real for ${selectedYear} — requested from Job Opening Date, closed from Hiring Date.`;
+  document.getElementById('quarterCompareHint').textContent =
+    `Requested (Job Opening Date) vs. Closed (Hiring Date), split by ${groupFieldName().toLowerCase()}, for ${selectedYear}.`;
+}
+function renderNewHiresTable(rows){
+  const tbody = document.getElementById('newHiresTableBody');
+  const emptyEl = document.getElementById('newHiresEmpty');
+  const sorted = [...rows].sort((a,b)=> new Date(b.hiring_date) - new Date(a.hiring_date));
+  if(!sorted.length){ tbody.innerHTML = ''; emptyEl.style.display = 'block'; return; }
+  emptyEl.style.display = 'none';
+  tbody.innerHTML = sorted.map(r=>`<tr>
+    <td>${escapeHtml(r.employee_name || '—')}</td>
+    <td>${escapeHtml(r.position_title || '—')}</td>
+    <td>${escapeHtml(r.division || '—')}</td>
+    <td>${escapeHtml(r.department || '—')}</td>
+    <td>${escapeHtml(fmtDate(r.hiring_date))}</td>
+  </tr>`).join('');
+}
+function renderOpenPositionsRegister(filtered){
+  // "Open positions...approved by Top Management" — a line that has
+  // fully cleared approval (status === 'Approved') AND is still
+  // currently open/vacant (position_status === 'Open', not yet On Hold
+  // or Closed) — matches the "candidate expected joining date" column,
+  // which is only meaningful for a position still actively being filled.
+  const rows = filtered.filter(r=>r.status === 'Approved' && r.position_status === 'Open');
+  const tbody = document.getElementById('openRegisterTableBody');
+  const emptyEl = document.getElementById('openRegisterEmpty');
+  if(!rows.length){ tbody.innerHTML = ''; emptyEl.style.display = 'block'; return; }
+  emptyEl.style.display = 'none';
+  tbody.innerHTML = rows.map(r=>`<tr>
+    <td>${escapeHtml(r.position_title || '—')}</td>
+    <td>${escapeHtml(r.division || '—')}</td>
+    <td>${escapeHtml(r.department || '—')}</td>
+    <td>${escapeHtml(sectionName(r.section_id) || '—')}</td>
+    <td>${escapeHtml(needOf(r) || '—')}</td>
+    <td>${escapeHtml(r.detailed_business_need || '—')}</td>
+    <td>${escapeHtml(fmtDate(r.expected_candidate_joining_date))}</td>
+  </tr>`).join('');
 }
 
 /* ====================== PRINT ====================== */
-const PRINT_IMG_ID = { dept:'printImgByDept', need:'printImgNeed', trend:'printImgTrend', hiresByDept:'printImgHiresByDept', hiredNeed:'printImgHiredNeed', quarterCompare:'printImgQuarterCompare' };
+const PRINT_IMG_ID = { dept:'printImgByDept', need:'printImgNeed', trend:'printImgTrend', hiresByDept:'printImgHiresByDept', quarterCompare:'printImgQuarterCompare' };
 async function prepareChartSnapshotsForPrint(){
   const jobs = Object.entries(charts).map(async ([key, c]) => {
     if(!c) return;
