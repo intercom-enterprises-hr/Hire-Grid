@@ -433,9 +433,9 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" id="cancelLifecycleBtn">Cancel</button>
       <button class="btn btn-secondary" id="lifecycleSaveBtn">Save</button>
-      <button class="btn btn-gold" id="lifecycleHoldBtn">Put On Hold</button>
+      <button class="btn btn-gold" id="lifecycleHoldBtn">On Hold</button>
       <button class="btn btn-primary" id="lifecycleReactivateBtn">Reactivate</button>
-      <button class="btn btn-primary" id="lifecycleCloseBtn">Mark Position Closed</button>
+      <button class="btn btn-primary" id="lifecycleCloseBtn">Hired</button>
       <button class="btn btn-danger" id="lifecycleRevokeBtn">Revoke Closure</button>
     </div>
   </div>
@@ -945,7 +945,7 @@ document.getElementById('lifecycleCloseBtn').addEventListener('click', async ()=
   const statusEl = document.getElementById('lifecycleStatus');
   const payload = collectLifecycleFieldPayload();
   if(!payload.employee_code || !payload.employee_name || !payload.hiring_date){
-    statusEl.textContent = 'Employee Code, Employee Name, and Employee Hiring Date are required to mark a position Closed.';
+    statusEl.textContent = 'Employee Code, Employee Name, and Employee Hiring Date are required to mark a position as Hired.';
     statusEl.className = 'status-msg err';
     return;
   }
@@ -957,7 +957,7 @@ document.getElementById('lifecycleCloseBtn').addEventListener('click', async ()=
   const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
   if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
   document.getElementById('lifecycleModal').classList.remove('show');
-  showToast('Position marked Closed.');
+  showToast('Position marked as Hired.');
   if(payload.ta_owner && payload.ta_owner !== prevTaOwner) await notifyLifecycleEvent('ta_owner_assigned', lifecycleRow.id);
   await notifyLifecycleEvent('position_closed', lifecycleRow.id);
   await loadRows();
