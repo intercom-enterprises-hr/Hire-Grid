@@ -124,6 +124,11 @@
   .modal p.sub{margin:0 0 18px;font-size:12.5px;color:var(--text-mute);}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
   .form-grid .full{grid-column:1/-1;}
+  /* Position details view (round #32) — groups the read-only field grid
+     under section headers so fields don't all run together as one long
+     list. */
+  .details-section-title{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.03em;margin:18px 0 2px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+  .details-section-title:first-child{margin-top:0;}
   .form-field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--charcoal-soft);}
   .form-field input, .form-field select, .form-field textarea{
     width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;
@@ -1201,8 +1206,14 @@ function fmtDate(v){
 // worklist already applies (getCostVisibilityLevel) — a 'total_only'
 // role (e.g. BU Head) still never sees the finer Total Monthly Cost
 // breakdown here either.
+// Round #32 — grouped into labeled sections (Position Info / Cost &
+// Compensation / Approval & Status / Position Lifecycle[ / Deleted]) so
+// the Position Details view doesn't read as one long unbroken list of
+// field boxes. Each section is [title, [[label,value],...]].
 function fieldsForRow(r, level){
-  const rows = [
+  const sections = [];
+
+  sections.push(['Position Info', [
     ['Position ID', r.position_code || '—'],
     ['Position', r.position_title || '—'],
     ['Division', r.division || '—'],
@@ -1217,6 +1228,9 @@ function fieldsForRow(r, level){
     ['Employee Being Replaced', r.employee_being_replaced || '—'],
     ['Justification', r.justification || '—'],
     ['Position Target Start Date', r.position_target_start_date || '—'],
+  ]]);
+
+  const costFields = [
     ['Department Utilization (%)', r.department_utilization != null ? r.department_utilization : '—'],
     ['Net Basic Monthly Salary', fmtMoney(r.net_basic_monthly_salary, r.currency)],
     ['Currency', r.currency || '—'],
@@ -1224,10 +1238,12 @@ function fieldsForRow(r, level){
     ['Gross Incentive', r.gross_incentive != null ? r.gross_incentive : '—'],
     ['Top Management Approver', r.top_management_approver_id ? profileName(r.top_management_approver_id) : '—'],
   ];
-  if(level !== 'total_only') rows.push(['Total Monthly Cost', fmtMoney(r.total_monthly_cost, r.currency)]);
-  rows.push(['Total Current Year Cost', fmtMoney(r.total_current_year_cost, r.currency)]);
-  rows.push(['Onboarding One-Time Cost', fmtMoney(r.onboarding_one_time_cost, r.currency)]);
-  rows.push(
+  if(level !== 'total_only') costFields.push(['Total Monthly Cost', fmtMoney(r.total_monthly_cost, r.currency)]);
+  costFields.push(['Total Current Year Cost', fmtMoney(r.total_current_year_cost, r.currency)]);
+  costFields.push(['Onboarding One-Time Cost', fmtMoney(r.onboarding_one_time_cost, r.currency)]);
+  sections.push(['Cost & Compensation', costFields]);
+
+  sections.push(['Approval & Status', [
     ['Status', r.status || 'Draft'],
     ['Status Date', fmtDate(r.status_changed_at)],
     ['Approval Note', r.approval_note || '—'],
@@ -1237,6 +1253,9 @@ function fieldsForRow(r, level){
     ['Updated By', profileName(r.updated_by)],
     ['Created At', fmtDate(r.created_at)],
     ['Updated At', fmtDate(r.updated_at)],
+  ]]);
+
+  sections.push(['Position Lifecycle', [
     ['Position Status', r.position_status || '—'],
     ['TA Owner', r.ta_owner ? profileName(r.ta_owner) : '—'],
     ['Employee Code', r.employee_code || '—'],
@@ -1250,12 +1269,17 @@ function fieldsForRow(r, level){
     ['Closed At', fmtDate(r.closed_at)],
     ['Closed By', r.closed_by ? profileName(r.closed_by) : '—'],
     ['Offer Outcome', r.offer_outcome || '—'],
-    ['Retention Status', r.retention_status || '—']
-  );
+    ['Retention Status', r.retention_status || '—'],
+  ]]);
+
   if(r.deleted_at){
-    rows.push(['Deleted At', fmtDate(r.deleted_at)], ['Deleted By', r.deleted_by ? profileName(r.deleted_by) : '—']);
+    sections.push(['Deleted', [
+      ['Deleted At', fmtDate(r.deleted_at)],
+      ['Deleted By', r.deleted_by ? profileName(r.deleted_by) : '—'],
+    ]]);
   }
-  return rows;
+
+  return sections;
 }
 function branchName(id){ const b = ALL_BRANCHES.find(b=>b.id===id); return b ? b.name : null; }
 function costCenterName(id){ const c = ALL_COST_CENTERS.find(c=>c.id===id); return c ? c.name : null; }
@@ -1747,13 +1771,19 @@ document.getElementById('worklistSelectAllCheckbox').addEventListener('change', 
 document.getElementById('worklistClearSelectionBtn').addEventListener('click', ()=>{ worklistSelectedIds.clear(); renderTable(); });
 
 /* ====================== FULL-DETAILS VIEW (item #2, round #23) ====================== */
+// Round #32 — grouped under section headers (Position Info / Cost &
+// Compensation / Approval & Status / Position Lifecycle[ / Deleted]) so
+// the fields don't all run together as one long list of boxes.
 function openDetailsModal(row){
   const level = getCostVisibilityLevel(currentUser.role);
   document.getElementById('detailsModalTitle').textContent = row.position_title || 'Position';
   const grid = document.getElementById('detailsModalGrid');
-  grid.innerHTML = fieldsForRow(row, level).map(([label, value])=>
-    '<div class="form-field"><label>'+escapeHtml(label)+'</label>'+
-    '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#f4f4f5;font-size:13px;min-height:16px;">'+escapeHtml(value)+'</div></div>'
+  grid.innerHTML = fieldsForRow(row, level).map(([sectionTitle, fields])=>
+    '<div class="details-section-title">'+escapeHtml(sectionTitle)+'</div>' +
+    fields.map(([label, value])=>
+      '<div class="form-field"><label>'+escapeHtml(label)+'</label>'+
+      '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#f4f4f5;font-size:13px;min-height:16px;">'+escapeHtml(value)+'</div></div>'
+    ).join('')
   ).join('');
   document.getElementById('detailsModal').classList.add('show');
 }
@@ -2826,7 +2856,12 @@ document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
   const level = getCostVisibilityLevel(currentUser.role);
   const rows = visibleRows().map(r=>{
     const row = {};
-    fieldsForRow(r, level).forEach(([label, value])=>{ row[label] = value; });
+    // fieldsForRow() now returns [sectionTitle, [[label,value],...]]
+    // sections (round #32, for the Position Details view's headers) —
+    // flatten them back out into one row of columns for the spreadsheet.
+    fieldsForRow(r, level).forEach(([, fields])=>{
+      fields.forEach(([label, value])=>{ row[label] = value; });
+    });
     return row;
   });
   const ws = XLSX.utils.json_to_sheet(rows);
