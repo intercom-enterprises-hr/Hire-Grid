@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HireGrid — Recruiter KPIs</title>
+<title>HireGrid — Recruitment Insights</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -98,13 +98,26 @@
   #loginScreen .btn{width:100%;padding:11px;font-size:14px;background:var(--blue);color:#fff;}
   #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
   #appScreen{display:none;}
+  /* Round #32, item #5 — multi-select checkbox dropdown, used for FILTER
+     controls only (not single-value data-entry fields). Replaces a plain
+     <select> so several values can be picked at once. */
+  .ms-dropdown{position:relative;display:inline-block;}
+  .ms-dropdown-btn{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:150px;color:inherit;}
+  .ms-dropdown-btn:hover{border-color:#c7c7cc;}
+  .ms-dropdown-caret{font-size:10px;color:var(--text-mute);}
+  .ms-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.14);padding:8px;min-width:210px;max-height:240px;overflow-y:auto;z-index:80;}
+  .ms-dropdown-panel.open{display:block;}
+  .ms-dropdown-opt{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  .ms-dropdown-opt:hover{background:#f4f4f5;}
+  .ms-dropdown-opt input{margin:0;}
+  .ms-dropdown-empty{font-size:12px;color:var(--text-mute);padding:6px;}
 </style>
 </head>
 <body>
 
 <div id="loginScreen">
   <img src="logo.png" alt="Intercom Enterprises" class="login-logo">
-  <h2>Recruiter KPIs</h2>
+  <h2>Recruitment Insights</h2>
   <p>Sign in with your Intercom Enterprises account.</p>
   <label for="loginEmail">Email</label>
   <input type="text" id="loginEmail" autocomplete="username">
@@ -118,7 +131,7 @@
   <header>
     <div class="brand">
       <div class="brand-logo-chip"><img src="logo.png" alt="Intercom Enterprises" class="brand-logo"></div>
-      <h1>HireGrid <span class="hg-divider">·</span> Recruiter KPIs<span>Intercom Enterprises — Talent Acquisition performance</span></h1>
+      <h1>HireGrid <span class="hg-divider">·</span> Recruitment Insights<span>Intercom Enterprises — Talent Acquisition performance</span></h1>
     </div>
     <div class="header-actions">
       <select id="yearSelect" class="btn-ghost"></select>
@@ -138,7 +151,7 @@
     <div class="filter-card">
       <div class="filter-group">
         <label>Recruiter / TA Owner</label>
-        <select id="f-owner"><option value="">Everyone</option></select>
+        <div id="f-owner"></div>
       </div>
     </div>
 
@@ -162,7 +175,7 @@
       <div class="kpi-card gold">
         <div class="kpi-label">Avg. time-to-fill (YTD)</div>
         <div class="kpi-value" id="kpiTTF">—</div>
-        <div class="kpi-foot">Job Opening → Hiring Date, closed this year</div>
+        <div class="kpi-foot">Job Opening → Offer Acceptance, closed this year</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Offer acceptance rate</div>
@@ -211,6 +224,80 @@
 </div>
 
 <script>
+/* ====================== MULTI-SELECT CHECKBOX DROPDOWN ======================
+   Round #32, item #5 — product owner: filter dropdowns should let you tick
+   several values at once instead of only one. This is a lightweight
+   replacement for a single-select <select> used as a FILTER. The
+   container keeps its original id and exposes:
+     .msSetOptions(values)  — (re)populate the choices; values is an array
+                               of strings, or {value,label} objects
+     .msValues()            — array of currently-selected values ([] means
+                               "all", same meaning as "" on a native select)
+     .msClear()             — clears the selection
+   and dispatches a real 'change' event on every toggle, so existing
+   addEventListener(id,'change',...) wiring elsewhere keeps working
+   unchanged. fillSelect-style population below checks for .msSetOptions
+   and defers to it automatically when present. */
+function makeMultiSelect(id, allLabel){
+  const host = document.getElementById(id);
+  if(!host || host.msSetOptions) return;
+  host.classList.add('ms-dropdown');
+  host.innerHTML = '<button type="button" class="ms-dropdown-btn"><span class="ms-dropdown-label"></span><span class="ms-dropdown-caret">▾</span></button><div class="ms-dropdown-panel"></div>';
+  const labelEl = host.querySelector('.ms-dropdown-label');
+  const btn = host.querySelector('.ms-dropdown-btn');
+  const panel = host.querySelector('.ms-dropdown-panel');
+  let options = []; // [{value,label}]
+  let selected = new Set();
+  function renderPanel(){
+    panel.innerHTML = options.length ? options.map(o=>
+      '<label class="ms-dropdown-opt"><input type="checkbox" value="'+String(o.value).replace(/"/g,'&quot;')+'" '+(selected.has(o.value)?'checked':'')+'> '+escapeMsHtml(o.label)+'</label>'
+    ).join('') : '<div class="ms-dropdown-empty">No options</div>';
+  }
+  function escapeMsHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function updateLabel(){
+    if(!selected.size){ labelEl.textContent = allLabel; return; }
+    if(selected.size === 1){
+      const only = [...selected][0];
+      const opt = options.find(o=>String(o.value)===String(only));
+      labelEl.textContent = opt ? opt.label : String(only);
+      return;
+    }
+    labelEl.textContent = allLabel.replace(/^All /i,'') + ' (' + selected.size + ')';
+  }
+  panel.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches('input[type="checkbox"]')){
+      if(e.target.checked) selected.add(e.target.value); else selected.delete(e.target.value);
+      updateLabel();
+      host.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+  });
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    document.querySelectorAll('.ms-dropdown-panel.open').forEach(p=>{ if(p!==panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', (e)=>{ if(!host.contains(e.target)) panel.classList.remove('open'); });
+
+  host.msSetOptions = function(values){
+    const prevSelected = selected;
+    options = (values||[]).map(v => (v && typeof v === 'object') ? v : { value:v, label:v });
+    const validValues = options.map(o=>String(o.value));
+    selected = new Set([...prevSelected].filter(v=>validValues.includes(String(v))));
+    renderPanel();
+    updateLabel();
+  };
+  host.msValues = function(){ return [...selected]; };
+  host.msClear = function(){ selected = new Set(); renderPanel(); updateLabel(); };
+  renderPanel();
+  updateLabel();
+}
+function selectedValues(id){
+  const el = document.getElementById(id);
+  if(!el) return [];
+  if(el.msValues) return el.msValues();
+  return el.value ? [el.value] : [];
+}
+
 /* ====================== CONFIG ====================== */
 const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
@@ -260,6 +347,10 @@ async function loadCurrentUserAndApp(){
   if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
     const achieveLink = document.getElementById('navAchieveLink'); if(achieveLink) achieveLink.style.display = 'none';
   }
+  // Round #32, item #5 — the recruiter filter is a multi-select checkbox
+  // dropdown (one-time setup; populateOwnerSelect() fills in the options
+  // on every loadData()).
+  makeMultiSelect('f-owner', 'Everyone');
   await loadData();
 }
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
@@ -305,11 +396,8 @@ function populateYearSelect(){
 }
 function populateOwnerSelect(){
   const sel = document.getElementById('f-owner');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Everyone</option>' + PROFILES
-    .filter(p=>ALL_ROWS.some(r=>r.ta_owner===p.id))
-    .map(p=>`<option value="${p.id}">${p.full_name}</option>`).join('');
-  if(PROFILES.some(p=>p.id===current)) sel.value = current;
+  const owners = PROFILES.filter(p=>ALL_ROWS.some(r=>r.ta_owner===p.id)).map(p=>({ value:p.id, label:p.full_name }));
+  sel.msSetOptions(owners);
 }
 function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
 function daysBetween(a,b){ return Math.floor((a-b)/(1000*60*60*24)); }
@@ -319,8 +407,8 @@ document.getElementById('f-owner').addEventListener('change', render);
 
 /* ====================== RENDER ====================== */
 function render(){
-  const ownerFilter = document.getElementById('f-owner').value;
-  const scoped = ownerFilter ? ALL_ROWS.filter(r=>r.ta_owner===ownerFilter) : ALL_ROWS;
+  const ownerFilter = selectedValues('f-owner');
+  const scoped = ownerFilter.length ? ALL_ROWS.filter(r=>ownerFilter.includes(r.ta_owner)) : ALL_ROWS;
   const now = new Date();
 
   const requestedThisYear = scoped.filter(r=>r.job_opening_date && new Date(r.job_opening_date).getFullYear()===selectedYear);
@@ -334,8 +422,10 @@ function render(){
   const avgAge = ages.length ? Math.round(ages.reduce((a,b)=>a+b,0)/ages.length) : null;
   document.getElementById('kpiAge').textContent = avgAge===null ? '—' : `${avgAge}d`;
 
-  const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.hiring_date);
-  const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.hiring_date), new Date(r.job_opening_date)));
+  // 3.3 Time to Fill (round #32) — Job Opening Date to Job Offer
+  // Acceptance Date (previously measured to Hiring Date instead).
+  const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.offer_acceptance_date);
+  const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.offer_acceptance_date), new Date(r.job_opening_date)));
   const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0)/ttfDays.length) : null;
   document.getElementById('kpiTTF').textContent = avgTTF===null ? '—' : `${avgTTF}d`;
 
@@ -362,8 +452,8 @@ function renderLeaderboard(){
     const mine = ALL_ROWS.filter(r=>r.ta_owner===p.id);
     const openReqs = mine.filter(r=>OPEN_PIPELINE_STATUSES.includes(r.position_status)).length;
     const closedYTD = mine.filter(r=>r.position_status==='Closed' && r.hiring_date && new Date(r.hiring_date).getFullYear()===selectedYear);
-    const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.hiring_date);
-    const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.hiring_date), new Date(r.job_opening_date)));
+    const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.offer_acceptance_date);
+    const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.offer_acceptance_date), new Date(r.job_opening_date)));
     const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0)/ttfDays.length) : null;
     const offers = mine.filter(r=>r.offer_outcome==='Accepted'||r.offer_outcome==='Declined');
     const offerRate = offers.length ? Math.round((offers.filter(r=>r.offer_outcome==='Accepted').length/offers.length)*100) : null;

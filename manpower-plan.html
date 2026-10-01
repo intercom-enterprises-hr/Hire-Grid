@@ -191,6 +191,19 @@
    * disabled (see JS) and visually dimmed via this class, rather than
    * hidden — the point is the user can see both fields exist. */
   .form-field.field-inactive{opacity:.45;}
+  /* Round #32, item #5 — multi-select checkbox dropdown, used for FILTER
+     controls only (not single-value data-entry fields). Replaces a plain
+     <select> so several values can be picked at once. */
+  .ms-dropdown{position:relative;display:inline-block;}
+  .ms-dropdown-btn{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:150px;color:inherit;}
+  .ms-dropdown-btn:hover{border-color:#c7c7cc;}
+  .ms-dropdown-caret{font-size:10px;color:var(--text-mute);}
+  .ms-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.14);padding:8px;min-width:210px;max-height:240px;overflow-y:auto;z-index:80;}
+  .ms-dropdown-panel.open{display:block;}
+  .ms-dropdown-opt{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  .ms-dropdown-opt:hover{background:#f4f4f5;}
+  .ms-dropdown-opt input{margin:0;}
+  .ms-dropdown-empty{font-size:12px;color:var(--text-mute);padding:6px;}
 </style>
 </head>
 <body>
@@ -216,7 +229,7 @@
     <div class="header-actions">
       <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
-      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruitment Insights</a>
       <a href="achievements.html" class="btn btn-ghost" id="navAchieveLink" style="text-decoration:none;">Achievements</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
@@ -235,9 +248,9 @@
     <div id="worklistView">
       <div class="toolbar">
         <input type="text" id="searchBox" placeholder="Search position, code…" style="min-width:220px;">
-        <select id="filterDivision"><option value="">All divisions</option></select>
-        <select id="filterDepartment"><option value="">All departments</option></select>
-        <select id="filterStatus"><option value="">All statuses</option></select>
+        <div id="filterDivision"></div>
+        <div id="filterDepartment"></div>
+        <div id="filterStatus"></div>
         <div class="spacer"></div>
         <button class="btn btn-secondary" id="exportExcelBtn" style="display:none;">Export to Excel</button>
         <!-- Round #12 (product owner): bulk-add positions from Excel —
@@ -301,7 +314,7 @@
     <div id="tmSummaryView" style="display:none;">
       <p class="hint">Bulk-review every line waiting on Top Management approval. Select rows and use Approve / Reject / Return — reject and return both require a reason (BR-09), and can be applied to several selected lines at once, or one at a time.</p>
       <div class="toolbar">
-        <select id="tmFilterDepartment"><option value="">All departments</option></select>
+        <div id="tmFilterDepartment"></div>
         <div class="spacer"></div>
         <button class="btn btn-secondary btn-small" id="tmSelectAllBtn">Select All</button>
         <button class="btn btn-secondary btn-small" id="tmClearSelectionBtn">Clear selection</button>
@@ -410,19 +423,31 @@
       </div>
       <div class="form-field"><label>Employee Code</label><input type="text" id="field_lifecycle_employee_code"></div>
       <div class="form-field"><label>Employee Name</label><input type="text" id="field_lifecycle_employee_name"></div>
-      <div class="form-field"><label>Job Offer Issuance Date</label><input type="date" id="field_lifecycle_job_issuance_date"></div>
+      <div class="form-field"><label>Job Offer Acceptance Date</label><input type="date" id="field_lifecycle_offer_acceptance_date"></div>
       <div class="form-field"><label>Employee Hiring Date</label><input type="date" id="field_lifecycle_hiring_date"></div>
+      <div class="form-field"><label>Seniority Level</label>
+        <select id="field_lifecycle_seniority_level">
+          <option value="">— Select —</option>
+          <option>Fresh</option><option>Junior</option><option>Mid-level</option><option>Senior</option><option>Lead</option><option>Team Leader</option><option>Manager</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Came From (Company Type)</label>
+        <select id="field_lifecycle_company_type">
+          <option value="">— Select —</option>
+          <option>System Integrator</option><option>Vendor</option><option>Distributor</option><option>NTI Graduate</option>
+        </select>
+      </div>
       <div class="form-field"><label>Offered Gross Basic Salary</label><input type="number" step="0.01" id="field_lifecycle_offered_gross_basic_salary"></div>
       <div class="form-field"><label>Offered Transportation Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_transportation_allowance"></div>
       <div class="form-field"><label>Offered Mobile Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_mobile_allowance"></div>
       <div class="form-field"><label>Offered Support Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_support_allowance"></div>
+      <div class="form-field full" id="lifecycleJoinDateWrap">
+        <label>Expected Candidate Joining Date</label>
+        <input type="date" id="field_lifecycle_new_joining_date">
+      </div>
       <div class="form-field full" id="lifecycleHoldDateWrap" style="display:none;">
         <label>On Hold Date</label>
         <input type="date" id="field_lifecycle_on_hold_date">
-      </div>
-      <div class="form-field full" id="lifecycleReactivateWrap" style="display:none;">
-        <label>New Expected Joining Date</label>
-        <input type="date" id="field_lifecycle_new_joining_date">
       </div>
       <div class="form-field full" id="lifecycleRevokeWrap" style="display:none;">
         <label>Reason (candidate accepted, then didn't join)</label>
@@ -444,6 +469,84 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ====================== MULTI-SELECT CHECKBOX DROPDOWN ======================
+   Round #32, item #5 — product owner: filter dropdowns should let you tick
+   several values at once instead of only one. This is a lightweight
+   replacement for a single-select <select> used as a FILTER (data-entry
+   fields elsewhere in the app stay single-select on purpose). The
+   container keeps its original id and exposes:
+     .msSetOptions(values)  — (re)populate the choices; values is an array
+                               of strings, or {value,label} objects
+     .msValues()            — array of currently-selected values ([] means
+                               "all", same meaning as "" on a native select)
+     .msClear()             — clears the selection
+   and dispatches a real 'change' event on every toggle, so existing
+   addEventListener(id,'change',...) wiring elsewhere keeps working
+   unchanged. fillSelect() below already checks for .msSetOptions and
+   defers to it automatically when present. */
+function makeMultiSelect(id, allLabel){
+  const host = document.getElementById(id);
+  if(!host || host.msSetOptions) return;
+  host.classList.add('ms-dropdown');
+  host.innerHTML = '<button type="button" class="ms-dropdown-btn"><span class="ms-dropdown-label"></span><span class="ms-dropdown-caret">▾</span></button><div class="ms-dropdown-panel"></div>';
+  const labelEl = host.querySelector('.ms-dropdown-label');
+  const btn = host.querySelector('.ms-dropdown-btn');
+  const panel = host.querySelector('.ms-dropdown-panel');
+  let options = []; // [{value,label}]
+  let selected = new Set();
+  function renderPanel(){
+    panel.innerHTML = options.length ? options.map(o=>
+      '<label class="ms-dropdown-opt"><input type="checkbox" value="'+String(o.value).replace(/"/g,'&quot;')+'" '+(selected.has(o.value)?'checked':'')+'> '+escapeMsHtml(o.label)+'</label>'
+    ).join('') : '<div class="ms-dropdown-empty">No options</div>';
+  }
+  function escapeMsHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function updateLabel(){
+    if(!selected.size){ labelEl.textContent = allLabel; return; }
+    if(selected.size === 1){
+      const only = [...selected][0];
+      const opt = options.find(o=>String(o.value)===String(only));
+      labelEl.textContent = opt ? opt.label : String(only);
+      return;
+    }
+    labelEl.textContent = allLabel.replace(/^All /i,'') + ' (' + selected.size + ')';
+  }
+  panel.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches('input[type="checkbox"]')){
+      if(e.target.checked) selected.add(e.target.value); else selected.delete(e.target.value);
+      updateLabel();
+      host.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+  });
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    document.querySelectorAll('.ms-dropdown-panel.open').forEach(p=>{ if(p!==panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', (e)=>{ if(!host.contains(e.target)) panel.classList.remove('open'); });
+
+  host.msSetOptions = function(values){
+    const prevSelected = selected;
+    options = (values||[]).map(v => (v && typeof v === 'object') ? v : { value:v, label:v });
+    const validValues = options.map(o=>String(o.value));
+    selected = new Set([...prevSelected].filter(v=>validValues.includes(String(v))));
+    renderPanel();
+    updateLabel();
+  };
+  host.msValues = function(){ return [...selected]; };
+  host.msClear = function(){ selected = new Set(); renderPanel(); updateLabel(); };
+  renderPanel();
+  updateLabel();
+}
+// Returns the selected values for a filter control, whether it's still a
+// native <select> (single value, as an array of 0 or 1) or has been
+// converted to a multi-select checkbox dropdown via makeMultiSelect().
+function selectedValues(id){
+  const el = document.getElementById(id);
+  if(!el) return [];
+  if(el.msValues) return el.msValues();
+  return el.value ? [el.value] : [];
+}
+
 /* ====================== CONFIG ====================== */
 const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
@@ -522,7 +625,7 @@ async function loadCurrentUserAndApp(){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
   }
-  // Product owner request (round #21) — Recruiter KPIs/Achievements are
+  // Product owner request (round #21) — Recruitment Insights/Achievements are
   // recruiter-performance pages, not something BU Head/Top Management/
   // Company VP need in their nav.
   if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
@@ -543,6 +646,13 @@ async function loadCurrentUserAndApp(){
   // from Excel.
   document.getElementById('downloadTemplateBtn').style.display = canCreate() ? '' : 'none';
   document.getElementById('uploadExcelBtn').style.display = canCreate() ? '' : 'none';
+  // Round #32, item #5 — worklist/TM-summary filters are multi-select
+  // checkbox dropdowns (one-time setup; option lists are filled in by
+  // populateFilterOptions() on every loadRows()).
+  makeMultiSelect('filterDivision', 'All divisions');
+  makeMultiSelect('filterDepartment', 'All departments');
+  makeMultiSelect('filterStatus', 'All statuses');
+  makeMultiSelect('tmFilterDepartment', 'All departments');
   await loadRows();
 }
 function roleLabel(role){ return ROLE_LABELS[role] || role; }
@@ -652,6 +762,9 @@ function populateFilterOptions(){
 function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
 function fillSelect(id, values){
   const el = document.getElementById(id);
+  // Round #32, item #5 — a filter converted to a multi-select checkbox
+  // dropdown (see makeMultiSelect()) handles its own option list.
+  if(el.msSetOptions){ el.msSetOptions(values); return; }
   const current = el.value;
   const placeholder = el.options[0];
   el.innerHTML = '';
@@ -860,12 +973,18 @@ function collectLifecycleFieldPayload(){
     ta_owner: document.getElementById('field_lifecycle_ta_owner').value || null,
     employee_code: document.getElementById('field_lifecycle_employee_code').value.trim() || null,
     employee_name: document.getElementById('field_lifecycle_employee_name').value.trim() || null,
-    job_issuance_date: document.getElementById('field_lifecycle_job_issuance_date').value || null,
+    offer_acceptance_date: document.getElementById('field_lifecycle_offer_acceptance_date').value || null,
     hiring_date: document.getElementById('field_lifecycle_hiring_date').value || null,
+    seniority_level: document.getElementById('field_lifecycle_seniority_level').value || null,
+    prior_company_type: document.getElementById('field_lifecycle_company_type').value || null,
     offered_gross_basic_salary: numOrNull('field_lifecycle_offered_gross_basic_salary'),
     offered_transportation_allowance: numOrZero('field_lifecycle_offered_transportation_allowance'),
     offered_mobile_allowance: numOrZero('field_lifecycle_offered_mobile_allowance'),
-    offered_support_allowance: numOrZero('field_lifecycle_offered_support_allowance')
+    offered_support_allowance: numOrZero('field_lifecycle_offered_support_allowance'),
+    // Expected Candidate Joining Date (product owner round #32, item #2):
+    // a TA Team Leader (or whoever can manage this line) can change this
+    // at any time via Save, not just during Reactivate.
+    expected_candidate_joining_date: document.getElementById('field_lifecycle_new_joining_date').value || null
   };
 }
 function openLifecycleModal(row){
@@ -897,8 +1016,10 @@ function openLifecycleModal(row){
 
   document.getElementById('field_lifecycle_employee_code').value = row.employee_code || '';
   document.getElementById('field_lifecycle_employee_name').value = row.employee_name || '';
-  document.getElementById('field_lifecycle_job_issuance_date').value = row.job_issuance_date || '';
+  document.getElementById('field_lifecycle_offer_acceptance_date').value = row.offer_acceptance_date || '';
   document.getElementById('field_lifecycle_hiring_date').value = row.hiring_date || '';
+  document.getElementById('field_lifecycle_seniority_level').value = row.seniority_level || '';
+  document.getElementById('field_lifecycle_company_type').value = row.prior_company_type || '';
   document.getElementById('field_lifecycle_offered_gross_basic_salary').value = row.offered_gross_basic_salary != null ? row.offered_gross_basic_salary : '';
   document.getElementById('field_lifecycle_offered_transportation_allowance').value = row.offered_transportation_allowance != null ? row.offered_transportation_allowance : '';
   document.getElementById('field_lifecycle_offered_mobile_allowance').value = row.offered_mobile_allowance != null ? row.offered_mobile_allowance : '';
@@ -909,8 +1030,12 @@ function openLifecycleModal(row){
   document.getElementById('lifecycleStatus').textContent = '';
 
   const status = effectiveLifecycleStatus(row);
+  // Expected Candidate Joining Date (round #32, item #2): visible and
+  // editable any time the position is still being worked (Open or On
+  // Hold) — not shown once Closed, where Revoke Closure is the relevant
+  // action instead.
+  document.getElementById('lifecycleJoinDateWrap').style.display = status === 'Closed' ? 'none' : '';
   document.getElementById('lifecycleHoldDateWrap').style.display = status === 'Open' ? '' : 'none';
-  document.getElementById('lifecycleReactivateWrap').style.display = status === 'On Hold' ? '' : 'none';
   document.getElementById('lifecycleRevokeWrap').style.display = status === 'Closed' ? '' : 'none';
   document.getElementById('lifecycleHoldBtn').style.display = status === 'Open' ? '' : 'none';
   document.getElementById('lifecycleCloseBtn').style.display = status === 'Open' ? '' : 'none';
@@ -944,8 +1069,8 @@ document.getElementById('lifecycleCloseBtn').addEventListener('click', async ()=
   if(!lifecycleRow) return;
   const statusEl = document.getElementById('lifecycleStatus');
   const payload = collectLifecycleFieldPayload();
-  if(!payload.employee_code || !payload.employee_name || !payload.hiring_date){
-    statusEl.textContent = 'Employee Code, Employee Name, and Employee Hiring Date are required to mark a position as Hired.';
+  if(!payload.employee_code || !payload.employee_name || !payload.hiring_date || !payload.seniority_level || !payload.prior_company_type){
+    statusEl.textContent = 'Employee Code, Employee Name, Employee Hiring Date, Seniority Level, and Came From (Company Type) are required to mark a position as Hired.';
     statusEl.className = 'status-msg err';
     return;
   }
@@ -1001,6 +1126,10 @@ document.getElementById('lifecycleReactivateBtn').addEventListener('click', asyn
 });
 // Revoke Closure (2.4) — candidate accepted the offer, then didn't join;
 // back to Open, with a reason, and an email to the BU Head (2.4/2.6).
+// Round #32, item #2: also clears out the employee/offer details that were
+// recorded when it was marked Hired, since none of that actually happened —
+// the position should look genuinely open again, not still carrying a
+// "hired" person's details.
 document.getElementById('lifecycleRevokeBtn').addEventListener('click', async ()=>{
   if(!lifecycleRow) return;
   const statusEl = document.getElementById('lifecycleStatus');
@@ -1010,7 +1139,11 @@ document.getElementById('lifecycleRevokeBtn').addEventListener('click', async ()
     position_status: 'Open',
     closed_at: null, closed_by: null,
     revoked_at: new Date().toISOString(), revoked_by: currentUser.id, revoke_reason: reason,
-    updated_by: currentUser.id
+    updated_by: currentUser.id,
+    employee_code: null, employee_name: null, offer_acceptance_date: null, hiring_date: null,
+    seniority_level: null, prior_company_type: null,
+    offered_gross_basic_salary: null, offered_transportation_allowance: 0, offered_mobile_allowance: 0, offered_support_allowance: 0,
+    expected_candidate_joining_date: null
   };
   const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
   if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
@@ -1108,7 +1241,10 @@ function fieldsForRow(r, level){
     ['TA Owner', r.ta_owner ? profileName(r.ta_owner) : '—'],
     ['Employee Code', r.employee_code || '—'],
     ['Employee Name', r.employee_name || '—'],
+    ['Job Offer Acceptance Date', r.offer_acceptance_date || '—'],
     ['Hiring Date', r.hiring_date || '—'],
+    ['Seniority Level', r.seniority_level || '—'],
+    ['Came From (Company Type)', r.prior_company_type || '—'],
     ['Expected Candidate Joining Date', r.expected_candidate_joining_date || '—'],
     ['On Hold Date', r.on_hold_date || '—'],
     ['Closed At', fmtDate(r.closed_at)],
@@ -1174,13 +1310,13 @@ function visibleRows(){
 // than reaching past whatever the user is currently filtered down to.
 function currentlyFilteredWorklistRows(){
   const search = document.getElementById('searchBox').value.trim().toLowerCase();
-  const fDiv = document.getElementById('filterDivision').value;
-  const fDept = document.getElementById('filterDepartment').value;
-  const fStatus = document.getElementById('filterStatus').value;
+  const fDiv = selectedValues('filterDivision');
+  const fDept = selectedValues('filterDepartment');
+  const fStatus = selectedValues('filterStatus');
   return visibleRows().filter(r=>{
-    if(fDiv && r.division !== fDiv) return false;
-    if(fDept && r.department !== fDept) return false;
-    if(fStatus && r.status !== fStatus) return false;
+    if(fDiv.length && !fDiv.includes(r.division)) return false;
+    if(fDept.length && !fDept.includes(r.department)) return false;
+    if(fStatus.length && !fStatus.includes(r.status)) return false;
     if(search){
       const hay = [r.position_code, r.position_title].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
@@ -1377,8 +1513,8 @@ function renderDeletedTable(){
 
 /* ====================== TOP MANAGEMENT SUMMARY VIEW (BR-08/09/10) ====================== */
 function tmPendingRows(){
-  const fDept = document.getElementById('tmFilterDepartment').value;
-  return visibleRows().filter(r=> requiredRoleFor(r) === 'top_management' && !MPCalc.isSelfApprovalBlocked(currentUser.id, r) && (!fDept || r.department === fDept));
+  const fDept = selectedValues('tmFilterDepartment');
+  return visibleRows().filter(r=> requiredRoleFor(r) === 'top_management' && !MPCalc.isSelfApprovalBlocked(currentUser.id, r) && (!fDept.length || fDept.includes(r.department)));
 }
 function renderTmSummary(){
   const rows = tmPendingRows();

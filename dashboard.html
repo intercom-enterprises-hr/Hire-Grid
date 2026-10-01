@@ -121,6 +121,19 @@
     .chart-card, .kpi-card, .table-card{break-inside:avoid;}
   }
   .print-chart-img{display:none;}
+  /* Round #32, item #5 — multi-select checkbox dropdown, used for FILTER
+     controls only (not single-value data-entry fields). Replaces a plain
+     <select> so several values can be picked at once. */
+  .ms-dropdown{position:relative;display:inline-block;}
+  .ms-dropdown-btn{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:150px;color:inherit;}
+  .ms-dropdown-btn:hover{border-color:#c7c7cc;}
+  .ms-dropdown-caret{font-size:10px;color:var(--text-mute);}
+  .ms-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.14);padding:8px;min-width:210px;max-height:240px;overflow-y:auto;z-index:80;}
+  .ms-dropdown-panel.open{display:block;}
+  .ms-dropdown-opt{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  .ms-dropdown-opt:hover{background:#f4f4f5;}
+  .ms-dropdown-opt input{margin:0;}
+  .ms-dropdown-empty{font-size:12px;color:var(--text-mute);padding:6px;}
 </style>
 </head>
 <body>
@@ -148,7 +161,7 @@
       <button class="btn btn-ghost" id="printBtn">Print / Save as PDF</button>
       <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
-      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruiter KPIs</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruitment Insights</a>
       <a href="achievements.html" class="btn btn-ghost" id="navAchieveLink" style="text-decoration:none;">Achievements</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
@@ -162,11 +175,11 @@
     <div class="filter-card">
       <div class="filter-group">
         <label>Department</label>
-        <select id="f-department"><option value="">All departments</option></select>
+        <div id="f-department"></div>
       </div>
       <div class="filter-group">
         <label>Business Need</label>
-        <select id="f-need"><option value="">All reasons</option></select>
+        <div id="f-need"></div>
       </div>
       <div class="filter-group">
         <label>Reporting period (for hires)</label>
@@ -228,6 +241,18 @@
         <div class="chart-holder"><canvas id="chartHiresByDept"></canvas><img class="print-chart-img" id="printImgHiresByDept" alt=""></div>
       </div>
     </div>
+    <div class="chart-grid" style="margin-top:14px;">
+      <div class="chart-card" id="card-seniority">
+        <h3>New hires by seniority level</h3>
+        <p class="hint">New hires in the selected period, by seniority level</p>
+        <div class="chart-holder"><canvas id="chartSeniority"></canvas><img class="print-chart-img" id="printImgSeniority" alt=""></div>
+      </div>
+      <div class="chart-card" id="card-companytype">
+        <h3>New hires by company type</h3>
+        <p class="hint">Where new hires came from in the selected period</p>
+        <div class="chart-holder"><canvas id="chartCompanyType"></canvas><img class="print-chart-img" id="printImgCompanyType" alt=""></div>
+      </div>
+    </div>
     <div class="chart-grid" style="margin-top:14px;grid-template-columns:1fr 1.3fr;">
       <div class="chart-card" id="card-trend">
         <h3>Hires &amp; closures by month</h3>
@@ -271,6 +296,80 @@
 <div class="toast" id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--charcoal);color:#fff;padding:11px 20px;border-radius:8px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,0.2);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s ease;"></div>
 
 <script>
+/* ====================== MULTI-SELECT CHECKBOX DROPDOWN ======================
+   Round #32, item #5 — product owner: filter dropdowns should let you tick
+   several values at once instead of only one. This is a lightweight
+   replacement for a single-select <select> used as a FILTER. The
+   container keeps its original id and exposes:
+     .msSetOptions(values)  — (re)populate the choices; values is an array
+                               of strings, or {value,label} objects
+     .msValues()            — array of currently-selected values ([] means
+                               "all", same meaning as "" on a native select)
+     .msClear()             — clears the selection
+   and dispatches a real 'change' event on every toggle, so existing
+   addEventListener(id,'change',...) wiring elsewhere keeps working
+   unchanged. fillSelect() below already checks for .msSetOptions and
+   defers to it automatically when present. */
+function makeMultiSelect(id, allLabel){
+  const host = document.getElementById(id);
+  if(!host || host.msSetOptions) return;
+  host.classList.add('ms-dropdown');
+  host.innerHTML = '<button type="button" class="ms-dropdown-btn"><span class="ms-dropdown-label"></span><span class="ms-dropdown-caret">▾</span></button><div class="ms-dropdown-panel"></div>';
+  const labelEl = host.querySelector('.ms-dropdown-label');
+  const btn = host.querySelector('.ms-dropdown-btn');
+  const panel = host.querySelector('.ms-dropdown-panel');
+  let options = []; // [{value,label}]
+  let selected = new Set();
+  function renderPanel(){
+    panel.innerHTML = options.length ? options.map(o=>
+      '<label class="ms-dropdown-opt"><input type="checkbox" value="'+String(o.value).replace(/"/g,'&quot;')+'" '+(selected.has(o.value)?'checked':'')+'> '+escapeMsHtml(o.label)+'</label>'
+    ).join('') : '<div class="ms-dropdown-empty">No options</div>';
+  }
+  function escapeMsHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function updateLabel(){
+    if(!selected.size){ labelEl.textContent = allLabel; return; }
+    if(selected.size === 1){
+      const only = [...selected][0];
+      const opt = options.find(o=>String(o.value)===String(only));
+      labelEl.textContent = opt ? opt.label : String(only);
+      return;
+    }
+    labelEl.textContent = allLabel.replace(/^All /i,'') + ' (' + selected.size + ')';
+  }
+  panel.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches('input[type="checkbox"]')){
+      if(e.target.checked) selected.add(e.target.value); else selected.delete(e.target.value);
+      updateLabel();
+      host.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+  });
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    document.querySelectorAll('.ms-dropdown-panel.open').forEach(p=>{ if(p!==panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', (e)=>{ if(!host.contains(e.target)) panel.classList.remove('open'); });
+
+  host.msSetOptions = function(values){
+    const prevSelected = selected;
+    options = (values||[]).map(v => (v && typeof v === 'object') ? v : { value:v, label:v });
+    const validValues = options.map(o=>String(o.value));
+    selected = new Set([...prevSelected].filter(v=>validValues.includes(String(v))));
+    renderPanel();
+    updateLabel();
+  };
+  host.msValues = function(){ return [...selected]; };
+  host.msClear = function(){ selected = new Set(); renderPanel(); updateLabel(); };
+  renderPanel();
+  updateLabel();
+}
+function selectedValues(id){
+  const el = document.getElementById(id);
+  if(!el) return [];
+  if(el.msValues) return el.msValues();
+  return el.value ? [el.value] : [];
+}
+
 /* ====================== CONFIG ====================== */
 const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
@@ -318,7 +417,7 @@ async function loadCurrentUserAndApp(){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
   }
-  // Product owner request (round #21) — Recruiter KPIs/Achievements are
+  // Product owner request (round #21) — Recruitment Insights/Achievements are
   // recruiter-performance pages, not something BU Head/Top Management/
   // Company VP need in their nav (mirrors the same restriction index.html
   // already applies to their home-page module cards).
@@ -326,6 +425,11 @@ async function loadCurrentUserAndApp(){
     const kpiLink = document.getElementById('navKpiLink'); if(kpiLink) kpiLink.style.display = 'none';
     const achieveLink = document.getElementById('navAchieveLink'); if(achieveLink) achieveLink.style.display = 'none';
   }
+  // Round #32, item #5 — filters are multi-select checkbox dropdowns
+  // (one-time setup; option lists are filled in by populateFilterOptions()
+  // on every loadRows()).
+  makeMultiSelect('f-department', 'All departments');
+  makeMultiSelect('f-need', 'All reasons');
   await loadSettingsAndProfiles();
   await loadRows();
 }
@@ -421,6 +525,9 @@ function animateCountUp(elId, target){
 }
 function fillSelect(id, values){
   const el = document.getElementById(id);
+  // Round #32, item #5 — a filter converted to a multi-select checkbox
+  // dropdown (see makeMultiSelect()) handles its own option list.
+  if(el.msSetOptions){ el.msSetOptions(values); return; }
   const current = el.value;
   const placeholder = el.options[0];
   el.innerHTML = '';
@@ -429,10 +536,10 @@ function fillSelect(id, values){
   if(values.includes(current)) el.value = current;
 }
 function getFilters(){
-  return { department: document.getElementById('f-department').value, businessNeed: document.getElementById('f-need').value };
+  return { department: selectedValues('f-department'), businessNeed: selectedValues('f-need') };
 }
 function matchesFilters(r, f){
-  return (!f.department || r.department===f.department) && (!f.businessNeed || needOf(r)===f.businessNeed);
+  return (!f.department.length || f.department.includes(r.department)) && (!f.businessNeed.length || f.businessNeed.includes(needOf(r)));
 }
 function periodRange(period){
   const y = selectedYear;
@@ -451,8 +558,8 @@ document.getElementById('yearSelect').addEventListener('change', function(){ sel
 document.getElementById('f-department').addEventListener('change', render);
 document.getElementById('f-need').addEventListener('change', render);
 document.getElementById('resetFilters').addEventListener('click', ()=>{
-  document.getElementById('f-department').value = '';
-  document.getElementById('f-need').value = '';
+  document.getElementById('f-department').msClear();
+  document.getElementById('f-need').msClear();
   render();
 });
 document.querySelectorAll('.period-btn').forEach(btn=>{
@@ -487,6 +594,11 @@ function render(){
   renderBarChart('dept', 'chartByDept', 'card-dept', groupCountBy(openPipeline, groupKeyOf), '#FCAF17');
   renderNeedChart(openPipeline);
   renderPieChart('hiresByDept', 'chartHiresByDept', 'card-hiresbydept', groupCountBy(hiresInPeriod, groupKeyOf));
+  // Round #32, item #4 — new hire insights: seniority level and prior
+  // company type, scoped to the same "hires in the selected period" set
+  // as the New Hires table and the Hires-by-department chart above.
+  renderPieChart('seniority', 'chartSeniority', 'card-seniority', groupCountBy(hiresInPeriod, r=>r.seniority_level));
+  renderPieChart('companytype', 'chartCompanyType', 'card-companytype', groupCountBy(hiresInPeriod, r=>r.prior_company_type));
   renderTrendChart(filtered);
   renderQuarterChart(filtered);
   renderNewHiresTable(hiresInPeriod);
@@ -636,7 +748,7 @@ function renderOpenPositionsRegister(filtered){
 }
 
 /* ====================== PRINT ====================== */
-const PRINT_IMG_ID = { dept:'printImgByDept', need:'printImgNeed', trend:'printImgTrend', hiresByDept:'printImgHiresByDept', quarterCompare:'printImgQuarterCompare' };
+const PRINT_IMG_ID = { dept:'printImgByDept', need:'printImgNeed', trend:'printImgTrend', hiresByDept:'printImgHiresByDept', quarterCompare:'printImgQuarterCompare', seniority:'printImgSeniority', companytype:'printImgCompanyType' };
 async function prepareChartSnapshotsForPrint(){
   const jobs = Object.entries(charts).map(async ([key, c]) => {
     if(!c) return;
