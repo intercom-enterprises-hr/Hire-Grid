@@ -106,6 +106,12 @@
   .status-Approved{background:#f0fdf4;color:#15803d;font-weight:700;}
   .status-Rejected{background:#fef2f2;color:#b91c1c;}
   .status-Returned{background:#fdf2f8;color:#9d174d;font-weight:700;}
+  /* Round #33, item #3 — Hiring Status column pills (separate from the
+     approval-chain Status pills above). */
+  .status-Active{background:#f0fdf4;color:#15803d;font-weight:700;}
+  .status-On\.Hold{background:#fffbeb;color:#92400e;}
+  .status-Hired{background:#eef2ff;color:#4338ca;font-weight:700;}
+  .status-Will\.Open\.Soon{background:#f4f4f5;color:#52525b;}
   .status-Deleted{background:#f4f4f5;color:#7f1d1d;}
   .status-Requested{background:#eef2ff;color:#4338ca;}
   .status-Open{background:#fff7ed;color:#c2410c;}
@@ -305,7 +311,7 @@
               <th><input type="checkbox" id="worklistSelectAllCheckbox"></th>
               <th>Branch</th><th>Position ID</th><th>Division</th><th>Department</th><th>Position</th>
               <th>Cost Center</th><th>Business Need</th><th>Net Basic Monthly Salary</th>
-              <th id="costColHeader">Total Current Year Cost</th><th>Status</th><th>Status Date</th><th>Submitted By</th><th></th>
+              <th id="costColHeader">Total Current Year Cost</th><th>Position Target Start Date</th><th>Hiring Status</th><th>Status</th><th>Status Date</th><th>Submitted By</th><th></th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -914,6 +920,27 @@ function canManageLifecycle(row){
 function effectiveLifecycleStatus(row){
   return (row.position_status === 'On Hold' || row.position_status === 'Closed') ? row.position_status : 'Open';
 }
+// Round #33, item #3 — a plain-language hiring status for the worklist:
+//   Closed position_status            -> "Hired"
+//   On Hold position_status           -> "On Hold"
+//   Open, job_opening_date not reached yet (still more than 10 weeks out
+//     from Position Target Start Date) -> "Will Open Soon"
+//   Open, job_opening_date already reached -> "Active"
+// job_opening_date is maintained by a DB trigger as Position Target Start
+// Date minus 10 weeks (70 days) — see migration 23.
+function hiringStatusLabel(row){
+  if(row.position_status === 'Closed') return 'Hired';
+  if(row.position_status === 'On Hold') return 'On Hold';
+  if(row.job_opening_date){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const opens = new Date(row.job_opening_date);
+    if(opens > today) return 'Will Open Soon';
+  }
+  return 'Active';
+}
+function hiringStatusPillClass(label){
+  return 'status-' + label.replace(/\s+/g,'.');
+}
 // Who a TA Owner can be assigned to: for a TA Leader, themself or one of
 // their own Recruiters (ta_leader_id === them) — "whether the TA TL or
 // Recruiter" — not the whole company's recruiters. head_of_hr/admin get
@@ -1035,11 +1062,11 @@ function openLifecycleModal(row){
   document.getElementById('lifecycleStatus').textContent = '';
 
   const status = effectiveLifecycleStatus(row);
-  // Expected Candidate Joining Date (round #32, item #2): visible and
-  // editable any time the position is still being worked (Open or On
-  // Hold) — not shown once Closed, where Revoke Closure is the relevant
-  // action instead.
-  document.getElementById('lifecycleJoinDateWrap').style.display = status === 'Closed' ? 'none' : '';
+  // Expected Candidate Joining Date (round #33, item #1): only relevant to
+  // the Reactivate flow (On Hold -> Open), where it's required — not shown
+  // while marking a position Hired (that's a different field, Hiring
+  // Date), and not shown once Closed either.
+  document.getElementById('lifecycleJoinDateWrap').style.display = status === 'On Hold' ? '' : 'none';
   document.getElementById('lifecycleHoldDateWrap').style.display = status === 'Open' ? '' : 'none';
   document.getElementById('lifecycleRevokeWrap').style.display = status === 'Closed' ? '' : 'none';
   document.getElementById('lifecycleHoldBtn').style.display = status === 'Open' ? '' : 'none';
@@ -1083,6 +1110,10 @@ document.getElementById('lifecycleCloseBtn').addEventListener('click', async ()=
   payload.closed_at = new Date().toISOString();
   payload.closed_by = currentUser.id;
   payload.updated_by = currentUser.id;
+  // Round #33, item #1 — Expected Candidate Joining Date belongs to the
+  // Reactivate flow, not the Hired details; always clear it here so a
+  // closed/hired position never carries a leftover value.
+  payload.expected_candidate_joining_date = null;
   const prevTaOwner = lifecycleRow.ta_owner;
   const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
   if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
@@ -1436,6 +1467,8 @@ function renderTable(){
       '<td class="cell-trunc" title="'+escapeHtml(r.business_need_type || r.business_need || '')+'">'+businessNeedCell(r)+'</td>'+
       '<td>'+fmtMoney(r.net_basic_monthly_salary, r.currency)+'</td>'+
       '<td>'+costCell+'</td>'+
+      '<td>'+escapeHtml(fmtDate(r.position_target_start_date))+'</td>'+
+      '<td><span class="status-pill '+hiringStatusPillClass(hiringStatusLabel(r))+'">'+escapeHtml(hiringStatusLabel(r))+'</span></td>'+
       '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
       '<td>'+escapeHtml(fmtDate(r.status_changed_at))+'</td>'+
       '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
@@ -2026,7 +2059,7 @@ function insertInlineEditorSkeleton(){
   tr.id = 'inlineEditorRow';
   tr.className = 'inline-editor-row';
   const td = document.createElement('td');
-  td.colSpan = 12; // matches the 11 worklist data columns + actions column (product owner change #7)
+  td.colSpan = 14; // matches the worklist's columns (checkbox + 11 data columns + the round #33 Position Target Start Date/Hiring Status columns + actions)
   td.innerHTML =
     '<div class="inline-editor-head">' +
       '<div class="inline-editor-title"><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +
