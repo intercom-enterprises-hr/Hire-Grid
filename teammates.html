@@ -201,6 +201,18 @@ const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'
 let currentUser = null;
 let SESSION = null;
 let TEAM = [];
+// Bug fix: SESSION was only ever set once, when the page first loaded —
+// supabase-js refreshes the underlying login token for you behind the
+// scenes as time passes, but this page's own copy of it (SESSION) never
+// picked up that refreshed token. So after being signed in for a while,
+// every call to create-teammate/delete-teammate below was sending an
+// expired token, which the server correctly rejects as "not signed in"
+// (visible as a 401 in the Edge Function's Invocations tab) — and
+// because that rejection doesn't come back in the exact shape the page
+// expected, it showed up on screen as a blank "Could not create: " with
+// no reason after it. This listener keeps SESSION pointed at whatever
+// token is currently valid, so that bug can't happen again.
+sb.auth.onAuthStateChange((_event, session)=>{ if(session) SESSION = session; });
 
 async function init(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -275,13 +287,13 @@ async function deleteTeammate(userId, name){
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SESSION.access_token}`
+        'Authorization': `Bearer ${(await sb.auth.getSession()).data.session.access_token}`
       },
       body: JSON.stringify({ user_id: userId })
     });
     const body = await res.json();
     if(!res.ok || body.error){
-      alert('Could not delete: ' + (body.error || res.statusText));
+      alert('Could not delete: ' + (body.error || body.message || ('HTTP ' + res.status)));
       return;
     }
     await loadTeam();
@@ -306,13 +318,13 @@ document.getElementById('createTeammateBtn').addEventListener('click', async ()=
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SESSION.access_token}`
+        'Authorization': `Bearer ${(await sb.auth.getSession()).data.session.access_token}`
       },
       body: JSON.stringify({ full_name, email, role })
     });
     const body = await res.json();
     if(!res.ok || body.error){
-      statusEl.textContent = 'Could not create: ' + (body.error || res.statusText);
+      statusEl.textContent = 'Could not create: ' + (body.error || body.message || ('HTTP ' + res.status));
       statusEl.className = 'status-msg err';
       return;
     }
@@ -370,13 +382,13 @@ document.getElementById('saveEditBtn').addEventListener('click', async ()=>{
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SESSION.access_token}`
+        'Authorization': `Bearer ${(await sb.auth.getSession()).data.session.access_token}`
       },
       body: JSON.stringify(payload)
     });
     const body = await res.json();
     if(!res.ok || body.error){
-      statusEl.textContent = 'Could not save: ' + (body.error || res.statusText);
+      statusEl.textContent = 'Could not save: ' + (body.error || body.message || ('HTTP ' + res.status));
       statusEl.className = 'status-msg err';
       return;
     }
