@@ -241,7 +241,6 @@
       <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
       <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruitment Insights</a>
-      <a href="achievements.html" class="btn btn-ghost" id="navAchieveLink" style="text-decoration:none;">Achievements</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
       <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
@@ -311,7 +310,7 @@
               <th><input type="checkbox" id="worklistSelectAllCheckbox"></th>
               <th>Branch</th><th>Position ID</th><th>Division</th><th>Department</th><th>Position</th>
               <th>Cost Center</th><th>Business Need</th><th>Net Basic Monthly Salary</th>
-              <th id="costColHeader">Total Current Year Cost</th><th>Position Target Start Date</th><th>Hiring Status</th><th>Status</th><th>Status Date</th><th>Submitted By</th><th></th>
+              <th id="costColHeader">Total Current Year Cost</th><th>Position Target Start Date</th><th>Hiring Status</th><th id="taOwnerColHeader" style="display:none;">TA Owner</th><th>Position Approval Status</th><th>Status Date</th><th>Submitted By</th><th></th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -636,12 +635,11 @@ async function loadCurrentUserAndApp(){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
   }
-  // Product owner request (round #21) — Recruitment Insights/Achievements are
-  // recruiter-performance pages, not something BU Head/Top Management/
+  // Product owner request (round #21) — Recruitment Insights is a
+  // recruiter-performance page, not something BU Head/Top Management/
   // Company VP need in their nav.
   if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
     const kpiLink = document.getElementById('navKpiLink'); if(kpiLink) kpiLink.style.display = 'none';
-    const achieveLink = document.getElementById('navAchieveLink'); if(achieveLink) achieveLink.style.display = 'none';
   }
   document.getElementById('addOpenBtn').style.display = canCreate() ? '' : 'none';
   document.getElementById('tabTmSummary').style.display = currentUser.role === 'top_management' ? '' : 'none';
@@ -1275,7 +1273,7 @@ function fieldsForRow(r, level){
   sections.push(['Cost & Compensation', costFields]);
 
   sections.push(['Approval & Status', [
-    ['Status', r.status || 'Draft'],
+    ['Position Approval Status', r.status || 'Draft'],
     ['Status Date', fmtDate(r.status_changed_at)],
     ['Approval Note', r.approval_note || '—'],
     ['Submitted By', profileName(r.submitted_by||r.requested_by)],
@@ -1355,6 +1353,9 @@ function visibleRows(){
     // draft (so they can get back to it), just not anyone else's.
     if(currentUser.role === 'ta_leader' && r.status === 'Draft'
       && r.requested_by !== currentUser.id && r.submitted_by !== currentUser.id) return false;
+    // Round #36 — a Recruiter should only ever see positions they're
+    // personally assigned to as TA Owner, not every position company-wide.
+    if(currentUser.role === 'recruiter' && r.ta_owner !== currentUser.id) return false;
     return true;
   });
 }
@@ -1401,8 +1402,17 @@ function renderTable(){
   // position" row just because a filter/search input fired a re-render —
   // that's the "obviously safe from accidental data loss" requirement.
   if(inlineEditorOpen) return;
-  const level = getCostVisibilityLevel(currentUser.role);
-  document.getElementById('costColHeader').textContent = level === 'total_only' ? 'Total Current Year Cost' : 'Total Current Year Cost (full breakdown on row)';
+  // Round #36 — the worklist's Total Current Year Cost column always
+  // shows just the plain header and the plain total figure for every
+  // role now (the "(full breakdown on row)" header suffix and inline
+  // "(net X)" breakdown are gone) — the fuller breakdown is still
+  // available in the Position Details view and Excel export, which
+  // still respect getCostVisibilityLevel.
+  // Round #36 — TA Owner column is shown only for TA Team Leader,
+  // Recruiter and Head of HR (the roles who actually need to know who's
+  // working a position); everyone else keeps the column hidden.
+  const showTaOwnerCol = ['ta_leader','recruiter','head_of_hr'].includes(currentUser.role);
+  document.getElementById('taOwnerColHeader').style.display = showTaOwnerCol ? '' : 'none';
 
   const rows = currentlyFilteredWorklistRows();
 
@@ -1445,9 +1455,7 @@ function renderTable(){
 
   rows.forEach(r=>{
     const tr = document.createElement('tr');
-    const costCell = level === 'total_only'
-      ? fmtMoney(r.total_current_year_cost, r.currency)
-      : fmtMoney(r.total_current_year_cost, r.currency) + (r.net_basic_monthly_salary ? ` <span style="color:var(--text-mute)">(net ${fmtMoney(r.net_basic_monthly_salary, r.currency)})</span>` : '');
+    const costCell = fmtMoney(r.total_current_year_cost, r.currency);
     // Item #3: Department/Position/Business Need are the wordier columns
     // — truncated with an ellipsis (`.cell-trunc`, see CSS) rather than
     // each forcing the whole table wider, with a title="" tooltip
@@ -1469,6 +1477,7 @@ function renderTable(){
       '<td>'+costCell+'</td>'+
       '<td>'+escapeHtml(fmtDate(r.position_target_start_date))+'</td>'+
       '<td><span class="status-pill '+hiringStatusPillClass(hiringStatusLabel(r))+'">'+escapeHtml(hiringStatusLabel(r))+'</span></td>'+
+      (showTaOwnerCol ? '<td>'+escapeHtml(r.ta_owner ? profileName(r.ta_owner) : '—')+'</td>' : '')+
       '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
       '<td>'+escapeHtml(fmtDate(r.status_changed_at))+'</td>'+
       '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
@@ -2059,7 +2068,7 @@ function insertInlineEditorSkeleton(){
   tr.id = 'inlineEditorRow';
   tr.className = 'inline-editor-row';
   const td = document.createElement('td');
-  td.colSpan = 14; // matches the worklist's columns (checkbox + 11 data columns + the round #33 Position Target Start Date/Hiring Status columns + actions)
+  td.colSpan = 15; // matches the worklist's columns (checkbox + 11 data columns + the round #33 Position Target Start Date/Hiring Status columns + the round #36 TA Owner column + actions)
   td.innerHTML =
     '<div class="inline-editor-head">' +
       '<div class="inline-editor-title"><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +

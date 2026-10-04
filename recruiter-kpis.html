@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HireGrid — Recruitment Insights</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root{
     --charcoal:#383839; --charcoal-soft:#5b5b5d; --red:#E21C24; --gold:#FBAE2F;
@@ -69,18 +68,15 @@
   .chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;}
   .chart-card h3{margin:0 0 2px;font-size:14.5px;}
   .chart-card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--text-mute);}
-  .chart-holder{position:relative;height:230px;}
-  .chart-holder canvas{width:100% !important;height:100% !important;}
-  .card-unavailable{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-mute);font-size:12.5px;text-align:center;padding:20px;}
-
-  .leader-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
-  .leader-card table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  .leader-card th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.02em;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
-  .leader-card td{padding:10px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
-  .leader-card tr:last-child td{border-bottom:none;}
-  .leader-card tr:hover td{background:#fafafa;}
-  .rank-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f4f4f5;color:var(--text-mute);font-size:11px;font-weight:700;}
-  .rank-badge.top{background:var(--gold);color:#fff;}
+  /* Round #36 — "Where the work is" shows plain numbers (a simple list of
+     name/bucket + value) rather than Chart.js bar charts. */
+  .stat-list-holder{position:relative;min-height:60px;}
+  .stat-list{display:flex;flex-direction:column;gap:2px;}
+  .stat-row{display:flex;align-items:center;justify-content:space-between;padding:8px 2px;border-bottom:1px solid #f0f0f2;font-size:13px;}
+  .stat-row:last-child{border-bottom:none;}
+  .stat-row .stat-name{color:var(--text);}
+  .stat-row .stat-value{font-weight:700;color:var(--charcoal);}
+  .card-unavailable{display:flex;align-items:center;justify-content:center;min-height:60px;color:var(--text-mute);font-size:12.5px;text-align:center;padding:20px;}
 
   @media (max-width:1050px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
@@ -138,7 +134,6 @@
       <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="manpower-plan.html" class="btn btn-ghost" style="text-decoration:none;">Manpower Plan</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
-      <a href="achievements.html" class="btn btn-ghost" id="navAchieveLink" style="text-decoration:none;">Achievements</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
       <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
@@ -147,11 +142,13 @@
   </header>
 
   <main>
-    <div class="section-title"><span class="chip"></span>Filter</div>
-    <div class="filter-card">
-      <div class="filter-group">
-        <label>Recruiter / TA Owner</label>
-        <div id="f-owner"></div>
+    <div id="filterSection">
+      <div class="section-title"><span class="chip"></span>Filter</div>
+      <div class="filter-card">
+        <div class="filter-group">
+          <label>Recruiter / TA Owner</label>
+          <div id="f-owner"></div>
+        </div>
       </div>
     </div>
 
@@ -184,39 +181,29 @@
       </div>
     </div>
 
-    <div class="section-title red"><span class="chip"></span>Leaderboard</div>
-    <div class="leader-card">
-      <table>
-        <thead>
-          <tr><th>#</th><th>Recruiter</th><th>Open reqs</th><th>Closed YTD</th><th>Avg time-to-fill</th><th>Offer accept %</th><th>1-yr retention %</th></tr>
-        </thead>
-        <tbody id="leaderTableBody"></tbody>
-      </table>
-    </div>
-
     <div class="section-title"><span class="chip"></span>Where the work is</div>
     <div class="chart-grid">
       <div class="chart-card" id="card-openByOwner">
         <h3>Open requisitions per recruiter</h3>
         <p class="hint">Current pipeline load, by TA Owner</p>
-        <div class="chart-holder"><canvas id="chartOpenByOwner"></canvas></div>
+        <div class="stat-list-holder"><div class="stat-list" id="listOpenByOwner"></div></div>
       </div>
       <div class="chart-card" id="card-ageDist">
         <h3>Requisition age distribution</h3>
         <p class="hint">How long currently-open positions have been open, bucketed</p>
-        <div class="chart-holder"><canvas id="chartAgeDist"></canvas></div>
+        <div class="stat-list-holder"><div class="stat-list" id="listAgeDist"></div></div>
       </div>
     </div>
     <div class="chart-grid" style="margin-top:14px;">
       <div class="chart-card" id="card-offerByOwner">
         <h3>Offer acceptance rate by recruiter</h3>
         <p class="hint">% of recorded offer outcomes that were Accepted</p>
-        <div class="chart-holder"><canvas id="chartOfferByOwner"></canvas></div>
+        <div class="stat-list-holder"><div class="stat-list" id="listOfferByOwner"></div></div>
       </div>
       <div class="chart-card" id="card-retentionByOwner">
         <h3>1-year retention by recruiter</h3>
         <p class="hint">% of hires (due for review) still employed at 1 year</p>
-        <div class="chart-holder"><canvas id="chartRetentionByOwner"></canvas></div>
+        <div class="stat-list-holder"><div class="stat-list" id="listRetentionByOwner"></div></div>
       </div>
     </div>
   </main>
@@ -304,7 +291,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const OPEN_PIPELINE_STATUSES = ['Approved','Open','Interviewing','Offer'];
-const CHART_COLORS = ['#065BAB','#ED1C24','#FCAF17','#383839','#7FA8D9','#F2A6A9','#FCD98B','#9a9a9c'];
 
 /* ====================== STATE ====================== */
 let currentUser = null;
@@ -312,7 +298,6 @@ let ALL_ROWS = [];
 let PROFILES = [];
 let PROFILES_BY_ID = {};
 let selectedYear = new Date().getFullYear();
-let charts = {};
 
 /* ====================== AUTH ====================== */
 async function init(){
@@ -342,15 +327,15 @@ async function loadCurrentUserAndApp(){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
   }
-  // Product owner request (round #21) — hide the recruiter-performance
-  // nav links for roles that don't need them.
-  if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
-    const achieveLink = document.getElementById('navAchieveLink'); if(achieveLink) achieveLink.style.display = 'none';
-  }
   // Round #32, item #5 — the recruiter filter is a multi-select checkbox
   // dropdown (one-time setup; populateOwnerSelect() fills in the options
   // on every loadData()).
   makeMultiSelect('f-owner', 'Everyone');
+  // Round #36 — a Recruiter only ever sees their own numbers here, so the
+  // filter (which would only ever offer themselves anyway) is just noise.
+  if(currentUser.role === 'recruiter'){
+    document.getElementById('filterSection').style.display = 'none';
+  }
   await loadData();
 }
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
@@ -407,7 +392,10 @@ document.getElementById('f-owner').addEventListener('change', render);
 
 /* ====================== RENDER ====================== */
 function render(){
-  const ownerFilter = selectedValues('f-owner');
+  // Round #36 — a Recruiter's filter is hidden (see loadCurrentUserAndApp),
+  // so they're always scoped to just their own positions, not whatever a
+  // stale/leftover filter selection might say.
+  const ownerFilter = currentUser.role === 'recruiter' ? [currentUser.id] : selectedValues('f-owner');
   const scoped = ownerFilter.length ? ALL_ROWS.filter(r=>ownerFilter.includes(r.ta_owner)) : ALL_ROWS;
   const now = new Date();
 
@@ -435,74 +423,40 @@ function render(){
   document.getElementById('kpiOfferRate').textContent = offerRate===null ? '—' : `${offerRate}%`;
   document.getElementById('kpiOfferFoot').textContent = offersWithOutcome.length ? `${offersWithOutcome.length} offers recorded` : 'No offer outcomes recorded yet';
 
-  renderLeaderboard();
-  renderOpenByOwnerChart();
-  renderAgeDistChart(openNow);
-  renderOfferByOwnerChart();
-  renderRetentionByOwnerChart();
+  renderOpenByOwnerList();
+  renderAgeDistList(openNow);
+  renderOfferByOwnerList();
+  renderRetentionByOwnerList();
 }
 
 function ownersInUse(){
   return PROFILES.filter(p=>ALL_ROWS.some(r=>r.ta_owner===p.id));
 }
 
-function renderLeaderboard(){
-  const owners = ownersInUse();
-  const rows = owners.map(p=>{
-    const mine = ALL_ROWS.filter(r=>r.ta_owner===p.id);
-    const openReqs = mine.filter(r=>OPEN_PIPELINE_STATUSES.includes(r.position_status)).length;
-    const closedYTD = mine.filter(r=>r.position_status==='Closed' && r.hiring_date && new Date(r.hiring_date).getFullYear()===selectedYear);
-    const ttfRows = closedYTD.filter(r=>r.job_opening_date && r.offer_acceptance_date);
-    const ttfDays = ttfRows.map(r=>daysBetween(new Date(r.offer_acceptance_date), new Date(r.job_opening_date)));
-    const avgTTF = ttfDays.length ? Math.round(ttfDays.reduce((a,b)=>a+b,0)/ttfDays.length) : null;
-    const offers = mine.filter(r=>r.offer_outcome==='Accepted'||r.offer_outcome==='Declined');
-    const offerRate = offers.length ? Math.round((offers.filter(r=>r.offer_outcome==='Accepted').length/offers.length)*100) : null;
-    const retentionRows = mine.filter(r=>r.retention_status==='Yes'||r.retention_status==='No');
-    const retentionRate = retentionRows.length ? Math.round((retentionRows.filter(r=>r.retention_status==='Yes').length/retentionRows.length)*100) : null;
-    return { name: p.full_name, openReqs, closedCount: closedYTD.length, avgTTF, offerRate, retentionRate };
-  }).sort((a,b)=>b.closedCount - a.closedCount);
-
-  const tbody = document.getElementById('leaderTableBody');
-  tbody.innerHTML = rows.map((r,i)=>`
-    <tr>
-      <td><span class="rank-badge ${i===0 && r.closedCount>0 ? 'top':''}">${i+1}</span></td>
-      <td>${r.name}</td>
-      <td>${r.openReqs}</td>
-      <td>${r.closedCount}</td>
-      <td>${r.avgTTF===null?'—':r.avgTTF+'d'}</td>
-      <td>${r.offerRate===null?'—':r.offerRate+'%'}</td>
-      <td>${r.retentionRate===null?'—':r.retentionRate+'%'}</td>
-    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-mute);padding:24px;">No recruiters assigned to positions yet.</td></tr>';
-}
-
-function setCardAvailable(cardId, available, message){
-  const card = document.getElementById(cardId);
-  let overlay = card.querySelector('.card-unavailable');
-  const holder = card.querySelector('.chart-holder');
-  if(available){ if(overlay) overlay.remove(); holder.style.display=''; }
-  else{
-    holder.style.display='none';
-    if(!overlay){ overlay = document.createElement('div'); overlay.className='card-unavailable'; card.appendChild(overlay); }
-    overlay.textContent = message || 'No data for this selection.';
+// Round #36 — "Where the work is" shows plain numbers, not charts. This
+// renders a sorted name/value list into a .stat-list container, or an
+// empty-state message (same idea as the old setCardAvailable, just for a
+// plain list instead of a chart canvas).
+function renderStatList(containerId, rows, message){
+  const el = document.getElementById(containerId);
+  if(!rows.length){
+    el.innerHTML = '<div class="card-unavailable">' + escapeHtml(message || 'No data for this selection.') + '</div>';
+    return;
   }
+  el.innerHTML = rows.map(r=>
+    '<div class="stat-row"><span class="stat-name">'+escapeHtml(r.name)+'</span><span class="stat-value">'+escapeHtml(r.value)+'</span></div>'
+  ).join('');
 }
-function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-function renderOpenByOwnerChart(){
+function renderOpenByOwnerList(){
   const owners = ownersInUse();
   const map = {};
   owners.forEach(p=>{ map[p.full_name] = ALL_ROWS.filter(r=>r.ta_owner===p.id && OPEN_PIPELINE_STATUSES.includes(r.position_status)).length; });
   const names = Object.keys(map).sort((a,b)=>map[b]-map[a]);
-  if(!names.length){ setCardAvailable('card-openByOwner', false); destroyChart('openByOwner'); return; }
-  setCardAvailable('card-openByOwner', true);
-  destroyChart('openByOwner');
-  charts.openByOwner = new Chart(document.getElementById('chartOpenByOwner'), {
-    type:'bar',
-    data:{ labels:names.map(n=>`${n} (${map[n]})`), datasets:[{ data:names.map(n=>map[n]), backgroundColor:'#065BAB', borderRadius:5, maxBarThickness:26 }]},
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true, ticks:{precision:0}} } }
-  });
+  renderStatList('listOpenByOwner', names.map(n=>({ name:n, value:String(map[n]) })));
 }
-function renderAgeDistChart(openNow){
+function renderAgeDistList(openNow){
   const now = new Date();
   const buckets = { '0-7d':0, '8-14d':0, '15-30d':0, '31-60d':0, '60+ d':0 };
   openNow.forEach(r=>{
@@ -516,50 +470,27 @@ function renderAgeDistChart(openNow){
   });
   const names = Object.keys(buckets);
   const total = names.reduce((a,n)=>a+buckets[n],0);
-  if(!total){ setCardAvailable('card-ageDist', false); destroyChart('ageDist'); return; }
-  setCardAvailable('card-ageDist', true);
-  destroyChart('ageDist');
-  charts.ageDist = new Chart(document.getElementById('chartAgeDist'), {
-    type:'bar',
-    data:{ labels:names, datasets:[{ data:names.map(n=>buckets[n]), backgroundColor:'#FCAF17', borderRadius:5, maxBarThickness:34 }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
-  });
+  renderStatList('listAgeDist', total ? names.map(n=>({ name:n, value:String(buckets[n]) })) : []);
 }
-function renderOfferByOwnerChart(){
+function renderOfferByOwnerList(){
   const owners = ownersInUse();
-  const names = [], values = [];
+  const rows = [];
   owners.forEach(p=>{
     const offers = ALL_ROWS.filter(r=>r.ta_owner===p.id && (r.offer_outcome==='Accepted'||r.offer_outcome==='Declined'));
     if(!offers.length) return;
-    names.push(p.full_name);
-    values.push(Math.round((offers.filter(r=>r.offer_outcome==='Accepted').length/offers.length)*100));
+    rows.push({ name: p.full_name, value: Math.round((offers.filter(r=>r.offer_outcome==='Accepted').length/offers.length)*100) + '%' });
   });
-  if(!names.length){ setCardAvailable('card-offerByOwner', false); destroyChart('offerByOwner'); return; }
-  setCardAvailable('card-offerByOwner', true);
-  destroyChart('offerByOwner');
-  charts.offerByOwner = new Chart(document.getElementById('chartOfferByOwner'), {
-    type:'bar',
-    data:{ labels:names, datasets:[{ data:values, backgroundColor:'#ED1C24', borderRadius:5, maxBarThickness:34 }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, max:100, ticks:{callback:v=>v+'%'}} } }
-  });
+  renderStatList('listOfferByOwner', rows);
 }
-function renderRetentionByOwnerChart(){
+function renderRetentionByOwnerList(){
   const owners = ownersInUse();
-  const names = [], values = [];
+  const rows = [];
   owners.forEach(p=>{
-    const rows = ALL_ROWS.filter(r=>r.ta_owner===p.id && (r.retention_status==='Yes'||r.retention_status==='No'));
-    if(!rows.length) return;
-    names.push(p.full_name);
-    values.push(Math.round((rows.filter(r=>r.retention_status==='Yes').length/rows.length)*100));
+    const retRows = ALL_ROWS.filter(r=>r.ta_owner===p.id && (r.retention_status==='Yes'||r.retention_status==='No'));
+    if(!retRows.length) return;
+    rows.push({ name: p.full_name, value: Math.round((retRows.filter(r=>r.retention_status==='Yes').length/retRows.length)*100) + '%' });
   });
-  if(!names.length){ setCardAvailable('card-retentionByOwner', false); destroyChart('retentionByOwner'); return; }
-  setCardAvailable('card-retentionByOwner', true);
-  destroyChart('retentionByOwner');
-  charts.retentionByOwner = new Chart(document.getElementById('chartRetentionByOwner'), {
-    type:'bar',
-    data:{ labels:names, datasets:[{ data:values, backgroundColor:'#383839', borderRadius:5, maxBarThickness:34 }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, max:100, ticks:{callback:v=>v+'%'}} } }
-  });
+  renderStatList('listRetentionByOwner', rows);
 }
 
 const _countUpFrom = {};

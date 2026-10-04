@@ -210,12 +210,6 @@
         <p>Per-recruiter performance — open load, requisition age, time-to-fill, offer acceptance, 1-year retention.</p>
       </a>
 
-      <a href="achievements.html" class="module-card gold" id="achieveCard">
-        <span class="module-icon">🎉</span>
-        <h3>Celebrate Achievements</h3>
-        <p>Highlight closed hires and milestones across the team, plus shoutouts from leadership.</p>
-      </a>
-
       <a href="admin.html" class="module-card" id="adminCard" style="display:none;border-left-color:var(--charcoal-soft);">
         <span class="module-icon">⚙️</span>
         <h3>Admin Settings</h3>
@@ -269,16 +263,13 @@ async function loadCurrentUserAndApp(){
     document.getElementById('mpCard').style.display = 'none';
     document.getElementById('dashCard').style.display = 'none';
     document.getElementById('kpiCard').style.display = 'none';
-    document.getElementById('achieveCard').style.display = 'none';
   } else if(profile.role === 'top_management'){
     // Top Management: Dashboard + final approval on Manpower Plan only.
     document.getElementById('kpiCard').style.display = 'none';
-    document.getElementById('achieveCard').style.display = 'none';
   } else if(profile.role === 'company_vp'){
     // Company VP: view-only — Dashboard + Manpower Plan (Total-Only cost
     // view), nothing else. Not part of the approval chain.
     document.getElementById('kpiCard').style.display = 'none';
-    document.getElementById('achieveCard').style.display = 'none';
   }
 }
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
