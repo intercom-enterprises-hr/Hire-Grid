@@ -562,11 +562,11 @@ const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
 const EMPLOYMENT_TYPES = ['Full Time','Part Time - Non Project Based'];
 const BUSINESS_NEED_TYPES = ['New Position','Replacement'];
 const INTERNAL_OR_PROJECT_OPTIONS = ['Internal','Project']; // product owner change #6
-const DEFAULT_COST_VISIBILITY = {bu_head:'total_only', recruiter:'full_breakdown', head_of_hr:'full_breakdown', top_management:'total_only', company_vp:'total_only', admin:'full_breakdown'};
+const DEFAULT_COST_VISIBILITY = {bu_head:'total_only', recruiter:'full_breakdown', head_of_hr:'full_breakdown', top_management:'total_only', admin:'full_breakdown'};
 
 /* ====================== STATE ====================== */
 let currentUser = null;
@@ -636,9 +636,9 @@ async function loadCurrentUserAndApp(){
     document.getElementById('teamLink').style.display = '';
   }
   // Product owner request (round #21) — Recruitment Insights is a
-  // recruiter-performance page, not something BU Head/Top Management/
-  // Company VP need in their nav.
-  if(['bu_head','top_management','company_vp'].includes(currentUser.role)){
+  // recruiter-performance page, not something BU Head/Top Management
+  // need in their nav.
+  if(['bu_head','top_management'].includes(currentUser.role)){
     const kpiLink = document.getElementById('navKpiLink'); if(kpiLink) kpiLink.style.display = 'none';
   }
   document.getElementById('addOpenBtn').style.display = canCreate() ? '' : 'none';

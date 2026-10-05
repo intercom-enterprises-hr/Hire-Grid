@@ -253,7 +253,7 @@ async function loadCurrentUserAndApp(){
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('whoName').textContent = profile.full_name;
   document.getElementById('whoFirstName').textContent = (profile.full_name || '').split(' ')[0];
-  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'}[profile.role] || profile.role;
+  document.getElementById('whoRole').textContent = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'}[profile.role] || profile.role;
 
   if(profile.role === 'admin'){
     // Admins manage accounts & settings — recruitment modules aren't
@@ -263,12 +263,10 @@ async function loadCurrentUserAndApp(){
     document.getElementById('mpCard').style.display = 'none';
     document.getElementById('dashCard').style.display = 'none';
     document.getElementById('kpiCard').style.display = 'none';
-  } else if(profile.role === 'top_management'){
-    // Top Management: Dashboard + final approval on Manpower Plan only.
-    document.getElementById('kpiCard').style.display = 'none';
-  } else if(profile.role === 'company_vp'){
-    // Company VP: view-only — Dashboard + Manpower Plan (Total-Only cost
-    // view), nothing else. Not part of the approval chain.
+  } else if(['top_management','bu_head'].includes(profile.role)){
+    // Round #37 — Top Management and BU Head don't need Recruitment
+    // Insights (it's recruiter-performance data, not something either of
+    // them acts on).
     document.getElementById('kpiCard').style.display = 'none';
   }
 }

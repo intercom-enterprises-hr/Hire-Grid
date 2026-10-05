@@ -359,7 +359,7 @@ const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
 
 const STATUS_META = {
   Requested:    { desc: 'Waiting on Head of HR / TA Leader approval' },
@@ -1211,7 +1211,7 @@ document.getElementById('saveStatutoryBtn').addEventListener('click', async ()=>
 
 /* ====================== COST VISIBILITY SETTINGS (BR-16) ====================== */
 let COST_VIS_ROWS = [];
-const COST_VIS_ROLES = ['bu_head','recruiter','head_of_hr','top_management','company_vp','admin'];
+const COST_VIS_ROLES = ['bu_head','recruiter','head_of_hr','top_management','admin'];
 async function loadCostVisibility(){
   const { data } = await sb.from('cost_visibility_settings').select('*');
   COST_VIS_ROWS = data || [];
