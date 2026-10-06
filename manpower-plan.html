@@ -1389,18 +1389,19 @@ function currentlyFilteredWorklistRows(){
 // Sums Total Current Year Cost across whatever's currently shown in the
 // worklist (same filters as the table itself). Grouped by currency
 // rather than added together across currencies, since a straight sum of
-// EGP + SAR + AED figures would be meaningless. Rejected and On Hold
-// positions are excluded from the sum.
+// EGP + SAR + AED figures would be meaningless. Positions rejected by Top
+// Management are excluded from the sum.
 function renderWorklistCostSummary(rows){
   const el = document.getElementById('worklistCostSummary');
   if(!el) return;
   const totals = {};
   rows.forEach(r=>{
     if(r.total_current_year_cost == null) return;
-    // Round #38 — a Rejected or On Hold position isn't going to spend
-    // that budget, so its cost is left out of the total (the row itself
-    // still shows its own cost figure in the table).
-    if(r.status === 'Rejected' || r.position_status === 'On Hold') return;
+    // Round #41 — every position counts toward the total (including On
+    // Hold ones) EXCEPT those Top Management rejected. A rejection leaves
+    // current_step on the step that rejected it, so "rejected at the Top
+    // Management step" is: status Rejected + that step's role.
+    if(r.status === 'Rejected' && requiredRoleFor(r) === 'top_management') return;
     const cur = r.currency || '';
     totals[cur] = (totals[cur]||0) + r.total_current_year_cost;
   });
