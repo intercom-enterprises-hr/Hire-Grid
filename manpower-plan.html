@@ -261,6 +261,7 @@
         <div id="filterDivision"></div>
         <div id="filterDepartment"></div>
         <div id="filterStatus"></div>
+        <div id="filterHiringStatus"></div>
         <div class="spacer"></div>
         <button class="btn btn-secondary" id="exportExcelBtn" style="display:none;">Export to Excel</button>
         <!-- Round #12 (product owner): bulk-add positions from Excel —
@@ -660,7 +661,8 @@ async function loadCurrentUserAndApp(){
   // populateFilterOptions() on every loadRows()).
   makeMultiSelect('filterDivision', 'All divisions');
   makeMultiSelect('filterDepartment', 'All departments');
-  makeMultiSelect('filterStatus', 'All statuses');
+  makeMultiSelect('filterStatus', 'All Position Approval Statuses');
+  makeMultiSelect('filterHiringStatus', 'All Hiring Statuses');
   makeMultiSelect('tmFilterDepartment', 'All departments');
   await loadRows();
 }
@@ -766,6 +768,8 @@ function populateFilterOptions(){
   fillSelect('filterDepartment', uniqueSorted(ALL_ROWS.map(r=>r.department)));
   const statuses = uniqueSorted(ALL_ROWS.map(r=>r.status));
   fillSelect('filterStatus', statuses);
+  // Round #40 — Hiring Status is a derived label (see hiringStatusLabel()), so its options are a fixed list.
+  fillSelect('filterHiringStatus', ['Will Open Soon','Active','On Hold','Hired']);
   fillSelect('tmFilterDepartment', uniqueSorted(ALL_ROWS.map(r=>r.department)));
 }
 function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
@@ -1369,10 +1373,12 @@ function currentlyFilteredWorklistRows(){
   const fDiv = selectedValues('filterDivision');
   const fDept = selectedValues('filterDepartment');
   const fStatus = selectedValues('filterStatus');
+  const fHiring = selectedValues('filterHiringStatus');
   return visibleRows().filter(r=>{
     if(fDiv.length && !fDiv.includes(r.division)) return false;
     if(fDept.length && !fDept.includes(r.department)) return false;
     if(fStatus.length && !fStatus.includes(r.status)) return false;
+    if(fHiring.length && !fHiring.includes(hiringStatusLabel(r))) return false;
     if(search){
       const hay = [r.position_code, r.position_title].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
@@ -1561,7 +1567,7 @@ function updateWorklistSelectionUi(){
   document.getElementById('worklistSelectionHint').textContent = worklistSelectedIds.size + ' selected';
 }
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-['searchBox','filterDivision','filterDepartment','filterStatus'].forEach(id=>{
+['searchBox','filterDivision','filterDepartment','filterStatus','filterHiringStatus'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
   document.getElementById(id).addEventListener('change', renderTable);
 });
