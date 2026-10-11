@@ -59,9 +59,17 @@
   #loginError{color:var(--red);font-size:12.5px;margin-top:4px;min-height:16px;}
   #appScreen{display:none;}
 
-  .tab-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .tab-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
   .tab-btn{font-family:inherit;font-size:13px;font-weight:600;padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:#fff;color:var(--text-mute);cursor:pointer;}
   .tab-btn.active{background:var(--charcoal);color:#fff;border-color:var(--charcoal);}
+  /* Product-owner change: the default/home view ("All Positions") is a
+     plain heading, not a pill-shaped button like the other tabs — it
+     still switches the view back when clicked (same click handler,
+     just a different look), but it no longer looks like a toggle you
+     have to press. */
+  .tab-btn.tab-heading{font-size:18px;padding:8px 4px;border:none;background:transparent;color:var(--charcoal);border-radius:0;}
+  .tab-btn.tab-heading.active{background:transparent;color:var(--charcoal);border-color:transparent;text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:3px;text-underline-offset:4px;}
+  .tab-btn.tab-heading:not(.active){color:var(--text-mute);text-decoration:none;}
 
   .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;}
   .toolbar input[type=text], .toolbar select{
@@ -70,9 +78,26 @@
   .toolbar .spacer{flex:1;}
 
   .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  /* Bug fix (round #10): the worklist table (and the inline editor row
+   * that lives inside it) can get wider than the viewport once enough
+   * columns/fields pile up. .card used to clip that overflow with
+   * overflow:hidden and no scrollbar at all — content (including the
+   * Save/Submit/Cancel buttons of an open inline editor) that fell
+   * outside the visible width was simply unreachable, with nothing to
+   * scroll. .table-scroll gives the table its OWN horizontal scrollport
+   * so wide content is always reachable by scrolling left/right, instead
+   * of being cut off. */
+  .table-scroll{overflow-x:auto;overflow-y:visible;max-width:100%;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.02em;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
-  td{padding:10px 12px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  /* Item #3: narrower columns + headers that wrap their label text
+   * instead of forcing one-line-per-column width, so the table needs
+   * less horizontal scrolling overall. */
+  th{text-align:left;background:#fafafa;color:var(--text-mute);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.02em;padding:8px 8px;border-bottom:1px solid var(--border);white-space:normal;word-break:break-word;min-width:64px;}
+  td{padding:8px 8px;border-bottom:1px solid #f0f0f2;vertical-align:middle;white-space:nowrap;}
+  /* Wordier columns (Position/Department/Business Need) are capped and
+   * truncated with an ellipsis + a title="" tooltip carrying the full
+   * text, rather than each forcing the whole table wider. */
+  td.cell-trunc{max-width:150px;overflow:hidden;text-overflow:ellipsis;}
   tr:last-child td{border-bottom:none;}
   tr:hover td{background:#fafafa;}
   .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;white-space:nowrap;}
@@ -81,6 +106,12 @@
   .status-Approved{background:#f0fdf4;color:#15803d;font-weight:700;}
   .status-Rejected{background:#fef2f2;color:#b91c1c;}
   .status-Returned{background:#fdf2f8;color:#9d174d;font-weight:700;}
+  /* Round #33, item #3 — Hiring Status column pills (separate from the
+     approval-chain Status pills above). */
+  .status-Active{background:#f0fdf4;color:#15803d;font-weight:700;}
+  .status-On\.Hold{background:#fffbeb;color:#92400e;}
+  .status-Hired{background:#eef2ff;color:#4338ca;font-weight:700;}
+  .status-Will\.Open\.Soon{background:#f4f4f5;color:#52525b;}
   .status-Deleted{background:#f4f4f5;color:#7f1d1d;}
   .status-Requested{background:#eef2ff;color:#4338ca;}
   .status-Open{background:#fff7ed;color:#c2410c;}
@@ -99,6 +130,11 @@
   .modal p.sub{margin:0 0 18px;font-size:12.5px;color:var(--text-mute);}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
   .form-grid .full{grid-column:1/-1;}
+  /* Position details view (round #32) — groups the read-only field grid
+     under section headers so fields don't all run together as one long
+     list. */
+  .details-section-title{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.03em;margin:18px 0 2px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+  .details-section-title:first-child{margin-top:0;}
   .form-field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--charcoal-soft);}
   .form-field input, .form-field select, .form-field textarea{
     width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;
@@ -128,6 +164,57 @@
   .status-msg.ok{color:var(--blue);}
   .status-msg.err{color:var(--red);}
   .hint{font-size:11.5px;color:var(--text-mute);margin:0 0 10px;line-height:1.5;}
+
+  /* ---- Inline editable row (Add / Edit / Duplicate a position) ----
+   * Change #1: there is no separate "Add position" screen or modal —
+   * the form renders as a normal <tr> inside the worklist table
+   * itself, so nothing navigates and nothing overlays the page. */
+  tr.inline-editor-row td{background:#fbfbfe;white-space:normal;padding:16px 14px;border-bottom:2px solid var(--gold);}
+  /* BUG FIX (root cause): this <td> spans colspan=12, so its rendered
+   * width is the WHOLE table's width — which can be well over 1600px
+   * once enough form fields pile up (see the .table-scroll comment
+   * above). The head row used to be `justify-content:space-between`,
+   * which stretches the title block on the left and the action buttons
+   * all the way to the FAR RIGHT EDGE of that oversized row — i.e. off
+   * past the visible viewport, with .card's old overflow:hidden giving
+   * no way to scroll to them. That's why Cancel/Save/Submit existed in
+   * the DOM (existence checks passed) but weren't reachable on screen.
+   * Fix: pack the title and the actions together at the LEFT edge
+   * (flex-start, not space-between) so the buttons render right next to
+   * the title, near x=0, regardless of how wide the row is — and cap
+   * the title block's width so a long subtitle can never push them out.
+   * The actions bar is ALSO made sticky to the left edge of the
+   * table's own horizontal scrollport (.table-scroll), so it stays
+   * pinned in view even if the user does scroll the table sideways. */
+  .inline-editor-head{display:flex;justify-content:flex-start;align-items:flex-start;gap:14px;margin-bottom:10px;flex-wrap:wrap;}
+  .inline-editor-title{max-width:460px;}
+  .inline-editor-head h3{margin:0;font-size:14.5px;}
+  .inline-editor-head .sub{margin:2px 0 0;font-size:12px;color:var(--text-mute);}
+  .inline-editor-actions{
+    display:flex;gap:8px;flex-wrap:wrap;
+    position:sticky;left:14px;
+    background:#fbfbfe;padding:2px;border-radius:8px;z-index:2;
+  }
+  .draft-flag{display:inline-block;background:var(--gold);color:#3a2a00;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:8px;text-transform:uppercase;letter-spacing:0.03em;}
+  .form-field input[readonly], .form-field input:disabled.auto-field{background:#f4f4f5;color:var(--charcoal-soft);}
+  /* Item #8 — Internal/Project: both Cost Center and Project Name are
+   * always visible side by side; the one that doesn't apply is
+   * disabled (see JS) and visually dimmed via this class, rather than
+   * hidden — the point is the user can see both fields exist. */
+  .form-field.field-inactive{opacity:.45;}
+  /* Round #32, item #5 — multi-select checkbox dropdown, used for FILTER
+     controls only (not single-value data-entry fields). Replaces a plain
+     <select> so several values can be picked at once. */
+  .ms-dropdown{position:relative;display:inline-block;}
+  .ms-dropdown-btn{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:150px;color:inherit;}
+  .ms-dropdown-btn:hover{border-color:#c7c7cc;}
+  .ms-dropdown-caret{font-size:10px;color:var(--text-mute);}
+  .ms-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.14);padding:8px;min-width:210px;max-height:240px;overflow-y:auto;z-index:80;}
+  .ms-dropdown-panel.open{display:block;}
+  .ms-dropdown-opt{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  .ms-dropdown-opt:hover{background:#f4f4f5;}
+  .ms-dropdown-opt input{margin:0;}
+  .ms-dropdown-empty{font-size:12px;color:var(--text-mute);padding:6px;}
 </style>
 </head>
 <body>
@@ -151,10 +238,9 @@
       <h1>HireGrid <span class="hg-divider">·</span> Manpower Plan<span>Intercom Enterprises — Talent Acquisition</span></h1>
     </div>
     <div class="header-actions">
-      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Recruitment Home</a>
+      <a href="index.html" class="btn btn-ghost" style="text-decoration:none;">Home</a>
       <a href="dashboard.html" class="btn btn-ghost" style="text-decoration:none;">Dashboard</a>
-      <a href="recruiter-kpis.html" class="btn btn-ghost" style="text-decoration:none;">Recruiter KPIs</a>
-      <a href="achievements.html" class="btn btn-ghost" style="text-decoration:none;">Achievements</a>
+      <a href="recruiter-kpis.html" class="btn btn-ghost" id="navKpiLink" style="text-decoration:none;">Recruitment Insights</a>
       <a href="admin.html" class="btn btn-ghost" id="adminLink" style="display:none;text-decoration:none;">Admin Settings</a>
       <a href="teammates.html" class="btn btn-ghost" id="teamLink" style="display:none;text-decoration:none;">Team</a>
       <span class="who"><b id="whoName">—</b> <span class="role-badge" id="whoRole">—</span></span>
@@ -163,7 +249,7 @@
   </header>
   <main>
     <div class="tab-row" id="tabRow">
-      <button class="tab-btn active" data-view="worklist" id="tabWorklist">Worklist</button>
+      <button class="tab-btn tab-heading active" data-view="worklist" id="tabWorklist">All Positions</button>
       <button class="tab-btn" data-view="tmsummary" id="tabTmSummary" style="display:none;">Top Management Summary</button>
       <button class="tab-btn" data-view="deleted" id="tabDeleted" style="display:none;">Deleted Lines</button>
     </div>
@@ -172,23 +258,65 @@
     <div id="worklistView">
       <div class="toolbar">
         <input type="text" id="searchBox" placeholder="Search position, code…" style="min-width:220px;">
-        <select id="filterDivision"><option value="">All divisions</option></select>
-        <select id="filterDepartment"><option value="">All departments</option></select>
-        <select id="filterStatus"><option value="">All statuses</option></select>
+        <div id="filterDivision"></div>
+        <div id="filterDepartment"></div>
+        <div id="filterStatus"></div>
+        <div id="filterHiringStatus"></div>
         <div class="spacer"></div>
         <button class="btn btn-secondary" id="exportExcelBtn" style="display:none;">Export to Excel</button>
+        <!-- Round #12 (product owner): bulk-add positions from Excel —
+             visible to whoever can already create lines one at a time
+             (canCreate(): bu_head, recruiter, head_of_hr). The upload
+             button triggers a hidden native file input rather than
+             building a custom drag/drop widget. -->
+        <button class="btn btn-secondary" id="downloadTemplateBtn" style="display:none;">Download Template</button>
+        <button class="btn btn-secondary" id="uploadExcelBtn" style="display:none;">Upload from Excel</button>
+        <input type="file" id="uploadExcelInput" accept=".xlsx,.xls" style="display:none;">
         <button class="btn btn-primary" id="addOpenBtn">+ Add Position</button>
       </div>
+      <!-- Bulk review toolbar — mirrors the Top Management Summary tab's
+           bulk toolbar, but for whichever rows on THIS worklist the
+           current user (or their active delegation) can act on right
+           now. Hidden entirely for a role that can never act on a line
+           (toggled in JS, same pattern as exportExcelBtn/canExport()). -->
+      <div class="toolbar" id="worklistBulkToolbar" style="display:none;">
+        <span class="hint" id="worklistSelectionHint">0 selected</span>
+        <div class="spacer"></div>
+        <button class="btn btn-secondary btn-small" id="worklistSelectAllBtn">Select all</button>
+        <button class="btn btn-secondary btn-small" id="worklistClearSelectionBtn">Clear selection</button>
+        <!-- Approve/Return/Reject — head_of_hr, ta_leader, top_management, admin, and active delegates. -->
+        <button class="btn btn-primary btn-small" id="worklistBulkApproveBtn">Approve selected</button>
+        <button class="btn btn-gold btn-small" id="worklistBulkReturnBtn">Return selected</button>
+        <button class="btn btn-danger btn-small" id="worklistBulkRejectBtn">Reject selected</button>
+        <!-- Edit — head_of_hr, ta_leader, admin only; only ever acts on exactly one selected line. -->
+        <button class="btn btn-secondary btn-small" id="worklistBulkEditBtn">Edit</button>
+        <!-- Submit / Duplicate / Delete — bu_head's own bulk action set (product owner spec: BU Head never gets Approve/Return/Reject/Edit in bulk, only these three). -->
+        <button class="btn btn-gold btn-small" id="worklistBulkSubmitBtn">Submit selected</button>
+        <button class="btn btn-secondary btn-small" id="worklistBulkDuplicateBtn">Duplicate selected</button>
+        <button class="btn btn-danger btn-small" id="worklistBulkDeleteBtn">Delete selected</button>
+      </div>
+      <!-- Round #12: per-row Upload-from-Excel results — a real inline
+           panel (not alert()) so several row errors are all readable at
+           once. Hidden whenever there is nothing to show. -->
+      <div class="card" id="importResultsPanel" style="display:none;margin-bottom:16px;"></div>
+      <!-- Product owner request (round #20): a running total of Total
+           Current Year Cost across whatever's currently filtered/shown
+           below — updates with search/division/department/status filters. -->
+      <div id="worklistCostSummary" style="margin-bottom:10px;font-weight:700;font-size:18px;color:var(--text);"></div>
       <div class="card">
+        <div class="table-scroll">
         <table>
           <thead>
             <tr id="worklistHeaderRow">
-              <th>Position ID</th><th>Position</th><th>Division</th><th>Department</th>
-              <th>Status</th><th>Submitted By</th><th id="costColHeader">Total Current Year Cost</th><th></th>
+              <th><input type="checkbox" id="worklistSelectAllCheckbox"></th>
+              <th>Branch</th><th>Position ID</th><th>Division</th><th>Department</th><th>Position</th>
+              <th>Cost Center</th><th>Business Need</th><th>Net Basic Monthly Salary</th>
+              <th id="costColHeader">Total Current Year Cost</th><th>Position Target Start Date</th><th>Hiring Status</th><th id="taOwnerColHeader" style="display:none;">TA Owner</th><th>Position Approval Status</th><th>Status Date</th><th>Submitted By</th><th></th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
         </table>
+        </div>
         <div class="empty-state" id="emptyState" style="display:none;">No positions match your filters yet.</div>
       </div>
     </div>
@@ -197,7 +325,7 @@
     <div id="tmSummaryView" style="display:none;">
       <p class="hint">Bulk-review every line waiting on Top Management approval. Select rows and use Approve / Reject / Return — reject and return both require a reason (BR-09), and can be applied to several selected lines at once, or one at a time.</p>
       <div class="toolbar">
-        <select id="tmFilterDepartment"><option value="">All departments</option></select>
+        <div id="tmFilterDepartment"></div>
         <div class="spacer"></div>
         <button class="btn btn-secondary btn-small" id="tmSelectAllBtn">Select All</button>
         <button class="btn btn-secondary btn-small" id="tmClearSelectionBtn">Clear selection</button>
@@ -206,6 +334,7 @@
         <button class="btn btn-danger btn-small" id="tmBulkRejectBtn">Reject selected</button>
       </div>
       <div class="card">
+        <div class="table-scroll">
         <table>
           <thead>
             <tr>
@@ -216,6 +345,7 @@
           </thead>
           <tbody id="tmTableBody"></tbody>
         </table>
+        </div>
         <div class="empty-state" id="tmEmptyState" style="display:none;">Nothing is waiting on Top Management right now.</div>
       </div>
     </div>
@@ -224,31 +354,16 @@
     <div id="deletedView" style="display:none;">
       <p class="hint">Lines the Hiring Manager deleted outright after they were Returned or Rejected back to them (BR-21). Kept here for audit only — not part of any normal worklist.</p>
       <div class="card">
+        <div class="table-scroll">
         <table>
           <thead><tr><th>Position</th><th>Department</th><th>Deleted On</th><th>Deleted By</th></tr></thead>
           <tbody id="deletedTableBody"></tbody>
         </table>
+        </div>
         <div class="empty-state" id="deletedEmptyState" style="display:none;">No deleted lines.</div>
       </div>
     </div>
   </main>
-</div>
-
-<!-- Add / Edit modal -->
-<div class="modal-overlay" id="positionModal">
-  <div class="modal">
-    <h2 id="modalTitle">Add position</h2>
-    <p class="sub" id="modalSub">Every field below is required unless marked optional.</p>
-    <div class="form-grid" id="formGrid"></div>
-    <div class="section-label">Cost preview</div>
-    <div id="costPreview" style="grid-column:1/-1;"></div>
-    <div class="status-msg" id="formStatus"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" id="cancelFormBtn">Cancel</button>
-      <button class="btn btn-primary" id="saveFormBtn">Save as Draft</button>
-      <button class="btn btn-gold" id="submitFormBtn" style="display:none;">Submit for Approval</button>
-    </div>
-  </div>
 </div>
 
 <!-- Single-row approve/reject/return action modal -->
@@ -272,6 +387,20 @@
   </div>
 </div>
 
+<!-- Full-details view (item #2, round #23) — read-only, opened by
+     clicking anywhere on a worklist row. Available to every role,
+     including Recruiter (who has no action buttons on the row at all). -->
+<div class="modal-overlay" id="detailsModal">
+  <div class="modal">
+    <h2 id="detailsModalTitle">Position details</h2>
+    <p class="sub">Every field on file for this position — view only.</p>
+    <div class="form-grid" id="detailsModalGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="closeDetailsBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Bulk action reason modal (Top Management summary) -->
 <div class="modal-overlay" id="bulkReasonModal">
   <div class="modal narrow">
@@ -289,19 +418,156 @@
   </div>
 </div>
 
+<!-- Position Lifecycle modal (item 2): TA Owner assignment, closing
+     fields, Put On Hold / Reactivate / Revoke Closure. Shown for any line
+     that has fully cleared approval (position_status is set). Which
+     sections/buttons are visible is toggled in JS by openLifecycleModal()
+     based on the line's current position_status (Open / On Hold / Closed). -->
+<div class="modal-overlay" id="lifecycleModal">
+  <div class="modal">
+    <h2 id="lifecycleModalTitle">Manage position</h2>
+    <p class="sub" id="lifecycleModalSub"></p>
+    <div class="form-grid">
+      <div class="form-field full">
+        <label>TA Owner</label>
+        <select id="field_lifecycle_ta_owner"><option value="">— Unassigned —</option></select>
+      </div>
+      <div class="form-field"><label>Employee Code</label><input type="text" id="field_lifecycle_employee_code"></div>
+      <div class="form-field"><label>Employee Name</label><input type="text" id="field_lifecycle_employee_name"></div>
+      <div class="form-field"><label>Job Offer Acceptance Date</label><input type="date" id="field_lifecycle_offer_acceptance_date"></div>
+      <div class="form-field"><label>Employee Hiring Date</label><input type="date" id="field_lifecycle_hiring_date"></div>
+      <div class="form-field"><label>Seniority Level</label>
+        <select id="field_lifecycle_seniority_level">
+          <option value="">— Select —</option>
+          <option>Fresh</option><option>Junior</option><option>Mid-level</option><option>Senior</option><option>Lead</option><option>Team Leader</option><option>Manager</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Came From (Company Type)</label>
+        <select id="field_lifecycle_company_type">
+          <option value="">— Select —</option>
+          <option>System Integrator</option><option>Vendor</option><option>Distributor</option><option>NTI Graduate</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Offered Gross Basic Salary</label><input type="number" step="0.01" id="field_lifecycle_offered_gross_basic_salary"></div>
+      <div class="form-field"><label>Offered Transportation Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_transportation_allowance"></div>
+      <div class="form-field"><label>Offered Mobile Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_mobile_allowance"></div>
+      <div class="form-field"><label>Offered Support Allowance</label><input type="number" step="0.01" id="field_lifecycle_offered_support_allowance"></div>
+      <div class="form-field full" id="lifecycleJoinDateWrap">
+        <label>Expected Candidate Joining Date</label>
+        <input type="date" id="field_lifecycle_new_joining_date">
+      </div>
+      <div class="form-field full" id="lifecycleHoldDateWrap" style="display:none;">
+        <label>On Hold Date</label>
+        <input type="date" id="field_lifecycle_on_hold_date">
+      </div>
+      <div class="form-field full" id="lifecycleRevokeWrap" style="display:none;">
+        <label>Reason (candidate accepted, then didn't join)</label>
+        <textarea id="field_lifecycle_revoke_reason"></textarea>
+      </div>
+    </div>
+    <div class="status-msg" id="lifecycleStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelLifecycleBtn">Cancel</button>
+      <button class="btn btn-secondary" id="lifecycleSaveBtn">Save</button>
+      <button class="btn btn-gold" id="lifecycleHoldBtn">On Hold</button>
+      <button class="btn btn-primary" id="lifecycleReactivateBtn">Reactivate</button>
+      <button class="btn btn-primary" id="lifecycleCloseBtn">Hired</button>
+      <button class="btn btn-danger" id="lifecycleRevokeBtn">Revoke Closure</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
+/* ====================== MULTI-SELECT CHECKBOX DROPDOWN ======================
+   Round #32, item #5 — product owner: filter dropdowns should let you tick
+   several values at once instead of only one. This is a lightweight
+   replacement for a single-select <select> used as a FILTER (data-entry
+   fields elsewhere in the app stay single-select on purpose). The
+   container keeps its original id and exposes:
+     .msSetOptions(values)  — (re)populate the choices; values is an array
+                               of strings, or {value,label} objects
+     .msValues()            — array of currently-selected values ([] means
+                               "all", same meaning as "" on a native select)
+     .msClear()             — clears the selection
+   and dispatches a real 'change' event on every toggle, so existing
+   addEventListener(id,'change',...) wiring elsewhere keeps working
+   unchanged. fillSelect() below already checks for .msSetOptions and
+   defers to it automatically when present. */
+function makeMultiSelect(id, allLabel){
+  const host = document.getElementById(id);
+  if(!host || host.msSetOptions) return;
+  host.classList.add('ms-dropdown');
+  host.innerHTML = '<button type="button" class="ms-dropdown-btn"><span class="ms-dropdown-label"></span><span class="ms-dropdown-caret">▾</span></button><div class="ms-dropdown-panel"></div>';
+  const labelEl = host.querySelector('.ms-dropdown-label');
+  const btn = host.querySelector('.ms-dropdown-btn');
+  const panel = host.querySelector('.ms-dropdown-panel');
+  let options = []; // [{value,label}]
+  let selected = new Set();
+  function renderPanel(){
+    panel.innerHTML = options.length ? options.map(o=>
+      '<label class="ms-dropdown-opt"><input type="checkbox" value="'+String(o.value).replace(/"/g,'&quot;')+'" '+(selected.has(o.value)?'checked':'')+'> '+escapeMsHtml(o.label)+'</label>'
+    ).join('') : '<div class="ms-dropdown-empty">No options</div>';
+  }
+  function escapeMsHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function updateLabel(){
+    if(!selected.size){ labelEl.textContent = allLabel; return; }
+    if(selected.size === 1){
+      const only = [...selected][0];
+      const opt = options.find(o=>String(o.value)===String(only));
+      labelEl.textContent = opt ? opt.label : String(only);
+      return;
+    }
+    labelEl.textContent = allLabel.replace(/^All /i,'') + ' (' + selected.size + ')';
+  }
+  panel.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches('input[type="checkbox"]')){
+      if(e.target.checked) selected.add(e.target.value); else selected.delete(e.target.value);
+      updateLabel();
+      host.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+  });
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    document.querySelectorAll('.ms-dropdown-panel.open').forEach(p=>{ if(p!==panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', (e)=>{ if(!host.contains(e.target)) panel.classList.remove('open'); });
+
+  host.msSetOptions = function(values){
+    const prevSelected = selected;
+    options = (values||[]).map(v => (v && typeof v === 'object') ? v : { value:v, label:v });
+    const validValues = options.map(o=>String(o.value));
+    selected = new Set([...prevSelected].filter(v=>validValues.includes(String(v))));
+    renderPanel();
+    updateLabel();
+  };
+  host.msValues = function(){ return [...selected]; };
+  host.msClear = function(){ selected = new Set(); renderPanel(); updateLabel(); };
+  renderPanel();
+  updateLabel();
+}
+// Returns the selected values for a filter control, whether it's still a
+// native <select> (single value, as an array of 0 or 1) or has been
+// converted to a multi-select checkbox dropdown via makeMultiSelect().
+function selectedValues(id){
+  const el = document.getElementById(id);
+  if(!el) return [];
+  if(el.msValues) return el.msValues();
+  return el.value ? [el.value] : [];
+}
+
 /* ====================== CONFIG ====================== */
 const SUPABASE_URL = 'https://iohcdgwtopphxqefhjxs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5TQP9Wjdr6fL2hlQzigKJg_eeYMLRWU';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin', company_vp:'Company VP'};
+const ROLE_LABELS = {head_of_hr:'Head of HR', ta_leader:'TA Leader', recruiter:'Recruiter', bu_head:'BU Head', top_management:'Top Management', admin:'Admin'};
 const EMPLOYMENT_TYPES = ['Full Time','Part Time - Non Project Based'];
-const PRIORITIES = ['High','Medium','Low'];
 const BUSINESS_NEED_TYPES = ['New Position','Replacement'];
-const DEFAULT_COST_VISIBILITY = {bu_head:'total_only', recruiter:'full_breakdown', head_of_hr:'full_breakdown', top_management:'total_only', company_vp:'total_only', admin:'full_breakdown'};
+const INTERNAL_OR_PROJECT_OPTIONS = ['Internal','Project']; // product owner change #6
+const DEFAULT_COST_VISIBILITY = {bu_head:'total_only', recruiter:'full_breakdown', head_of_hr:'full_breakdown', top_management:'total_only', admin:'full_breakdown'};
 
 /* ====================== STATE ====================== */
 let currentUser = null;
@@ -309,20 +575,38 @@ let ALL_PROFILES = [];
 let ALL_DIVISIONS = [];
 let ALL_DEPARTMENTS = [];
 let ALL_SECTIONS = [];
+let ALL_SPECIALIZATIONS = [];   // migration 9 — optional 3rd level under Department+Section
+let ALL_CC_SCOPES = [];         // migration 9 — cost_center_scopes: (dept, section, specialization?) -> cost_center
 let ALL_COST_CENTERS = [];
 let ALL_BRANCHES = [];
 let ALL_POSITIONS = [];
+let ALL_COST_POLICY_TIERS = []; // migration 10 — replaces reading policy amounts directly off positions
 let ALL_ROWS = [];
 let COST_VIS = [];              // cost_visibility_settings rows
-let STATUTORY_EG = null;        // latest EG statutory_parameters.params
+let STATUTORY_EG = null;        // latest EG statutory_parameters.params — fallback only, used before any start date is chosen
+let ALL_STATUTORY_EG = [];      // every EG statutory_parameters row ({year, params}), so each calculation can use the row that actually matches the position's own year rather than always the newest one
 let MY_DELEGATED_ROLES = [];    // roles I can act as, via an active delegation
 let MY_BU_DEPARTMENTS = [];
+let MY_TA_LEADER_DEPARTMENTS = []; // departments this TA Leader covers (ta_leader_departments), same shape as MY_BU_DEPARTMENTS
 let editingRowId = null;
+let duplicatingFromId = null;   // change #3 — set while the inline editor was opened via "Duplicate"
+let inlineEditorOpen = false;   // change #1 — guards renderTable() from ever wiping an open, unsaved inline row
 let currentView = 'worklist';
 let tmSelectedIds = new Set();
+let worklistSelectedIds = new Set(); // same idea as tmSelectedIds, but for the main Worklist's own bulk toolbar
 let pendingBulkAction = null;   // 'rejected' | 'returned' — awaiting a shared reason
+let pendingBulkIdsSet = null;   // the Set (tmSelectedIds or worklistSelectedIds) the pending bulk action applies to
 let actionRow = null;           // row currently open in the single-row action modal
 let actionKind = null;          // 'approve'|'reject'|'return'|'delete'|'resubmit'
+// Whether this user could EVER act on some line's approval step — gates
+// whether the Worklist's bulk-review toolbar is shown at all. A plain
+// Recruiter, for instance, submits lines but never appears as an
+// approval-chain role, so showing Approve/Reject/Return buttons for them
+// would just be inert clutter.
+function canEverActOnSomeRow(){
+  return ['bu_head','ta_leader','head_of_hr','top_management','admin'].includes(currentUser.role)
+    || MY_DELEGATED_ROLES.length > 0;
+}
 
 /* ====================== AUTH ====================== */
 async function init(){
@@ -352,15 +636,41 @@ async function loadCurrentUserAndApp(){
     document.getElementById('adminLink').style.display = '';
     document.getElementById('teamLink').style.display = '';
   }
+  // Product owner request (round #21) — Recruitment Insights is a
+  // recruiter-performance page, not something BU Head/Top Management
+  // need in their nav.
+  if(['bu_head','top_management'].includes(currentUser.role)){
+    const kpiLink = document.getElementById('navKpiLink'); if(kpiLink) kpiLink.style.display = 'none';
+  }
   document.getElementById('addOpenBtn').style.display = canCreate() ? '' : 'none';
   document.getElementById('tabTmSummary').style.display = currentUser.role === 'top_management' ? '' : 'none';
   document.getElementById('tabDeleted').style.display = ['head_of_hr','admin'].includes(currentUser.role) ? '' : 'none';
 
   await Promise.all([
-    loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadCostCenters(),
-    loadBranches(), loadPositions(), loadCostVisibility(), loadStatutory(), loadMyDelegations(), loadMyBuDepartments()
+    loadProfiles(), loadDivisions(), loadDepartments(), loadSections(), loadSpecializations(), loadCostCenterScopes(), loadCostCenters(),
+    loadBranches(), loadPositions(), loadCostPolicyTiers(), loadCostVisibility(), loadStatutory(), loadMyDelegations()
   ]);
+  // Round #42 fix — these two work out "which departments do I cover" by
+  // matching against ALL_DEPARTMENTS, so they MUST run only after
+  // loadDepartments() has finished. They used to run in the same
+  // Promise.all as loadDepartments(); whenever the department list
+  // arrived second, a TA Leader / BU Head ended up covering NO
+  // departments and lost every Review / Manage Position / Delete button.
+  await Promise.all([loadMyBuDepartments(), loadMyTaLeaderDepartments()]);
   document.getElementById('exportExcelBtn').style.display = canExport() ? '' : 'none';
+  // Round #12 — same gate as "+ Add Position": whoever can create a
+  // line by hand can also bulk-add lines via Download Template / Upload
+  // from Excel.
+  document.getElementById('downloadTemplateBtn').style.display = canCreate() ? '' : 'none';
+  document.getElementById('uploadExcelBtn').style.display = canCreate() ? '' : 'none';
+  // Round #32, item #5 — worklist/TM-summary filters are multi-select
+  // checkbox dropdowns (one-time setup; option lists are filled in by
+  // populateFilterOptions() on every loadRows()).
+  makeMultiSelect('filterDivision', 'All divisions');
+  makeMultiSelect('filterDepartment', 'All departments');
+  makeMultiSelect('filterStatus', 'All Position Approval Statuses');
+  makeMultiSelect('filterHiringStatus', 'All Hiring Statuses');
+  makeMultiSelect('tmFilterDepartment', 'All departments');
   await loadRows();
 }
 function roleLabel(role){ return ROLE_LABELS[role] || role; }
@@ -377,7 +687,7 @@ document.getElementById('loginBtn').addEventListener('click', async ()=>{
 document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
   currentUser = null;
-  showLogin();
+  window.location.href = 'index.html'; // always land on the public landing page, not a stale in-memory login form
 });
 
 /* ====================== DATA LOADING ====================== */
@@ -385,13 +695,43 @@ async function loadProfiles(){ const { data } = await sb.from('profiles').select
 async function loadDivisions(){ const { data } = await sb.from('divisions').select('*').order('name'); ALL_DIVISIONS = data || []; }
 async function loadDepartments(){ const { data } = await sb.from('departments').select('*').order('name'); ALL_DEPARTMENTS = data || []; }
 async function loadSections(){ const { data } = await sb.from('sections').select('*').order('name'); ALL_SECTIONS = data || []; }
+async function loadSpecializations(){ const { data } = await sb.from('specializations').select('*').order('name'); ALL_SPECIALIZATIONS = data || []; }
+async function loadCostCenterScopes(){ const { data } = await sb.from('cost_center_scopes').select('*'); ALL_CC_SCOPES = data || []; }
 async function loadCostCenters(){ const { data } = await sb.from('cost_centers').select('*').order('name'); ALL_COST_CENTERS = data || []; }
 async function loadBranches(){ const { data } = await sb.from('branches').select('*').order('name'); ALL_BRANCHES = data || []; }
 async function loadPositions(){ const { data } = await sb.from('positions').select('*').order('title'); ALL_POSITIONS = data || []; }
+async function loadCostPolicyTiers(){ const { data } = await sb.from('cost_policy_tiers').select('*').order('name'); ALL_COST_POLICY_TIERS = data || []; }
 async function loadCostVisibility(){ const { data } = await sb.from('cost_visibility_settings').select('*'); COST_VIS = data || []; }
 async function loadStatutory(){
   const { data } = await sb.from('statutory_parameters').select('*').eq('country','EG').order('year', { ascending:false });
+  ALL_STATUTORY_EG = data || [];
   STATUTORY_EG = (data && data[0] && data[0].params) || MPCalc.defaultStatutoryParams();
+}
+// The statutory_parameters table is year+country versioned on purpose —
+// so a future year's constants (e.g. an updated SI Salary min/max for
+// 2027) can be added ahead of time without disturbing this year's own
+// calculations. Every calculation must therefore use the row that
+// actually matches the POSITION's own year (from its Target Start
+// Date), never blindly "whichever row was added most recently":
+//   1. an exact match for that year, if one exists;
+//   2. otherwise the closest earlier year on file (e.g. a 2026 position
+//      calculated before a 2026 row ever existed would fall back to the
+//      most recent year before it);
+//   3. otherwise (every row on file is for a LATER year than this
+//      position — nothing has been entered for this year or earlier
+//      yet) the earliest year on file, as the least-wrong available data;
+//   4. otherwise (no rows at all) the calc engine's own hardcoded defaults.
+function statutoryParamsForYear(year){
+  if(!ALL_STATUTORY_EG.length) return MPCalc.defaultStatutoryParams();
+  const exact = ALL_STATUTORY_EG.find(r=>r.year===year);
+  if(exact) return exact.params;
+  const atOrBefore = ALL_STATUTORY_EG.filter(r=>r.year<=year);
+  if(atOrBefore.length) return atOrBefore.reduce((a,b)=> a.year>b.year?a:b).params;
+  return ALL_STATUTORY_EG.reduce((a,b)=> a.year<b.year?a:b).params;
+}
+function statutoryParamsForDateStr(dateStr){
+  const year = dateStr ? new Date(dateStr).getFullYear() : NaN;
+  return statutoryParamsForYear(isNaN(year) ? new Date().getFullYear() : year);
 }
 async function loadMyDelegations(){
   MY_DELEGATED_ROLES = [];
@@ -410,6 +750,18 @@ async function loadMyBuDepartments(){
   const ids = (data || []).map(r=>r.department_id);
   MY_BU_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id));
 }
+// Analogous to loadMyBuDepartments() above, but for the TA Team Leader
+// approval-chain step: which departments THIS user (a ta_leader) covers,
+// queried directly by their own id against `ta_leader_departments`. NOT
+// to be confused with myRecruiterDepartmentIds() below, which is a
+// Recruiter looking up their TA Leader's departments via
+// currentUser.ta_leader_id — here currentUser IS the TA Leader.
+async function loadMyTaLeaderDepartments(){
+  if(currentUser.role !== 'ta_leader'){ MY_TA_LEADER_DEPARTMENTS = []; return; }
+  const { data } = await sb.from('ta_leader_departments').select('department_id').eq('ta_leader_id', currentUser.id);
+  const ids = (data || []).map(r=>r.department_id);
+  MY_TA_LEADER_DEPARTMENTS = ALL_DEPARTMENTS.filter(d=>ids.includes(d.id));
+}
 async function loadRows(){
   const { data, error } = await sb.from('manpower_plan').select('*').order('created_at', { ascending:false });
   if(error){ showToast('Could not load positions: ' + error.message); return; }
@@ -423,11 +775,16 @@ function populateFilterOptions(){
   fillSelect('filterDepartment', uniqueSorted(ALL_ROWS.map(r=>r.department)));
   const statuses = uniqueSorted(ALL_ROWS.map(r=>r.status));
   fillSelect('filterStatus', statuses);
+  // Round #40 — Hiring Status is a derived label (see hiringStatusLabel()), so its options are a fixed list.
+  fillSelect('filterHiringStatus', ['Will Open Soon','Active','On Hold','Hired']);
   fillSelect('tmFilterDepartment', uniqueSorted(ALL_ROWS.map(r=>r.department)));
 }
 function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort(); }
 function fillSelect(id, values){
   const el = document.getElementById(id);
+  // Round #32, item #5 — a filter converted to a multi-select checkbox
+  // dropdown (see makeMultiSelect()) handles its own option list.
+  if(el.msSetOptions){ el.msSetOptions(values); return; }
   const current = el.value;
   const placeholder = el.options[0];
   el.innerHTML = '';
@@ -437,8 +794,20 @@ function fillSelect(id, values){
 }
 
 /* ====================== ROLE / PERMISSION HELPERS ====================== */
-function canCreate(){ return ['bu_head','recruiter','head_of_hr'].includes(currentUser.role); }
-function canExport(){ return ['recruiter','head_of_hr','top_management','admin'].includes(currentUser.role); } // BR-22 minimum
+// Product owner change (round #17): Recruiter is now view-only across the
+// whole Manpower Plan request/approval workflow — they never create,
+// duplicate, edit, or submit a line themselves any more (removed from
+// this list). They keep a SEPARATE, narrow editing right on the
+// post-approval "position lifecycle" fields (employee code, hiring date,
+// etc.) once a TA Team Leader assigns them as that specific line's TA
+// Owner — see canEditLifecycleFields() below; that's a different field
+// set and a different RLS policy, not this one.
+function canCreate(){ return ['bu_head','head_of_hr','ta_leader'].includes(currentUser.role); }
+// Round #12: BU Head also gets Export to Excel now — the cost-visibility
+// rule (getCostVisibilityLevel) still governs WHICH columns are exported
+// for them (see the export click handler below), so this addition alone
+// never leaks the full cost breakdown a BU Head doesn't see on screen.
+function canExport(){ return ['recruiter','head_of_hr','top_management','admin','bu_head'].includes(currentUser.role); } // BR-22 minimum
 function getCostVisibilityLevel(role){
   const row = COST_VIS.find(r=>r.role===role);
   return (row && row.level) || DEFAULT_COST_VISIBILITY[role] || 'total_only';
@@ -465,21 +834,369 @@ function canActOnRow(row){
   if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) return false;
   const required = requiredRoleFor(row);
   if(!required) return false;
+  // TA Team Leader Review step: like a BU Head creating a line, a TA
+  // Leader may only ACT on a line for a department they actually cover
+  // (ta_leader_departments), not on every ta_leader-step row in the
+  // system. Mirrors loadMyBuDepartments()/MY_BU_DEPARTMENTS above.
+  if(required === 'ta_leader' && currentUser.role === required){
+    return MY_TA_LEADER_DEPARTMENTS.some(d=>d.id === row.department_id);
+  }
   if(currentUser.role === required) return true;
+  // Judgment call: a delegate acting on behalf of a TA Leader is NOT
+  // department-scoped here. Delegation (MY_DELEGATED_ROLES) only records
+  // {role, delegator_id, delegator_name} — it doesn't carry the
+  // delegator's own department coverage, and there's no per-delegation
+  // department list in the schema to check against. Scoping a delegate
+  // correctly would mean looking up ta_leader_departments for the
+  // SPECIFIC delegator_id(s) this user is standing in for (row-by-row,
+  // since a user could hold delegations from multiple TA Leaders with
+  // different coverage) rather than the flat MY_TA_LEADER_DEPARTMENTS
+  // list built for the current user's own id. That's a bigger, separate
+  // change, so — as explicitly allowed by the task — delegated ta_leader
+  // actions are left unscoped-by-department for now (same as every other
+  // delegated step already works today: MY_DELEGATED_ROLES only checks
+  // role, never department).
   return MY_DELEGATED_ROLES.some(d=>d.role === required);
 }
 function canResubmit(row){
   // Draft, or Returned-to-initiator: current_step === -1, and I'm the submitter.
+  // Recruiter is explicitly excluded — they're view-only for the request/
+  // approval workflow now, even on a line that (from before this change)
+  // still lists them as requested_by/submitted_by.
+  if(currentUser.role === 'recruiter') return false;
   return row.current_step === -1 && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id) && row.status !== 'Rejected' && !row.deleted_at;
 }
 function canDelete(row){
-  // BR-21: Hiring Manager may delete outright once it's Returned or
-  // Rejected back to them.
-  return currentUser.role === 'bu_head'
-    && (row.requested_by === currentUser.id || row.submitted_by === currentUser.id)
-    && (row.status === 'Returned for Revision' || row.status === 'Rejected')
-    && !row.deleted_at;
+  // BR-21: BU Head may delete outright once it's Returned or Rejected —
+  // for ANY line in one of their own covered departments, not only lines
+  // they personally submitted (product owner change: previously this
+  // required requested_by/submitted_by === them, which meant a BU Head
+  // could never delete a Returned/Rejected line a Recruiter or TA Leader
+  // had submitted for their department — fixed here, and on the DB side
+  // in migration 18, which also widens their read access to the whole
+  // department so those lines are even visible in the first place).
+  //
+  // Product owner fix (round #20): a BU Head may ALSO delete a line while
+  // it's still a Draft, or has been Submitted but not yet acted on by
+  // anyone (current_step === 0 — i.e. it hasn't cleared the TA Team
+  // Leader review step yet). Once that first approval happens and the
+  // line moves past step 0, it can no longer be deleted this way — only
+  // Returned/Rejected lines can, per BR-21 above.
+  if(currentUser.role !== 'bu_head') return false;
+  if(!MY_BU_DEPARTMENTS.some(d=>d.id === row.department_id)) return false;
+  if(row.deleted_at) return false;
+  return row.status === 'Returned for Revision' || row.status === 'Rejected'
+    || row.status === 'Draft' || row.current_step === 0;
 }
+
+/* ====================== POSITION LIFECYCLE (item 2) ======================
+ * Once a line has fully cleared approval, position_status stops being
+ * null (the front-end already sets it to 'Open' at final approval — see
+ * applyAction()) and the line enters its own separate lifecycle: TA Owner
+ * assignment, the post-hire closing fields, On Hold / Reactivate / Revoke
+ * Closure. Who can manage it:
+ *  - head_of_hr / admin: any line (matches their existing "update any
+ *    line" DB rights).
+ *  - ta_leader: any line in one of their own covered departments
+ *    (migration 20's new RLS policy mirrors this exactly).
+ *  - recruiter: ONLY a line where they are already the assigned TA Owner
+ *    (their pre-existing "own assigned recruiting line" DB right) — they
+ *    can fill in the closing fields for their own assignment, but cannot
+ *    assign/reassign the TA Owner themselves (see taOwnerCandidates()
+ *    and the disabled dropdown in openLifecycleModal() below).
+ *  - bu_head / top_management: no access (not part of this workflow). */
+function canManageLifecycle(row){
+  // Gate on row.status === 'Approved' — the authoritative "fully cleared
+  // approval" signal from THIS workflow (applyAction() sets it, together
+  // with position_status = 'Open', at the final approval step) — not on
+  // position_status alone. position_status is a much older field that
+  // predates the current approval_chain/current_step workflow entirely;
+  // on any row that was never actually run through applyAction (i.e.
+  // pre-existing data from before this workflow existed) it can hold a
+  // stale, unrelated leftover value that has nothing to do with whether
+  // the line is really approved. effectiveLifecycleStatus() below is what
+  // heals that — treating a missing/stale value as 'Open' once status
+  // really is 'Approved'.
+  if(!row || row.status !== 'Approved' || row.deleted_at) return false;
+  if(['head_of_hr','admin'].includes(currentUser.role)) return true;
+  if(currentUser.role === 'ta_leader') return MY_TA_LEADER_DEPARTMENTS.some(d=>d.id === row.department_id);
+  if(currentUser.role === 'recruiter') return row.ta_owner === currentUser.id;
+  return false;
+}
+// The position_status value to actually treat this Approved row as being
+// at — see the comment on canManageLifecycle() above for why this isn't
+// just "row.position_status".
+function effectiveLifecycleStatus(row){
+  return (row.position_status === 'On Hold' || row.position_status === 'Closed') ? row.position_status : 'Open';
+}
+// Round #33, item #3 — a plain-language hiring status for the worklist:
+//   Closed position_status            -> "Hired"
+//   On Hold position_status           -> "On Hold"
+//   Open, job_opening_date not reached yet (still more than 10 weeks out
+//     from Position Target Start Date) -> "Will Open Soon"
+//   Open, job_opening_date already reached -> "Active"
+// job_opening_date is maintained by a DB trigger as Position Target Start
+// Date minus 10 weeks (70 days) — see migration 23.
+function hiringStatusLabel(row){
+  if(row.position_status === 'Closed') return 'Hired';
+  if(row.position_status === 'On Hold') return 'On Hold';
+  if(row.job_opening_date){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const opens = new Date(row.job_opening_date);
+    if(opens > today) return 'Will Open Soon';
+  }
+  return 'Active';
+}
+function hiringStatusPillClass(label){
+  return 'status-' + label.replace(/\s+/g,'.');
+}
+// Who a TA Owner can be assigned to: for a TA Leader, themself or one of
+// their own Recruiters (ta_leader_id === them) — "whether the TA TL or
+// Recruiter" — not the whole company's recruiters. head_of_hr/admin get
+// the full list since they oversee every team.
+function taOwnerCandidates(){
+  if(['head_of_hr','admin'].includes(currentUser.role)) return ALL_PROFILES.filter(p=>['ta_leader','recruiter'].includes(p.role));
+  if(currentUser.role === 'ta_leader') return ALL_PROFILES.filter(p=>p.id === currentUser.id || (p.role === 'recruiter' && p.ta_leader_id === currentUser.id));
+  return [];
+}
+// Fire-and-forget: the position lifecycle emails (item 2.5/2.6) are
+// informational, never a reason to block or roll back a save that has
+// already succeeded — so a failure here is logged, not surfaced as an
+// error to the user.
+async function notifyLifecycleEvent(type, manpowerPlanId, extra){
+  try {
+    const { error } = await sb.functions.invoke('mp-lifecycle-notify', { body: { type, manpower_plan_id: manpowerPlanId, extra: extra || null } });
+    if(error) console.warn('mp-lifecycle-notify returned an error (non-blocking):', error.message);
+  } catch(e){
+    console.warn('mp-lifecycle-notify failed (non-blocking):', e);
+  }
+}
+// Called directly by the app right after a BU Head's Submit succeeds,
+// instead of a Supabase Database Webhook on insert (this project is
+// missing the internal "supabase_functions" schema webhooks need, so a
+// webhook fails outright — calling the function directly sidesteps that
+// and matches the same pattern used for the lifecycle emails above).
+// `type` covers every stage of the approval workflow this function
+// knows about, not just the original new-request email — see
+// edge-functions/notify-new-request/index.ts for the full list.
+// Defaults to 'new_request' so the existing call sites (a fresh Submit,
+// or a Resubmit in resubmitRow()) don't need to change.
+async function notifyNewPositionRequest(manpowerPlanId, type){
+  try {
+    const { error } = await sb.functions.invoke('notify-new-request', { body: { manpower_plan_id: manpowerPlanId, type: type || 'new_request' } });
+    if(error) console.warn('notify-new-request returned an error (non-blocking):', error.message);
+  } catch(e){
+    console.warn('notify-new-request failed (non-blocking):', e);
+  }
+}
+// Round #26 (item #7): "if one of the roles selects several lines
+// together and submits or approves them, the next step person shall
+// receive one email with all positions" — the bulk-action call sites
+// (bulkSubmit/bulkApprove/the bulk reject-return handler) collect the
+// ids that ended up needing the SAME notification kind and send them
+// here together, instead of calling notifyNewPositionRequest() once
+// per line. The Edge Function sends one consolidated email per
+// audience listing every position, not one email per line.
+async function notifyNewPositionRequestBatch(manpowerPlanIds, type){
+  if(!manpowerPlanIds || !manpowerPlanIds.length) return;
+  try {
+    const { error } = await sb.functions.invoke('notify-new-request', { body: { manpower_plan_ids: manpowerPlanIds, type: type || 'new_request' } });
+    if(error) console.warn('notify-new-request (batch) returned an error (non-blocking):', error.message);
+  } catch(e){
+    console.warn('notify-new-request (batch) failed (non-blocking):', e);
+  }
+}
+let lifecycleRow = null;
+function collectLifecycleFieldPayload(){
+  const numOrNull = (id)=>{ const v = document.getElementById(id).value; return v !== '' ? parseFloat(v) : null; };
+  const numOrZero = (id)=>{ const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; };
+  return {
+    ta_owner: document.getElementById('field_lifecycle_ta_owner').value || null,
+    employee_code: document.getElementById('field_lifecycle_employee_code').value.trim() || null,
+    employee_name: document.getElementById('field_lifecycle_employee_name').value.trim() || null,
+    offer_acceptance_date: document.getElementById('field_lifecycle_offer_acceptance_date').value || null,
+    hiring_date: document.getElementById('field_lifecycle_hiring_date').value || null,
+    seniority_level: document.getElementById('field_lifecycle_seniority_level').value || null,
+    prior_company_type: document.getElementById('field_lifecycle_company_type').value || null,
+    offered_gross_basic_salary: numOrNull('field_lifecycle_offered_gross_basic_salary'),
+    offered_transportation_allowance: numOrZero('field_lifecycle_offered_transportation_allowance'),
+    offered_mobile_allowance: numOrZero('field_lifecycle_offered_mobile_allowance'),
+    offered_support_allowance: numOrZero('field_lifecycle_offered_support_allowance'),
+    // Expected Candidate Joining Date (product owner round #32, item #2):
+    // a TA Team Leader (or whoever can manage this line) can change this
+    // at any time via Save, not just during Reactivate.
+    expected_candidate_joining_date: document.getElementById('field_lifecycle_new_joining_date').value || null
+  };
+}
+function openLifecycleModal(row){
+  lifecycleRow = row;
+  document.getElementById('lifecycleModalTitle').textContent = 'Manage position — ' + (row.position_title || '');
+  document.getElementById('lifecycleModalSub').textContent = 'Position ID ' + (row.position_code || '—') + ' · Currently: ' + effectiveLifecycleStatus(row);
+
+  const taOwnerSelect = document.getElementById('field_lifecycle_ta_owner');
+  taOwnerSelect.innerHTML = '<option value="">— Unassigned —</option>';
+  taOwnerCandidates().forEach(p=>{
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.full_name + (p.role === 'ta_leader' ? ' (TA Team Leader)' : ' (Recruiter)');
+    taOwnerSelect.appendChild(o);
+  });
+  // If the currently-assigned TA Owner isn't in this viewer's own
+  // candidate list (e.g. a head_of_hr viewing a line already assigned to
+  // some other team's recruiter), still show who it is rather than
+  // silently blanking the field.
+  if(row.ta_owner && !taOwnerSelect.querySelector('option[value="'+row.ta_owner+'"]')){
+    const existing = ALL_PROFILES.find(p=>p.id === row.ta_owner);
+    const o = document.createElement('option'); o.value = row.ta_owner; o.textContent = existing ? existing.full_name : row.ta_owner;
+    taOwnerSelect.appendChild(o);
+  }
+  taOwnerSelect.value = row.ta_owner || '';
+  // Only a TA Leader (or HR/admin) assigns/reassigns the TA Owner — a
+  // Recruiter viewing their own assigned line sees it, but can't change it.
+  taOwnerSelect.disabled = !['ta_leader','head_of_hr','admin'].includes(currentUser.role);
+
+  document.getElementById('field_lifecycle_employee_code').value = row.employee_code || '';
+  document.getElementById('field_lifecycle_employee_name').value = row.employee_name || '';
+  document.getElementById('field_lifecycle_offer_acceptance_date').value = row.offer_acceptance_date || '';
+  document.getElementById('field_lifecycle_hiring_date').value = row.hiring_date || '';
+  document.getElementById('field_lifecycle_seniority_level').value = row.seniority_level || '';
+  document.getElementById('field_lifecycle_company_type').value = row.prior_company_type || '';
+  document.getElementById('field_lifecycle_offered_gross_basic_salary').value = row.offered_gross_basic_salary != null ? row.offered_gross_basic_salary : '';
+  document.getElementById('field_lifecycle_offered_transportation_allowance').value = row.offered_transportation_allowance != null ? row.offered_transportation_allowance : '';
+  document.getElementById('field_lifecycle_offered_mobile_allowance').value = row.offered_mobile_allowance != null ? row.offered_mobile_allowance : '';
+  document.getElementById('field_lifecycle_offered_support_allowance').value = row.offered_support_allowance != null ? row.offered_support_allowance : '';
+  document.getElementById('field_lifecycle_on_hold_date').value = row.on_hold_date || new Date().toISOString().slice(0,10);
+  document.getElementById('field_lifecycle_new_joining_date').value = row.expected_candidate_joining_date || '';
+  document.getElementById('field_lifecycle_revoke_reason').value = '';
+  document.getElementById('lifecycleStatus').textContent = '';
+
+  const status = effectiveLifecycleStatus(row);
+  // Expected Candidate Joining Date (round #33, item #1): only relevant to
+  // the Reactivate flow (On Hold -> Open), where it's required — not shown
+  // while marking a position Hired (that's a different field, Hiring
+  // Date), and not shown once Closed either.
+  document.getElementById('lifecycleJoinDateWrap').style.display = status === 'On Hold' ? '' : 'none';
+  document.getElementById('lifecycleHoldDateWrap').style.display = status === 'Open' ? '' : 'none';
+  document.getElementById('lifecycleRevokeWrap').style.display = status === 'Closed' ? '' : 'none';
+  document.getElementById('lifecycleHoldBtn').style.display = status === 'Open' ? '' : 'none';
+  document.getElementById('lifecycleCloseBtn').style.display = status === 'Open' ? '' : 'none';
+  document.getElementById('lifecycleReactivateBtn').style.display = status === 'On Hold' ? '' : 'none';
+  document.getElementById('lifecycleRevokeBtn').style.display = status === 'Closed' ? '' : 'none';
+
+  document.getElementById('lifecycleModal').classList.add('show');
+}
+document.getElementById('cancelLifecycleBtn').addEventListener('click', ()=> document.getElementById('lifecycleModal').classList.remove('show'));
+// Save — persists whatever's filled in (e.g. just the TA Owner
+// assignment, ahead of the closing fields being ready) without changing
+// position_status. Fires the "you've been assigned" email (2.5) whenever
+// the TA Owner actually changed to someone new.
+document.getElementById('lifecycleSaveBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const payload = collectLifecycleFieldPayload();
+  payload.updated_by = currentUser.id;
+  const prevTaOwner = lifecycleRow.ta_owner;
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Saved.');
+  if(payload.ta_owner && payload.ta_owner !== prevTaOwner) await notifyLifecycleEvent('ta_owner_assigned', lifecycleRow.id);
+  await loadRows();
+});
+// Mark Position Closed (2.1) — requires the minimum info that actually
+// makes it a closure (who got hired, and when), not just an empty status
+// flip. Fires the closure email (2.6).
+document.getElementById('lifecycleCloseBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const payload = collectLifecycleFieldPayload();
+  if(!payload.employee_code || !payload.employee_name || !payload.hiring_date || !payload.seniority_level || !payload.prior_company_type){
+    statusEl.textContent = 'Employee Code, Employee Name, Employee Hiring Date, Seniority Level, and Came From (Company Type) are required to mark a position as Hired.';
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  payload.position_status = 'Closed';
+  payload.closed_at = new Date().toISOString();
+  payload.closed_by = currentUser.id;
+  payload.updated_by = currentUser.id;
+  // Round #33, item #1 — Expected Candidate Joining Date belongs to the
+  // Reactivate flow, not the Hired details; always clear it here so a
+  // closed/hired position never carries a leftover value.
+  payload.expected_candidate_joining_date = null;
+  const prevTaOwner = lifecycleRow.ta_owner;
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Position marked as Hired.');
+  if(payload.ta_owner && payload.ta_owner !== prevTaOwner) await notifyLifecycleEvent('ta_owner_assigned', lifecycleRow.id);
+  await notifyLifecycleEvent('position_closed', lifecycleRow.id);
+  await loadRows();
+});
+// Put On Hold (2.2).
+document.getElementById('lifecycleHoldBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const holdDate = document.getElementById('field_lifecycle_on_hold_date').value;
+  if(!holdDate){ statusEl.textContent = 'A hold date is required to put this position on hold.'; statusEl.className = 'status-msg err'; return; }
+  const payload = collectLifecycleFieldPayload();
+  payload.position_status = 'On Hold';
+  payload.on_hold_date = holdDate;
+  payload.updated_by = currentUser.id;
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Position put on hold.');
+  // Round #26 (item #6) — Head of HR wants to know when a TA Team
+  // Leader puts a position on hold (previously silent, per the
+  // original spec — the product owner has now asked for this).
+  await notifyLifecycleEvent('position_on_hold', lifecycleRow.id, holdDate);
+  await loadRows();
+});
+// Reactivate an On-Hold position back to Open (2.3) — requires the new
+// expected joining date the product owner specifically called for.
+document.getElementById('lifecycleReactivateBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const newJoinDate = document.getElementById('field_lifecycle_new_joining_date').value;
+  if(!newJoinDate){ statusEl.textContent = 'A new expected joining date is required to reactivate this position.'; statusEl.className = 'status-msg err'; return; }
+  const payload = { position_status: 'Open', expected_candidate_joining_date: newJoinDate, on_hold_date: null, updated_by: currentUser.id };
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Position reactivated.');
+  // Round #26 (item #6) — and again when it's reactivated, including
+  // the new expected candidate joining date that was just set above.
+  await notifyLifecycleEvent('position_reactivated', lifecycleRow.id, newJoinDate);
+  await loadRows();
+});
+// Revoke Closure (2.4) — candidate accepted the offer, then didn't join;
+// back to Open, with a reason, and an email to the BU Head (2.4/2.6).
+// Round #32, item #2: also clears out the employee/offer details that were
+// recorded when it was marked Hired, since none of that actually happened —
+// the position should look genuinely open again, not still carrying a
+// "hired" person's details.
+document.getElementById('lifecycleRevokeBtn').addEventListener('click', async ()=>{
+  if(!lifecycleRow) return;
+  const statusEl = document.getElementById('lifecycleStatus');
+  const reason = document.getElementById('field_lifecycle_revoke_reason').value.trim();
+  if(!reason){ statusEl.textContent = 'A reason is required to revoke this closure.'; statusEl.className = 'status-msg err'; return; }
+  const payload = {
+    position_status: 'Open',
+    closed_at: null, closed_by: null,
+    revoked_at: new Date().toISOString(), revoked_by: currentUser.id, revoke_reason: reason,
+    updated_by: currentUser.id,
+    employee_code: null, employee_name: null, offer_acceptance_date: null, hiring_date: null,
+    seniority_level: null, prior_company_type: null,
+    offered_gross_basic_salary: null, offered_transportation_allowance: 0, offered_mobile_allowance: 0, offered_support_allowance: 0,
+    expected_candidate_joining_date: null
+  };
+  const { error } = await sb.from('manpower_plan').update(payload).eq('id', lifecycleRow.id);
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.className = 'status-msg err'; return; }
+  document.getElementById('lifecycleModal').classList.remove('show');
+  showToast('Closure revoked — position reopened.');
+  await notifyLifecycleEvent('closure_revoked', lifecycleRow.id, reason);
+  await loadRows();
+});
 
 /* ====================== VIEW SWITCHING ====================== */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -511,77 +1228,354 @@ function fmtMoney(v, currency){
   if(v == null || isNaN(v)) return '—';
   return Math.round(v).toLocaleString() + ' ' + (currency||'');
 }
-function visibleRows(){
-  return ALL_ROWS.filter(r=>!r.deleted_at);
+// Item #1 (round #23) — a human-readable date for the new "Status Date"
+// column and the full-details view. status_changed_at is stamped by the
+// DB trigger (migration 22) AND set client-side wherever `status` is
+// set (saveForm/applyAction/resubmitRow/deleteRow below), so it's always
+// present even against a stub/test environment that has no triggers.
+function fmtDate(v){
+  if(!v) return '—';
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
 }
-function renderTable(){
+// Item #3 (round #23) — the single source of truth for "every field in
+// the box we fill with each position", shared by the Excel export and
+// the click-to-view full-details modal (item #2) so the two can never
+// drift apart. Respects the same cost-visibility rule the on-screen
+// worklist already applies (getCostVisibilityLevel) — a 'total_only'
+// role (e.g. BU Head) still never sees the finer Total Monthly Cost
+// breakdown here either.
+// Round #32 — grouped into labeled sections (Position Info / Cost &
+// Compensation / Approval & Status / Position Lifecycle[ / Deleted]) so
+// the Position Details view doesn't read as one long unbroken list of
+// field boxes. Each section is [title, [[label,value],...]].
+function fieldsForRow(r, level){
+  const sections = [];
+
+  sections.push(['Position Info', [
+    ['Position ID', r.position_code || '—'],
+    ['Position', r.position_title || '—'],
+    ['Division', r.division || '—'],
+    ['Department', r.department || '—'],
+    ['Section', sectionName(r.section_id) || '—'],
+    ['Branch', branchName(r.branch_id) || '—'],
+    ['Employment Type', r.employment_type || '—'],
+    ['Internal / Project', r.internal_or_project || '—'],
+    ['Project Name', r.project_name || '—'],
+    ['Cost Center', costCenterName(r.cost_center_id) || '—'],
+    ['Business Need', r.business_need_type || r.business_need || '—'],
+    ['Employee Being Replaced', r.employee_being_replaced || '—'],
+    ['Justification', r.justification || '—'],
+    ['Position Target Start Date', r.position_target_start_date || '—'],
+  ]]);
+
+  const costFields = [
+    ['Department Utilization (%)', r.department_utilization != null ? r.department_utilization : '—'],
+    ['Net Basic Monthly Salary', fmtMoney(r.net_basic_monthly_salary, r.currency)],
+    ['Currency', r.currency || '—'],
+    ['Support Allowance Applicable', r.support_allowance_applicable ? 'Yes' : 'No'],
+    ['Gross Incentive', r.gross_incentive != null ? r.gross_incentive : '—'],
+    ['Top Management Approver', r.top_management_approver_id ? profileName(r.top_management_approver_id) : '—'],
+  ];
+  if(level !== 'total_only') costFields.push(['Total Monthly Cost', fmtMoney(r.total_monthly_cost, r.currency)]);
+  costFields.push(['Total Current Year Cost', fmtMoney(r.total_current_year_cost, r.currency)]);
+  costFields.push(['Onboarding One-Time Cost', fmtMoney(r.onboarding_one_time_cost, r.currency)]);
+  sections.push(['Cost & Compensation', costFields]);
+
+  sections.push(['Approval & Status', [
+    ['Position Approval Status', r.status || 'Draft'],
+    ['Status Date', fmtDate(r.status_changed_at)],
+    ['Approval Note', r.approval_note || '—'],
+    ['Submitted By', profileName(r.submitted_by||r.requested_by)],
+    ['Requested By', profileName(r.requested_by)],
+    ['Created By', profileName(r.created_by)],
+    ['Updated By', profileName(r.updated_by)],
+    ['Created At', fmtDate(r.created_at)],
+    ['Updated At', fmtDate(r.updated_at)],
+  ]]);
+
+  sections.push(['Position Lifecycle', [
+    ['Position Status', r.position_status || '—'],
+    ['TA Owner', r.ta_owner ? profileName(r.ta_owner) : '—'],
+    ['Employee Code', r.employee_code || '—'],
+    ['Employee Name', r.employee_name || '—'],
+    ['Job Offer Acceptance Date', r.offer_acceptance_date || '—'],
+    ['Hiring Date', r.hiring_date || '—'],
+    ['Seniority Level', r.seniority_level || '—'],
+    ['Came From (Company Type)', r.prior_company_type || '—'],
+    ['Expected Candidate Joining Date', r.expected_candidate_joining_date || '—'],
+    ['On Hold Date', r.on_hold_date || '—'],
+    ['Closed At', fmtDate(r.closed_at)],
+    ['Closed By', r.closed_by ? profileName(r.closed_by) : '—'],
+    ['Offer Outcome', r.offer_outcome || '—'],
+    ['Retention Status', r.retention_status || '—'],
+  ]]);
+
+  if(r.deleted_at){
+    sections.push(['Deleted', [
+      ['Deleted At', fmtDate(r.deleted_at)],
+      ['Deleted By', r.deleted_by ? profileName(r.deleted_by) : '—'],
+    ]]);
+  }
+
+  return sections;
+}
+function branchName(id){ const b = ALL_BRANCHES.find(b=>b.id===id); return b ? b.name : null; }
+function costCenterName(id){ const c = ALL_COST_CENTERS.find(c=>c.id===id); return c ? c.name : null; }
+// Product owner change #6 — a Project line has no Cost Center at all;
+// show its free-text Project Name instead, clearly labeled.
+function costCenterOrProjectCell(r){
+  if(r.internal_or_project === 'Project'){
+    return r.project_name ? (escapeHtml(r.project_name) + ' <span style="color:var(--text-mute);font-size:11px;">(Project)</span>') : '—';
+  }
+  return escapeHtml(costCenterName(r.cost_center_id) || '—');
+}
+function businessNeedCell(r){ return escapeHtml(r.business_need_type || r.business_need || '—'); }
+// Round #27 — has the given approval-chain role already cleared this row
+// (i.e. approved it, whatever happens further down the chain afterwards)?
+// The chain's role order is always ta_leader → bu_head → head_of_hr →
+// top_management, minus whichever role initiated the line (BR-15a), so a
+// role that isn't in the chain at all means that role WAS the initiator —
+// treated as "cleared" automatically, since they created the line
+// themselves. Otherwise the row has cleared that role's step once
+// current_step has moved past that step's index in ITS chain (a Rejected
+// line whose current_step never advanced past that step was never
+// actually approved by it, so it stays excluded).
+function hasClearedApprovalStep(row, roleName){
+  const chain = row.approval_chain || [];
+  const idx = chain.findIndex(c=>c.role === roleName);
+  if(idx === -1) return true; // that role wasn't part of this row's chain — they were the initiator
+  return row.current_step > idx;
+}
+function visibleRows(){
+  return ALL_ROWS.filter(r=>{
+    if(r.deleted_at) return false;
+    // Round #27 (product owner request) — Head of HR's worklist should
+    // only show positions the TA Team Leader has already approved, not
+    // every position system-wide (e.g. still pending/rejected at the TA
+    // Team Leader step). Same idea for Top Management, gated one step
+    // later on Head of HR's own approval.
+    if(currentUser.role === 'head_of_hr' && !hasClearedApprovalStep(r, 'ta_leader')) return false;
+    if(currentUser.role === 'top_management' && !hasClearedApprovalStep(r, 'head_of_hr')) return false;
+    // Product owner request (round #21) — a TA Team Leader's worklist
+    // should only show positions that have actually been Submitted, not
+    // other people's Drafts sitting unfinished. They still see their OWN
+    // draft (so they can get back to it), just not anyone else's.
+    if(currentUser.role === 'ta_leader' && r.status === 'Draft'
+      && r.requested_by !== currentUser.id && r.submitted_by !== currentUser.id) return false;
+    // Round #36 — a Recruiter should only ever see positions they're
+    // personally assigned to as TA Owner, not every position company-wide.
+    if(currentUser.role === 'recruiter' && r.ta_owner !== currentUser.id) return false;
+    return true;
+  });
+}
+// Same search/Division/Department/Status filtering renderTable() applies
+// to the on-screen worklist — pulled out so the bulk toolbar's "select all"
+// can select all CURRENTLY VISIBLE actionable rows, same as the TM
+// Summary tab's own select-all respects its department filter, rather
+// than reaching past whatever the user is currently filtered down to.
+function currentlyFilteredWorklistRows(){
   const search = document.getElementById('searchBox').value.trim().toLowerCase();
-  const fDiv = document.getElementById('filterDivision').value;
-  const fDept = document.getElementById('filterDepartment').value;
-  const fStatus = document.getElementById('filterStatus').value;
-
-  const level = getCostVisibilityLevel(currentUser.role);
-  document.getElementById('costColHeader').textContent = level === 'total_only' ? 'Total Current Year Cost' : 'Total Current Year Cost (full breakdown on row)';
-
-  const rows = visibleRows().filter(r=>{
-    if(fDiv && r.division !== fDiv) return false;
-    if(fDept && r.department !== fDept) return false;
-    if(fStatus && r.status !== fStatus) return false;
+  const fDiv = selectedValues('filterDivision');
+  const fDept = selectedValues('filterDepartment');
+  const fStatus = selectedValues('filterStatus');
+  const fHiring = selectedValues('filterHiringStatus');
+  return visibleRows().filter(r=>{
+    if(fDiv.length && !fDiv.includes(r.division)) return false;
+    if(fDept.length && !fDept.includes(r.department)) return false;
+    if(fStatus.length && !fStatus.includes(r.status)) return false;
+    if(fHiring.length && !fHiring.includes(hiringStatusLabel(r))) return false;
     if(search){
       const hay = [r.position_code, r.position_title].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
     }
     return true;
   });
+}
+// Sums Total Current Year Cost across whatever's currently shown in the
+// worklist (same filters as the table itself). Grouped by currency
+// rather than added together across currencies, since a straight sum of
+// EGP + SAR + AED figures would be meaningless. Positions rejected by Top
+// Management are excluded from the sum.
+function renderWorklistCostSummary(rows){
+  const el = document.getElementById('worklistCostSummary');
+  if(!el) return;
+  const totals = {};
+  rows.forEach(r=>{
+    if(r.total_current_year_cost == null) return;
+    // Round #41 — every position counts toward the total (including On
+    // Hold ones) EXCEPT those Top Management rejected. A rejection leaves
+    // current_step on the step that rejected it, so "rejected at the Top
+    // Management step" is: status Rejected + that step's role.
+    if(r.status === 'Rejected' && requiredRoleFor(r) === 'top_management') return;
+    const cur = r.currency || '';
+    totals[cur] = (totals[cur]||0) + r.total_current_year_cost;
+  });
+  const currencies = Object.keys(totals);
+  if(!currencies.length){ el.textContent = 'Sum of Total Year Cost: —'; return; }
+  el.textContent = 'Sum of Total Year Cost: ' + currencies.map(cur=>fmtMoney(totals[cur], cur)).join('  ·  ');
+}
+function renderTable(){
+  // Change #1: never blow away an open, unsaved inline "Add/Edit/Duplicate
+  // position" row just because a filter/search input fired a re-render —
+  // that's the "obviously safe from accidental data loss" requirement.
+  if(inlineEditorOpen) return;
+  // Round #36 — the worklist's Total Current Year Cost column always
+  // shows just the plain header and the plain total figure for every
+  // role now (the "(full breakdown on row)" header suffix and inline
+  // "(net X)" breakdown are gone) — the fuller breakdown is still
+  // available in the Position Details view and Excel export, which
+  // still respect getCostVisibilityLevel.
+  // Round #36 — TA Owner column is shown only for TA Team Leader,
+  // Recruiter and Head of HR (the roles who actually need to know who's
+  // working a position); everyone else keeps the column hidden.
+  const showTaOwnerCol = ['ta_leader','recruiter','head_of_hr'].includes(currentUser.role);
+  document.getElementById('taOwnerColHeader').style.display = showTaOwnerCol ? '' : 'none';
+
+  const rows = currentlyFilteredWorklistRows();
 
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = '';
   document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
+  renderWorklistCostSummary(rows);
+
+  // Bulk review toolbar — hidden entirely for a Recruiter (view-only) or
+  // anyone else who could never act on ANY line. Product owner change
+  // (round #17): every role that DOES get the toolbar can now select ANY
+  // row, not just ones awaiting their approval — "select any row or
+  // select all" — and each bulk button applies only to the rows it's
+  // actually valid for, silently skipping (and reporting) the rest. Which
+  // BUTTONS show is role-specific: BU Head gets Submit/Duplicate/Delete;
+  // Head of HR/TA Leader/admin get Approve/Return/Reject + Edit;
+  // Top Management (and a delegate standing in for one of these roles)
+  // gets Approve/Return/Reject only.
+  const bulkToolbarVisible = canEverActOnSomeRow();
+  document.getElementById('worklistBulkToolbar').style.display = bulkToolbarVisible ? '' : 'none';
+  if(bulkToolbarVisible){
+    const role = currentUser.role;
+    const isDelegate = MY_DELEGATED_ROLES.length > 0;
+    const showApprovalActions = ['head_of_hr','ta_leader','top_management','admin'].includes(role) || isDelegate;
+    const showBuHeadActions = role === 'bu_head';
+    const showEdit = ['head_of_hr','ta_leader','admin'].includes(role); // not top_management or a delegate, per spec
+    document.getElementById('worklistBulkApproveBtn').style.display = showApprovalActions ? '' : 'none';
+    document.getElementById('worklistBulkReturnBtn').style.display = showApprovalActions ? '' : 'none';
+    document.getElementById('worklistBulkRejectBtn').style.display = showApprovalActions ? '' : 'none';
+    document.getElementById('worklistBulkEditBtn').style.display = showEdit ? '' : 'none';
+    document.getElementById('worklistBulkSubmitBtn').style.display = showBuHeadActions ? '' : 'none';
+    document.getElementById('worklistBulkDuplicateBtn').style.display = showBuHeadActions ? '' : 'none';
+    document.getElementById('worklistBulkDeleteBtn').style.display = showBuHeadActions ? '' : 'none';
+  }
+  // Selections for rows that just scrolled out of the current filter/search
+  // are dropped — there'd be no way to see or clear them otherwise. (No
+  // longer limited to canActOnRow rows — any visible row can be selected.)
+  const idsOnScreen = new Set(rows.map(r=>r.id));
+  [...worklistSelectedIds].forEach(id=>{ if(!idsOnScreen.has(id)) worklistSelectedIds.delete(id); });
 
   rows.forEach(r=>{
     const tr = document.createElement('tr');
-    const costCell = level === 'total_only'
-      ? fmtMoney(r.total_current_year_cost, r.currency)
-      : fmtMoney(r.total_current_year_cost, r.currency) + (r.net_basic_monthly_salary ? ` <span style="color:var(--text-mute)">(net ${fmtMoney(r.net_basic_monthly_salary, r.currency)})</span>` : '');
+    const costCell = fmtMoney(r.total_current_year_cost, r.currency);
+    // Item #3: Department/Position/Business Need are the wordier columns
+    // — truncated with an ellipsis (`.cell-trunc`, see CSS) rather than
+    // each forcing the whole table wider, with a title="" tooltip
+    // carrying the full text so nothing is actually lost, just not
+    // shown inline.
+    // Every row is selectable once the toolbar itself is visible for this
+    // role (see above) — selection is universal now; it's the bulk
+    // ACTIONS that are each scoped to whichever rows they're valid for.
     tr.innerHTML =
+      '<td>'+(bulkToolbarVisible ? '<input type="checkbox" class="worklist-select-row" data-id="'+r.id+'" '+(worklistSelectedIds.has(r.id)?'checked':'')+'>' : '')+'</td>'+
+      '<td>'+escapeHtml(branchName(r.branch_id)||'—')+'</td>'+
       '<td>'+escapeHtml(r.position_code||'—')+'</td>'+
-      '<td>'+escapeHtml(r.position_title||'—')+'</td>'+
       '<td>'+escapeHtml(r.division||'—')+'</td>'+
-      '<td>'+escapeHtml(r.department||'—')+'</td>'+
-      '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
-      '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
+      '<td class="cell-trunc" title="'+escapeHtml(r.department||'')+'">'+escapeHtml(r.department||'—')+'</td>'+
+      '<td class="cell-trunc" title="'+escapeHtml(r.position_title||'')+'">'+escapeHtml(r.position_title||'—')+'</td>'+
+      '<td>'+costCenterOrProjectCell(r)+'</td>'+
+      '<td class="cell-trunc" title="'+escapeHtml(r.business_need_type || r.business_need || '')+'">'+businessNeedCell(r)+'</td>'+
+      '<td>'+fmtMoney(r.net_basic_monthly_salary, r.currency)+'</td>'+
       '<td>'+costCell+'</td>'+
+      '<td>'+escapeHtml(fmtDate(r.position_target_start_date))+'</td>'+
+      '<td><span class="status-pill '+hiringStatusPillClass(hiringStatusLabel(r))+'">'+escapeHtml(hiringStatusLabel(r))+'</span></td>'+
+      (showTaOwnerCol ? '<td>'+escapeHtml(r.ta_owner ? profileName(r.ta_owner) : '—')+'</td>' : '')+
+      '<td><span class="status-pill '+statusPillClass(r.status)+'">'+escapeHtml(r.status||'Draft')+'</span></td>'+
+      '<td>'+escapeHtml(fmtDate(r.status_changed_at))+'</td>'+
+      '<td>'+escapeHtml(profileName(r.submitted_by||r.requested_by))+'</td>'+
       '<td></td>';
     const actionCell = tr.lastElementChild;
+    // Item #2 (round #23) — click anywhere on the row (except an action
+    // button, a checkbox, or while the row IS the inline editor) opens
+    // the read-only full-details view. Available to every role,
+    // including Recruiter, who has no action buttons on this row at all.
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', (e)=>{
+      if(e.target.closest('button') || e.target.closest('input')) return;
+      openDetailsModal(r);
+    });
     if(canActOnRow(r)){
       const btn = document.createElement('button');
       btn.className = 'btn btn-primary btn-small'; btn.textContent = 'Review';
-      btn.addEventListener('click', ()=> openActionModal(r));
+      btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'review'); });
       actionCell.appendChild(btn);
     }
     if(canResubmit(r)){
       const btn = document.createElement('button');
       btn.className = 'btn btn-gold btn-small'; btn.style.marginLeft='6px'; btn.textContent = r.current_step === -1 && r.status === 'Draft' ? 'Submit' : 'Resubmit';
-      btn.addEventListener('click', ()=> openActionModal(r));
+      btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'resubmit'); });
       actionCell.appendChild(btn);
     }
     if(canDelete(r)){
       const btn = document.createElement('button');
       btn.className = 'btn btn-danger btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Delete';
-      btn.addEventListener('click', ()=> openActionModal(r));
+      btn.addEventListener('click', (e)=> { e.stopPropagation(); openActionModal(r, 'delete'); });
       actionCell.appendChild(btn);
     }
-    if((r.requested_by === currentUser.id || r.submitted_by === currentUser.id) && (r.status === 'Draft')){
+    // Round #27 fix — a line the submitter can already Resubmit (Draft,
+    // or Returned-for-Revision now that it's actually back with them —
+    // current_step === -1, see applyAction()'s 'returned' branch above)
+    // should also offer Edit, so they can fix whatever the reviewer
+    // flagged before resubmitting it. Previously this only fired for
+    // 'Draft', so a Returned line never got an Edit button at all.
+    if(currentUser.role !== 'recruiter' && (r.requested_by === currentUser.id || r.submitted_by === currentUser.id)
+      && r.current_step === -1 && (r.status === 'Draft' || r.status === 'Returned for Revision')){
       const btn = document.createElement('button');
       btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Edit';
       btn.addEventListener('click', ()=> openForm(r));
       actionCell.appendChild(btn);
     }
+    // Change #3: Duplicate — available to whoever could have originally
+    // submitted this kind of line (same gate as "+ Add Position").
+    if(canCreate()){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Duplicate';
+      btn.addEventListener('click', ()=> openForm(r, { duplicate: true }));
+      actionCell.appendChild(btn);
+    }
+    // Item #2 — Position Lifecycle: TA Owner assignment, closing fields,
+    // On Hold / Reactivate / Revoke Closure. Only ever shown once a line
+    // has fully cleared approval (position_status is set).
+    if(canManageLifecycle(r)){
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-small'; btn.style.marginLeft='6px'; btn.textContent = 'Manage Position';
+      btn.addEventListener('click', ()=> openLifecycleModal(r));
+      actionCell.appendChild(btn);
+    }
     tbody.appendChild(tr);
   });
+  tbody.querySelectorAll('.worklist-select-row').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = Number(cb.dataset.id);
+      if(cb.checked) worklistSelectedIds.add(id); else worklistSelectedIds.delete(id);
+      updateWorklistSelectionUi();
+    });
+  });
+  document.getElementById('worklistSelectAllCheckbox').checked = idsOnScreen.size > 0 && [...idsOnScreen].every(id=>worklistSelectedIds.has(id));
+  if(bulkToolbarVisible) updateWorklistSelectionUi();
+}
+function updateWorklistSelectionUi(){
+  document.getElementById('worklistSelectionHint').textContent = worklistSelectedIds.size + ' selected';
 }
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-['searchBox','filterDivision','filterDepartment','filterStatus'].forEach(id=>{
+['searchBox','filterDivision','filterDepartment','filterStatus','filterHiringStatus'].forEach(id=>{
   document.getElementById(id).addEventListener('input', renderTable);
   document.getElementById(id).addEventListener('change', renderTable);
 });
@@ -604,8 +1598,8 @@ function renderDeletedTable(){
 
 /* ====================== TOP MANAGEMENT SUMMARY VIEW (BR-08/09/10) ====================== */
 function tmPendingRows(){
-  const fDept = document.getElementById('tmFilterDepartment').value;
-  return visibleRows().filter(r=> requiredRoleFor(r) === 'top_management' && !MPCalc.isSelfApprovalBlocked(currentUser.id, r) && (!fDept || r.department === fDept));
+  const fDept = selectedValues('tmFilterDepartment');
+  return visibleRows().filter(r=> requiredRoleFor(r) === 'top_management' && !MPCalc.isSelfApprovalBlocked(currentUser.id, r) && (!fDept.length || fDept.includes(r.department)));
 }
 function renderTmSummary(){
   const rows = tmPendingRows();
@@ -645,23 +1639,55 @@ document.getElementById('tmSelectAllCheckbox').addEventListener('change', (e)=>{
 });
 document.getElementById('tmClearSelectionBtn').addEventListener('click', ()=>{ tmSelectedIds.clear(); renderTmSummary(); });
 
-document.getElementById('tmBulkApproveBtn').addEventListener('click', async ()=>{
-  const ids = [...tmSelectedIds];
+// Bulk-approve for a given ids Set + its "clear/re-render" callback — the
+// same shape whether the selection came from the TM Summary tab or the
+// main Worklist's own bulk toolbar. Product owner change (round #17): the
+// Worklist's own selection can now include ANY row (not just ones
+// awaiting this user's action), so this filters to canActOnRow(row) itself
+// and reports how many were skipped, rather than assuming every selected
+// id is eligible (the TM Summary tab's selection was always
+// actionable-only anyway, so this is a no-op there).
+async function bulkApprove(idsSet, onDone){
+  const ids = [...idsSet];
   if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let applied = 0, skipped = 0;
+  // Round #26 (item #7): group by which notification kind each line's
+  // approval triggers (usually the same for every line in one bulk
+  // action, but see the comment on applyAction() — it can genuinely
+  // differ line-to-line, e.g. a mix of BU-Head-initiated and
+  // Recruiter-initiated lines), then send ONE consolidated email per
+  // kind instead of one per line.
+  const notifyGroups = {};
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
-    if(row) await applyAction(row, 'approved', null);
+    if(row && canActOnRow(row)){
+      const kind = await applyAction(row, 'approved', null, { suppressNotify: true });
+      applied++;
+      if(kind){ (notifyGroups[kind] = notifyGroups[kind] || []).push(id); }
+    }
+    else skipped++;
   }
-  tmSelectedIds.clear();
-  showToast('Approved ' + ids.length + ' line(s).');
+  idsSet.clear();
+  showToast('Approved ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not awaiting your action)' : '') + '.');
+  for(const kind of Object.keys(notifyGroups)) notifyNewPositionRequestBatch(notifyGroups[kind], kind);
   await loadRows();
-});
-document.getElementById('tmBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned'));
-document.getElementById('tmBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected'));
+  if(onDone) onDone();
+}
+document.getElementById('tmBulkApproveBtn').addEventListener('click', ()=> bulkApprove(tmSelectedIds));
+document.getElementById('tmBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned', tmSelectedIds));
+document.getElementById('tmBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected', tmSelectedIds));
 
-function openBulkReasonModal(action){
-  if(!tmSelectedIds.size){ showToast('Select at least one line first.'); return; }
+document.getElementById('worklistBulkApproveBtn').addEventListener('click', ()=> bulkApprove(worklistSelectedIds, updateWorklistSelectionUi));
+document.getElementById('worklistBulkReturnBtn').addEventListener('click', ()=> openBulkReasonModal('returned', worklistSelectedIds));
+document.getElementById('worklistBulkRejectBtn').addEventListener('click', ()=> openBulkReasonModal('rejected', worklistSelectedIds));
+
+// action: 'rejected' | 'returned'. idsSet: whichever selection (TM Summary
+// or the main Worklist) triggered this — the SAME shared modal serves both,
+// since the reason-required flow (BR-09) is identical either way.
+function openBulkReasonModal(action, idsSet){
+  if(!idsSet.size){ showToast('Select at least one line first.'); return; }
   pendingBulkAction = action;
+  pendingBulkIdsSet = idsSet;
   document.getElementById('bulkReasonTitle').textContent = action === 'rejected' ? 'Reject selected lines' : 'Return selected lines for revision';
   document.getElementById('bulkReasonInput').value = '';
   document.getElementById('bulkReasonStatus').textContent = '';
@@ -672,30 +1698,178 @@ document.getElementById('confirmBulkReasonBtn').addEventListener('click', async 
   const reason = document.getElementById('bulkReasonInput').value.trim();
   const statusEl = document.getElementById('bulkReasonStatus');
   if(!reason){ statusEl.textContent = 'A reason is required (BR-09).'; statusEl.className='status-msg err'; return; }
-  const ids = [...tmSelectedIds];
+  const idsSet = pendingBulkIdsSet;
+  const ids = [...idsSet];
+  let applied = 0, skipped = 0;
+  // Round #26 (item #7) — same consolidation as bulkApprove() above:
+  // one email per notification kind, not one per line.
+  const notifyGroups = {};
   for(const id of ids){
     const row = ALL_ROWS.find(r=>r.id===id);
-    if(row) await applyAction(row, pendingBulkAction, reason);
+    if(row && canActOnRow(row)){
+      const kind = await applyAction(row, pendingBulkAction, reason, { suppressNotify: true });
+      applied++;
+      if(kind){ (notifyGroups[kind] = notifyGroups[kind] || []).push(id); }
+    }
+    else skipped++;
   }
-  tmSelectedIds.clear();
+  idsSet.clear();
   document.getElementById('bulkReasonModal').classList.remove('show');
-  showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + ids.length + ' line(s).');
+  showToast((pendingBulkAction==='rejected'?'Rejected ':'Returned ') + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not awaiting your action)' : '') + '.');
+  for(const kind of Object.keys(notifyGroups)) notifyNewPositionRequestBatch(notifyGroups[kind], kind);
   await loadRows();
 });
 
-/* ====================== SINGLE-ROW ACTION MODAL ====================== */
-function openActionModal(row){
+/* ====================== BU HEAD'S BULK ACTIONS: Submit / Duplicate / Delete ======================
+ * Each of these can be handed a mixed selection (any row is selectable
+ * now) and only ever applies to the rows it's actually valid for,
+ * silently skipping — and reporting — the rest, the same pattern as
+ * bulkApprove()/the reject-return modal above. */
+async function bulkSubmit(idsSet){
+  const ids = [...idsSet];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let applied = 0, skipped = 0;
+  // Round #26 (item #7) — one consolidated "new position request(s)"
+  // email to TA Team Leader(s)/Head of HR instead of one per line.
+  const notifiedIds = [];
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(!row || !canResubmit(row)){ skipped++; continue; }
+    const { error } = await resubmitRow(row, { suppressNotify: true });
+    if(error) skipped++; else { applied++; notifiedIds.push(id); }
+  }
+  idsSet.clear();
+  if(notifiedIds.length) notifyNewPositionRequestBatch(notifiedIds, 'new_request');
+  showToast('Submitted ' + applied + ' line(s) for approval' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + '.');
+  await loadRows();
+}
+async function bulkDelete(idsSet){
+  const ids = [...idsSet];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let applied = 0, skipped = 0, failed = 0;
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(!row || !canDelete(row)){ skipped++; continue; }
+    // Bug fix (item #4, round #23) — same as the single-row Delete
+    // button: check the write's result instead of assuming it always
+    // succeeds just because canDelete() allowed it on the client.
+    const { error } = await deleteRow(row);
+    if(error) failed++; else applied++;
+  }
+  idsSet.clear();
+  showToast('Deleted ' + applied + ' line(s)' + (skipped ? ' (' + skipped + ' skipped — not eligible)' : '') + (failed ? ' (' + failed + ' failed — could not delete)' : '') + '.');
+  await loadRows();
+}
+// Builds an INSERT payload for a fresh Draft copy of `row` — the exact
+// same field set and reset rules (status/current_step/approval_chain/
+// position_code/requested_by/submitted_by) the single-row "Duplicate"
+// button's inline-editor prefill uses, just applied directly without the
+// interactive review step (opening N inline editors for a bulk selection
+// isn't practical from one click).
+function buildDuplicatePayloadFromRow(row){
+  const carry = ['position_master_id','position_title','division_id','department_id','section_id',
+    'cost_center_id','internal_or_project','project_name','branch_id','currency','master_data_flag',
+    'employment_type','position_target_start_date','business_need_type','employee_being_replaced',
+    'justification','department_utilization','net_basic_monthly_salary','support_allowance_applicable',
+    'top_management_approver_id','gross_incentive','cost_breakdown','total_monthly_cost',
+    'total_current_year_cost','onboarding_one_time_cost'];
+  const payload = {};
+  carry.forEach(f=>{ payload[f] = row[f] !== undefined ? row[f] : null; });
+  payload.created_by = currentUser.id;
+  payload.updated_by = currentUser.id;
+  payload.requested_by = currentUser.id;
+  payload.submitted_by = currentUser.id;
+  payload.position_status = 'Requested';
+  payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
+  payload.current_step = -1;
+  payload.status = 'Draft';
+  payload.status_changed_at = new Date().toISOString();
+  return payload;
+}
+async function bulkDuplicate(idsSet){
+  const ids = [...idsSet];
+  if(!ids.length){ showToast('Select at least one line first.'); return; }
+  let created = 0;
+  for(const id of ids){
+    const row = ALL_ROWS.find(r=>r.id===id);
+    if(!row) continue;
+    const { error } = await sb.from('manpower_plan').insert(buildDuplicatePayloadFromRow(row));
+    if(!error) created++;
+  }
+  idsSet.clear();
+  showToast('Created ' + created + ' duplicate draft(s)' + (created<ids.length ? ' (' + (ids.length-created) + ' failed)' : '') + '.');
+  await loadRows();
+}
+document.getElementById('worklistBulkSubmitBtn').addEventListener('click', ()=> bulkSubmit(worklistSelectedIds));
+document.getElementById('worklistBulkDuplicateBtn').addEventListener('click', ()=> bulkDuplicate(worklistSelectedIds));
+document.getElementById('worklistBulkDeleteBtn').addEventListener('click', ()=> bulkDelete(worklistSelectedIds));
+// Edit is single-row only — bulk-editing several different lines' full
+// content at once isn't a coherent action — so this just requires
+// exactly one line selected and opens the normal inline editor for it,
+// same as the per-row Edit button, but usable on ANY line (not only
+// one's own Draft), matching HR/TA Leaders' existing "update any line"
+// database rights.
+document.getElementById('worklistBulkEditBtn').addEventListener('click', ()=>{
+  if(worklistSelectedIds.size !== 1){ showToast('Select exactly one line to edit.'); return; }
+  const row = ALL_ROWS.find(r=>r.id===[...worklistSelectedIds][0]);
+  if(row) openForm(row);
+});
+
+/* ---- Worklist bulk toolbar: select-all / clear (mirrors the TM tab's) ----
+ * Product owner change (round #17): selects EVERY currently-filtered row,
+ * not just "actionable" ones — matches the new "select any row or select
+ * all" selection model above. */
+document.getElementById('worklistSelectAllBtn').addEventListener('click', ()=>{
+  currentlyFilteredWorklistRows().forEach(r=>worklistSelectedIds.add(r.id));
+  renderTable();
+});
+document.getElementById('worklistSelectAllCheckbox').addEventListener('change', (e)=>{
+  const filteredRows = currentlyFilteredWorklistRows();
+  if(e.target.checked) filteredRows.forEach(r=>worklistSelectedIds.add(r.id));
+  else filteredRows.forEach(r=>worklistSelectedIds.delete(r.id));
+  renderTable();
+});
+document.getElementById('worklistClearSelectionBtn').addEventListener('click', ()=>{ worklistSelectedIds.clear(); renderTable(); });
+
+/* ====================== FULL-DETAILS VIEW (item #2, round #23) ====================== */
+// Round #32 — grouped under section headers (Position Info / Cost &
+// Compensation / Approval & Status / Position Lifecycle[ / Deleted]) so
+// the fields don't all run together as one long list of boxes.
+function openDetailsModal(row){
+  const level = getCostVisibilityLevel(currentUser.role);
+  document.getElementById('detailsModalTitle').textContent = row.position_title || 'Position';
+  const grid = document.getElementById('detailsModalGrid');
+  grid.innerHTML = fieldsForRow(row, level).map(([sectionTitle, fields])=>
+    '<div class="details-section-title">'+escapeHtml(sectionTitle)+'</div>' +
+    fields.map(([label, value])=>
+      '<div class="form-field"><label>'+escapeHtml(label)+'</label>'+
+      '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:#f4f4f5;font-size:13px;min-height:16px;">'+escapeHtml(value)+'</div></div>'
+    ).join('')
+  ).join('');
+  document.getElementById('detailsModal').classList.add('show');
+}
+document.getElementById('closeDetailsBtn').addEventListener('click', ()=>{ document.getElementById('detailsModal').classList.remove('show'); });
+
+/* ====================== SINGLE-ROW ACTION MODAL ======================
+ * Item #5 (round #23) — `mode` scopes which button(s) show to exactly
+ * the ones relevant to whichever button the person actually clicked
+ * ('review' / 'resubmit' / 'delete'), instead of showing every action
+ * the row happens to independently qualify for all at once (which is
+ * why clicking Delete used to also show a Submit button alongside it). */
+function openActionModal(row, mode){
   actionRow = row;
   document.getElementById('actionReasonInput').value = '';
   document.getElementById('actionStatus').textContent = '';
   document.getElementById('actionModalTitle').textContent = row.position_title || 'Position';
   document.getElementById('actionModalSub').textContent = 'Status: ' + (row.status||'Draft') + (row.total_current_year_cost ? ' — Total Current Year Cost: ' + fmtMoney(row.total_current_year_cost, row.currency) : '');
-  const canAct = canActOnRow(row);
+  const canAct = mode === 'review' && canActOnRow(row);
+  const canRes = mode === 'resubmit' && canResubmit(row);
+  const canDel = mode === 'delete' && canDelete(row);
   document.getElementById('actionApproveBtn').style.display = canAct ? '' : 'none';
   document.getElementById('actionRejectBtn').style.display = canAct ? '' : 'none';
   document.getElementById('actionReturnBtn').style.display = canAct ? '' : 'none';
-  document.getElementById('actionResubmitBtn').style.display = canResubmit(row) ? '' : 'none';
-  document.getElementById('actionDeleteBtn').style.display = canDelete(row) ? '' : 'none';
+  document.getElementById('actionResubmitBtn').style.display = canRes ? '' : 'none';
+  document.getElementById('actionDeleteBtn').style.display = canDel ? '' : 'none';
   document.getElementById('actionReasonWrap').style.display = 'none';
   document.getElementById('actionModal').classList.add('show');
 }
@@ -713,14 +1887,23 @@ document.getElementById('actionReturnBtn').addEventListener('click', ()=>{
 });
 document.getElementById('actionResubmitBtn').addEventListener('click', async ()=>{
   if(!actionRow) return;
-  await resubmitRow(actionRow);
+  const { error } = await resubmitRow(actionRow);
+  if(error){ showToast('Could not submit: ' + error.message); return; }
   document.getElementById('actionModal').classList.remove('show');
   showToast('Submitted for approval.');
   await loadRows();
 });
 document.getElementById('actionDeleteBtn').addEventListener('click', async ()=>{
   if(!actionRow) return;
-  await deleteRow(actionRow);
+  // Bug fix (item #4, round #23): previously this never checked the
+  // update's result at all, so a delete blocked by RLS (e.g. a line at
+  // "Pending TA Team Leader Review" — current_step === 0 — before
+  // migration 22 widened the bu_head delete policy to match) silently
+  // did nothing at the database level while still showing the success
+  // toast and the line reappeared after loadRows() refetched. Same fix
+  // pattern already applied to resubmitRow()'s caller above.
+  const { error } = await deleteRow(actionRow);
+  if(error){ showToast('Could not delete: ' + error.message); return; }
   document.getElementById('actionModal').classList.remove('show');
   showToast('Line deleted — logged for audit.');
   await loadRows();
@@ -759,48 +1942,92 @@ wireConfirmOnSecondClick('actionRejectBtn', 'rejected');
 wireConfirmOnSecondClick('actionReturnBtn', 'returned');
 
 /* ====================== APPLY AN ACTION (shared by single + bulk) ====================== */
-function computeNextPositionId(divisionId){
-  const div = ALL_DIVISIONS.find(d=>d.id===divisionId);
-  const abbrev = (div && (div.abbreviation || div.name.slice(0,2).toUpperCase())) || 'NA';
-  const year = new Date().getFullYear();
-  const prefix = 'MP_' + year + '_' + abbrev + '_';
+// Product owner change #8 (round #26) — Position ID now reads the
+// DEPARTMENT's abbreviation (not the Division's), format
+// MP_{DepartmentAbbreviation}_{Serial} — e.g. "MP_S&IO_1" — with NO
+// year in it at all (the previous MP_{Year}_{Abbrev}_{Serial} format
+// is retired). The serial is a straight running count per department,
+// never resetting. Falls back to a derived abbreviation from the
+// department name if Admin hasn't set one yet.
+// Note: existing rows already carrying an old MP_{Year}_..._{n}
+// position_code won't match this new prefix, so numbering for each
+// department starts fresh at 1 under the new format — their old codes
+// are untouched, only NEWLY approved positions get the new format.
+function computeNextPositionId(departmentId){
+  const dept = ALL_DEPARTMENTS.find(d=>d.id===departmentId);
+  const abbrev = (dept && (dept.abbreviation || dept.name.slice(0,3).toUpperCase())) || 'NA';
+  const prefix = 'MP_' + abbrev + '_';
   const serials = ALL_ROWS
-    .filter(r=>r.position_code && r.position_code.indexOf(prefix)===0)
+    .filter(r=>r.department_id === departmentId && r.position_code && r.position_code.indexOf(prefix)===0)
     .map(r=>parseInt(r.position_code.slice(prefix.length),10))
     .filter(n=>!isNaN(n));
   const next = (serials.length ? Math.max(...serials) : 0) + 1;
-  return MPCalc.formatPositionId(year, abbrev, next);
+  return MPCalc.formatPositionId(null, abbrev, next);
 }
-async function applyAction(row, action, reason){
-  if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) { showToast('Blocked by BR-15a — you cannot act on your own submission.'); return; }
+// `opts.suppressNotify` (round #26, item #7): when true, the caller is
+// doing a bulk action and wants to collect the notification kind this
+// call WOULD have fired (returned below) instead of sending it right
+// away, so it can batch every line that needs the SAME kind into one
+// consolidated email afterward. A normal single-row call (the button
+// handlers below) never passes this, so it keeps notifying immediately.
+async function applyAction(row, action, reason, opts){
+  opts = opts || {};
+  if(MPCalc.isSelfApprovalBlocked(currentUser.id, row)) { showToast('Blocked by BR-15a — you cannot act on your own submission.'); return null; }
   const required = requiredRoleFor(row);
-  if(!required) return;
+  if(!required) return null;
   const isDelegate = currentUser.role !== required;
   const delegateInfo = isDelegate ? MY_DELEGATED_ROLES.find(d=>d.role===required) : null;
 
   const chain = row.approval_chain || [];
   const payload = {};
+  // Round #26 (items #3/#4/#5) — which audience needs telling, and
+  // about what. Keyed by the role that just acted (`required`), not by
+  // fixed chain position, since which roles are even IN the chain
+  // varies by who initiated the line (BR-15a drops the initiator's own
+  // role from their own chain).
+  let notifyKind = null;
   if(action === 'approved'){
     const nextStep = row.current_step + 1;
     payload.current_step = nextStep;
     if(nextStep >= chain.length){
       payload.status = 'Approved';
       payload.position_status = 'Open';
-      payload.position_code = computeNextPositionId(row.division_id);
+      payload.position_code = computeNextPositionId(row.department_id);
+      notifyKind = 'position_approved'; // item #5 (approve case): HOH, TA TL(s), BU Head
     } else {
       payload.status = MPCalc.statusLabelForStep(chain, nextStep);
+      const nextRole = chain[nextStep].role;
+      if(nextRole === 'head_of_hr') notifyKind = 'pending_head_of_hr'; // item #3 (approve case)
+      else if(nextRole === 'top_management') notifyKind = 'pending_top_management'; // item #4 (approve case)
     }
   } else if(action === 'rejected'){
     payload.status = 'Rejected';
     payload.approval_note = reason;
+    if(required === 'ta_leader') notifyKind = 'rejected_by_ta_leader'; // item #3 (reject case): notify HOH
+    else if(required === 'head_of_hr') notifyKind = 'rejected_by_head_of_hr'; // item #4 (reject case): notify Top Management
+    else if(required === 'top_management') notifyKind = 'rejected_by_top_management'; // item #5 (reject case): HOH, TA TL(s), BU Head
   } else if(action === 'returned'){
-    const backStep = MPCalc.stepAfterReturn(row.current_step);
-    payload.current_step = backStep;
+    // Round #27 fix — a Return-for-Revision now always goes all the way
+    // back to whoever originally submitted the line (current_step -1,
+    // same as a fresh Draft — canResubmit()'s own comment already
+    // documented this as the intended behavior: "Draft, or
+    // Returned-to-initiator: current_step === -1"). Previously
+    // MPCalc.stepAfterReturn() only stepped back ONE index and clamped
+    // at 0, so a Return from the very first approval step (the most
+    // common case) left current_step at 0 instead of -1 — meaning the
+    // line silently stayed queued for the SAME approver to act on again,
+    // and the submitter never got an Edit button or a way to resubmit it
+    // (canResubmit()/the Edit button both key off current_step === -1).
+    payload.current_step = -1;
     payload.status = 'Returned for Revision';
     payload.approval_note = reason;
   }
+  // Item #1 (round #23) — stamp the new "Status Date" column client-side
+  // too (mirrors the DB trigger from migration 22), so it's correct
+  // immediately and even against a stub/test environment with no triggers.
+  if(payload.status) payload.status_changed_at = new Date().toISOString();
   const { error } = await sb.from('manpower_plan').update(payload).eq('id', row.id);
-  if(error){ showToast('Could not save: ' + error.message); return; }
+  if(error){ showToast('Could not save: ' + error.message); return null; }
   await sb.from('approval_log').insert({
     manpower_plan_id: row.id,
     step: required,
@@ -809,20 +2036,78 @@ async function applyAction(row, action, reason){
     acted_as_delegate_for: delegateInfo ? delegateInfo.delegator_id : null,
     reason: reason || null
   });
+  if(notifyKind && !opts.suppressNotify) notifyNewPositionRequest(row.id, notifyKind);
+  return notifyKind;
 }
-async function resubmitRow(row){
+async function resubmitRow(row, opts){
+  opts = opts || {};
   const chain = row.approval_chain || [];
-  const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0) };
-  await sb.from('manpower_plan').update(payload).eq('id', row.id);
+  const payload = { current_step: 0, status: MPCalc.statusLabelForStep(chain, 0), status_changed_at: new Date().toISOString() };
+  // Bug fix: previously this swallowed the update's result entirely, so
+  // if the write was rejected (e.g. by an RLS policy) the button appeared
+  // to do nothing — no error, and the status never actually changed,
+  // since the DB write silently failed. Now the caller checks .error.
+  const result = await sb.from('manpower_plan').update(payload).eq('id', row.id);
+  // A resubmit (Draft or Returned-for-Revision going back to step 0) is
+  // just as much "a BU Head submitting a position request" as a brand
+  // new one — notify the same reviewers. `opts.suppressNotify`: see the
+  // comment on applyAction() above — bulkSubmit() batches these instead.
+  if(!result.error && !opts.suppressNotify) notifyNewPositionRequest(row.id);
+  return result;
 }
+// Bug fix (item #4, round #23): this used to fire the DB write and
+// throw the result away entirely, so a delete an RLS policy actually
+// rejected (e.g. a "Pending TA Team Leader Review" line — current_step
+// === 0 — before migration 22 widened the bu_head delete policy to
+// match the client-side canDelete() fix from round #20) looked exactly
+// like a successful one: no error, but the row was never actually
+// updated, and it simply reappeared once loadRows() refetched. The
+// caller (actionDeleteBtn's click handler above) now checks .error.
 async function deleteRow(row){
-  await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted' }).eq('id', row.id);
+  return await sb.from('manpower_plan').update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, status: 'Deleted', status_changed_at: new Date().toISOString() }).eq('id', row.id);
 }
 
-/* ====================== ADD / EDIT FORM (cascading dropdowns, Not-in-list, live calc) ====================== */
+/* ====================== ADD / EDIT / DUPLICATE FORM ======================
+ * Change #1: this is an INLINE ROW inside the worklist table, not a modal
+ * or a separate screen — see insertInlineEditorSkeleton() below. The
+ * three action buttons (Cancel/Save Draft/Submit) are rebuilt fresh
+ * every time that skeleton is (re)built, so their click handlers are
+ * wired inside that function rather than once at page load. */
 document.getElementById('addOpenBtn').addEventListener('click', ()=> openForm(null));
-document.getElementById('cancelFormBtn').addEventListener('click', ()=> closeForm());
-document.getElementById('positionModal').addEventListener('click', (e)=>{ if(e.target.id==='positionModal') closeForm(); });
+
+// Builds (or rebuilds) the single inline editor <tr> at the top of the
+// worklist table and returns its live container elements. Any
+// previously-open editor row is removed first, so there is only ever
+// one on screen at a time.
+function insertInlineEditorSkeleton(){
+  const old = document.getElementById('inlineEditorRow');
+  if(old) old.remove();
+  const tbody = document.getElementById('tableBody');
+  const tr = document.createElement('tr');
+  tr.id = 'inlineEditorRow';
+  tr.className = 'inline-editor-row';
+  const td = document.createElement('td');
+  td.colSpan = 15; // matches the worklist's columns (checkbox + 11 data columns + the round #33 Position Target Start Date/Hiring Status columns + the round #36 TA Owner column + actions)
+  td.innerHTML =
+    '<div class="inline-editor-head">' +
+      '<div class="inline-editor-title"><h3 id="modalTitle">Add position</h3><p class="sub" id="modalSub">Fill in this row directly — every field below is required unless marked optional.</p></div>' +
+      '<div class="inline-editor-actions">' +
+        '<button class="btn btn-secondary btn-small" id="cancelFormBtn">Cancel</button>' +
+        '<button class="btn btn-primary btn-small" id="saveFormBtn">Save as Draft</button>' +
+        '<button class="btn btn-gold btn-small" id="submitFormBtn" style="display:none;">Submit for Approval</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="form-grid" id="formGrid"></div>' +
+    '<div class="section-label">Cost preview</div>' +
+    '<div id="costPreview" style="grid-column:1/-1;"></div>' +
+    '<div class="status-msg" id="formStatus"></div>';
+  tr.appendChild(td);
+  tbody.insertBefore(tr, tbody.firstChild);
+  document.getElementById('cancelFormBtn').addEventListener('click', ()=> closeForm());
+  document.getElementById('saveFormBtn').addEventListener('click', ()=> saveForm(false));
+  document.getElementById('submitFormBtn').addEventListener('click', ()=> saveForm(true));
+  return tr;
+}
 
 function buildNotInListField(key, label, options, currentId, currentFreeText){
   // Returns a form-field wrapper with a <select> + a hidden free-text
@@ -857,45 +2142,144 @@ function buildNotInListField(key, label, options, currentId, currentFreeText){
   return wrap;
 }
 
-function openForm(row){
-  editingRowId = row ? row.id : null;
-  document.getElementById('modalTitle').textContent = row ? 'Edit position (Draft)' : 'Add position';
+// Change #2 — Division and Cost Center are now ALWAYS derived/auto-filled
+// (never a raw dropdown a BU Head has to think about): a disabled display
+// input shows the resolved value, a hidden input carries the real FK the
+// rest of the form/save logic reads, and the same "Not in list?" flag
+// (BR-18) is still offered as a fallback, per the product owner's request
+// that the flag keep working the same way on every one of these 5 fields.
+function buildNotInListAutoField(key, label, currentDisplayValue, currentId, currentFreeText){
+  const wrap = document.createElement('div');
+  wrap.className = 'form-field';
+  const lbl = document.createElement('label'); lbl.textContent = label + ' *';
+  wrap.appendChild(lbl);
+  const display = document.createElement('input');
+  display.type = 'text'; display.id = 'field_'+key+'_display'; display.disabled = true; display.className = 'auto-field';
+  display.value = currentDisplayValue || '';
+  display.style.display = currentFreeText ? 'none' : '';
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden'; hidden.id = 'field_'+key;
+  hidden.value = currentId != null ? currentId : '';
+  const text = document.createElement('input'); text.type='text'; text.id = 'field_'+key+'_text';
+  text.style.display = currentFreeText ? '' : 'none';
+  text.placeholder = 'Type the new ' + label.toLowerCase();
+  if(currentFreeText) text.value = currentFreeText;
+  const notInListRow = document.createElement('label'); notInListRow.className = 'not-in-list';
+  const chk = document.createElement('input'); chk.type='checkbox'; chk.id = 'chk_'+key+'_notinlist'; chk.checked = !!currentFreeText;
+  notInListRow.appendChild(chk);
+  notInListRow.appendChild(document.createTextNode('Not in list? (flags for HR review)'));
+  chk.addEventListener('change', ()=>{
+    display.style.display = chk.checked ? 'none' : '';
+    text.style.display = chk.checked ? '' : 'none';
+    if(!chk.checked) text.value = '';
+  });
+  wrap.appendChild(display);
+  wrap.appendChild(hidden);
+  wrap.appendChild(text);
+  wrap.appendChild(notInListRow);
+  return wrap;
+}
+
+// row: the line to prefill from (Edit) or copy from (Duplicate) — null for
+// a brand new blank line. opts.duplicate: true means "insert a new row
+// pre-filled from `row`, resetting Status/Position ID/approval state"
+// (change #3) — editingRowId is deliberately left null in that case so
+// saveForm() takes its normal INSERT path instead of updating the original.
+function openForm(row, opts){
+  opts = opts || {};
+  const isDuplicate = !!opts.duplicate;
+  editingRowId = (row && !isDuplicate) ? row.id : null;
+  duplicatingFromId = (row && isDuplicate) ? row.id : null;
+  inlineEditorOpen = true;
+  insertInlineEditorSkeleton(); // change #1 — the form lives in the table itself, not a modal
+
+  document.getElementById('modalTitle').textContent = isDuplicate ? 'Duplicate position — new Draft' : (row ? 'Edit position (Draft)' : 'Add position');
+  document.getElementById('modalSub').textContent = isDuplicate
+    ? 'Everything is copied from the original except Status, Position ID and approval history — tweak what’s different, then Save or Submit.'
+    : 'Fill in this row directly — every field below is required unless marked optional.';
   document.getElementById('formStatus').textContent = '';
   document.getElementById('costPreview').innerHTML = '';
   const grid = document.getElementById('formGrid');
   grid.innerHTML = '';
-  const flag = (row && row.master_data_flag) || {};
+  const flag = (row && !isDuplicate ? row.master_data_flag : null) || {}; // a Duplicate starts with a clean slate of exception flags
 
   const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
+  const isBuHead = currentUser.role === 'bu_head';
+  const isTaLeader = currentUser.role === 'ta_leader';
 
-  // ---- Position ----
+  // ---- Product owner change #2: identity block, reordered/grouped into
+  // exactly: Branch/Location (alone) / Division | Department / Section-Track
+  // | Position / Specialization | Cost Center (or Project Name — change #6).
+  // Change #2: Department is scoped to the BU Head's own covered
+  // departments (never shows a department they don't cover); Recruiter/
+  // Head of HR still get every department. ----
   addSectionLabel(grid, 'Position');
-  grid.appendChild(buildNotInListField('position', 'Position (Title)', ALL_POSITIONS.map(p=>({id:p.id,label:p.title})), row ? row.position_master_id : null, flag.position || null));
 
-  // ---- Division / Department / Section / Cost Center (cascading) ----
-  grid.appendChild(buildNotInListField('division', 'Division', ALL_DIVISIONS.map(d=>({id:d.id,label:d.name})), row ? row.division_id : null, flag.division || null));
-  grid.appendChild(buildNotInListField('department', 'Department', [], row ? row.department_id : null, flag.department || null));
-  grid.appendChild(buildNotInListField('section', 'Section', [], row ? row.section_id : null, flag.section || null));
-  grid.appendChild(buildNotInListField('cost_center', 'Cost Center', [], row ? row.cost_center_id : null, flag.cost_center || null));
-
-  // ---- Branch (no Not-in-list — BR-18) ----
-  const branchWrap = document.createElement('div'); branchWrap.className='form-field';
+  // ---- Row 1: Branch / Location — alone, full width (no Not-in-list — BR-18) ----
+  const branchWrap = document.createElement('div'); branchWrap.className='form-field full';
   branchWrap.innerHTML = '<label>Branch / Location *</label>';
   const branchSel = document.createElement('select'); branchSel.id = 'field_branch';
   const bBlank = document.createElement('option'); bBlank.value=''; bBlank.textContent='— Choose —'; branchSel.appendChild(bBlank);
-  ALL_BRANCHES.forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.name+' ('+b.country+')'; branchSel.appendChild(o); });
+  // Egypt-only for now (product owner change #14): only active branches are
+  // offered as choices. ALL_BRANCHES itself stays unfiltered elsewhere so a
+  // worklist row that already references an inactive Gulf branch still
+  // displays its name correctly via branchName().
+  ALL_BRANCHES.filter(b=>b.active !== false).forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=b.name+' ('+b.country+')'; branchSel.appendChild(o); });
   if(row && row.branch_id) branchSel.value = row.branch_id;
   branchWrap.appendChild(branchSel);
   grid.appendChild(branchWrap);
 
-  const currencyWrap = document.createElement('div'); currencyWrap.className='form-field';
-  currencyWrap.innerHTML = '<label>Currency</label><input type="text" id="field_currency_display" disabled>';
-  grid.appendChild(currencyWrap);
+  // ---- Row 2: Division | Department — Division always auto-derived from Department, never a dropdown ----
+  {
+    const dept = row && row.department_id ? ALL_DEPARTMENTS.find(d=>d.id===row.department_id) : null;
+    const div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    grid.appendChild(buildNotInListAutoField('division', 'Division', div ? div.name : '', row ? row.division_id : null, flag.division || null));
+  }
+  let departmentOptions = isBuHead ? MY_BU_DEPARTMENTS.slice() : isTaLeader ? MY_TA_LEADER_DEPARTMENTS.slice() : ALL_DEPARTMENTS.slice();
+  if(row && row.department_id && !departmentOptions.some(d=>d.id===row.department_id)){
+    const extra = ALL_DEPARTMENTS.find(d=>d.id===row.department_id);
+    if(extra) departmentOptions.push(extra); // keep an already-picked-but-no-longer-covered department visible rather than silently blanking it
+  }
+  grid.appendChild(buildNotInListField('department', 'Department', departmentOptions.map(d=>({id:d.id,label:d.name})), row ? row.department_id : null, flag.department || null));
 
-  // ---- Employment Type / Priority ----
+  // ---- Row 3: Section | Position — Position options are filtered to Department+Section below by wireOrgCascade() ----
+  grid.appendChild(buildNotInListField('section', 'Section', [], row ? row.section_id : null, flag.section || null));
+  grid.appendChild(buildNotInListField('position', 'Position (Title)', [], row ? row.position_master_id : null, flag.position || null));
+
+  // ---- Row 4: Specialization | Cost Center (or Project Name, when
+  // Internal/Project below is set to "Project" — change #6). Specialization
+  // is ONLY rendered visibly when the Department+Track actually branches
+  // into more than one Cost Center; wireOrgCascade() shows/hides it — when
+  // hidden, Cost Center's row simply flows to take the space (grid auto-flow). ----
+  {
+    const specWrap = document.createElement('div'); specWrap.className = 'form-field'; specWrap.id = 'wrap_specialization'; specWrap.style.display = 'none';
+    specWrap.innerHTML = '<label>Specialization *</label>';
+    const specSel = document.createElement('select'); specSel.id = 'field_specialization';
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Choose —'; specSel.appendChild(blank);
+    specWrap.appendChild(specSel);
+    grid.appendChild(specWrap);
+  }
+  // Cost Center — always auto-derived from Department+Section(+Specialization),
+  // never a raw dropdown; disabled + dimmed (not hidden) when
+  // Internal/Project = "Project" — see wireInternalOrProjectToggle().
+  // (Its old neighbor here used to be Project Name — moved down next to
+  // the Internal/Project field itself, per the product owner's layout
+  // request, so it now sits alone in this row.)
+  const costCenterField = buildNotInListAutoField('cost_center', 'Cost Center', '', row ? row.cost_center_id : null, flag.cost_center || null);
+  costCenterField.id = 'wrap_cost_center';
+  grid.appendChild(costCenterField);
+
+  // ---- Employment Type / Internal-Project (change #6) — Position Priority removed (change #5) ----
   addSectionLabel(grid, 'Position details');
+  grid.appendChild(buildSelectField('internal_or_project','Internal / Project', INTERNAL_OR_PROJECT_OPTIONS, row ? (row.internal_or_project || 'Internal') : 'Internal'));
+  // Project Name — Item #8 — ALWAYS visible, now right next to Internal /
+  // Project (moved off Cost Center's row per the product owner's layout
+  // request); disabled + dimmed (not hidden) when Internal/Project =
+  // "Internal" — see wireInternalOrProjectToggle().
+  const projWrap = document.createElement('div'); projWrap.className = 'form-field'; projWrap.id = 'wrap_project_name';
+  projWrap.innerHTML = '<label>Project Name *</label><input type="text" id="field_project_name" placeholder="Name of the project this headcount is for" value="'+escapeHtml(row && row.project_name || '')+'">';
+  grid.appendChild(projWrap);
   grid.appendChild(buildSelectField('employment_type','Employment Type', EMPLOYMENT_TYPES, row ? row.employment_type : ''));
-  grid.appendChild(buildSelectField('position_priority','Position Priority', PRIORITIES, row ? row.position_priority : ''));
 
   const startWrap = document.createElement('div'); startWrap.className='form-field';
   const todayStr = new Date().toISOString().slice(0,10);
@@ -928,11 +2312,33 @@ function openForm(row){
   utilWrap.innerHTML = '<label>Department Utilization (%) '+(currentUser.role==='recruiter'?'*':'(set by Recruiter)')+'</label><input type="number" id="field_department_utilization" min="0" max="100" step="0.1" value="'+(row && row.department_utilization!=null ? row.department_utilization : '')+'" '+(currentUser.role==='recruiter'?'':'disabled')+'>';
   grid.appendChild(utilWrap);
 
-  // ---- Salary ----
+  // ---- Salary — product owner change #3: Currency sits immediately next
+  // to Net Basic Monthly Salary (same row). Change #4: the salary input
+  // shows comma thousands-separators as you type (stored/calculated as a
+  // plain number — MPCalc.parseMoneyInput() strips the commas back out),
+  // and a small read-only "Total Year Cost" box sits directly next to it,
+  // live-updating with the rest of the preview. ----
   addSectionLabel(grid, 'Salary & cost (§5.1.5)');
   const netWrap = document.createElement('div'); netWrap.className='form-field';
-  netWrap.innerHTML = '<label>Net Basic Monthly Salary *</label><input type="number" id="field_net_basic_monthly_salary" min="0" step="1" value="'+(row && row.net_basic_monthly_salary!=null?row.net_basic_monthly_salary:'')+'">';
+  netWrap.innerHTML = '<label>Net Basic Monthly Salary *</label><input type="text" inputmode="numeric" id="field_net_basic_monthly_salary" placeholder="0" value="'+(row && row.net_basic_monthly_salary!=null ? MPCalc.formatMoneyInput(row.net_basic_monthly_salary) : '')+'">';
   grid.appendChild(netWrap);
+
+  const currencyWrap = document.createElement('div'); currencyWrap.className='form-field';
+  currencyWrap.innerHTML = '<label>Currency</label><input type="text" id="field_currency_display" disabled>';
+  grid.appendChild(currencyWrap);
+
+  const totalYearWrap = document.createElement('div'); totalYearWrap.className='form-field';
+  totalYearWrap.innerHTML = '<label>Total Year Cost</label><input type="text" id="field_total_year_cost_preview" placeholder="—" disabled>';
+  grid.appendChild(totalYearWrap);
+
+  // Support Allowance Applicable — product owner change #14: an independent
+  // per-line override, relevant only for "Project" lines (see
+  // wireInternalOrProjectToggle()). Dimmed/disabled for Internal lines,
+  // mirroring the existing Project Name vs Cost Center pattern.
+  const supportAllowanceWrap = document.createElement('div'); supportAllowanceWrap.className='form-field'; supportAllowanceWrap.id='wrap_support_allowance';
+  supportAllowanceWrap.innerHTML = '<label><input type="checkbox" id="field_support_allowance_applicable" '+(row && row.support_allowance_applicable ? 'checked' : '')+'> Support Allowance Applicable</label>';
+  grid.appendChild(supportAllowanceWrap);
+  document.getElementById('field_support_allowance_applicable').addEventListener('change', recalcPreview);
 
   if(currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr'){
     const incWrap = document.createElement('div'); incWrap.className='form-field';
@@ -941,23 +2347,27 @@ function openForm(row){
   }
 
   // ---- Wire cascading + conditional behavior ----
-  wireCascadingDropdowns(row);
+  wireOrgCascade(row);
   wireBusinessNeedToggle(row);
-  ['field_branch','field_net_basic_monthly_salary','field_gross_incentive','field_position_target_start_date','field_position_master_id_dummy']
+  wireInternalOrProjectToggle(row);
+  wireSalaryInputFormatting();
+  ['field_branch','field_gross_incentive','field_position_target_start_date','field_position_master_id_dummy']
     .forEach(id=>{ const el = document.getElementById(id); if(el) el.addEventListener('input', recalcPreview); });
   document.getElementById('field_branch').addEventListener('change', ()=>{ updateCurrencyDisplay(); recalcPreview(); });
   document.getElementById('field_position').addEventListener('change', recalcPreview);
-  document.getElementById('field_net_basic_monthly_salary').addEventListener('input', recalcPreview);
   const incEl = document.getElementById('field_gross_incentive'); if(incEl) incEl.addEventListener('input', recalcPreview);
   document.getElementById('field_position_target_start_date').addEventListener('change', recalcPreview);
 
   updateCurrencyDisplay();
   recalcPreview();
 
-  const isDraft = !row || row.status === 'Draft';
+  const isDraft = !row || isDuplicate || row.status === 'Draft';
   document.getElementById('saveFormBtn').style.display = isDraft ? '' : 'none';
   document.getElementById('submitFormBtn').style.display = isDraft ? '' : 'none';
-  document.getElementById('positionModal').classList.add('show');
+  // Scroll the freshly-inserted row into view — it's always prepended at
+  // the top of the worklist table, so this matters most when the person
+  // clicked "Duplicate"/"Edit" on a row further down the list.
+  document.getElementById('inlineEditorRow').scrollIntoView({ block: 'nearest' });
 }
 function addSectionLabel(grid, text){
   const label = document.createElement('div'); label.className = 'section-label'; label.textContent = text;
@@ -973,34 +2383,193 @@ function buildSelectField(key, label, options, currentVal){
   wrap.appendChild(sel);
   return wrap;
 }
-function wireCascadingDropdowns(row){
-  const divisionSel = document.getElementById('field_division');
+// Change #2 — the whole minimized BU Head flow lives here: Department is
+// the top-level pick (pre-selected/locked when there's only one covered
+// department), Division is derived and read-only, Section is the
+// one other real choice, Specialization appears ONLY when the Department+
+// Track genuinely branches into more than one Cost Center, and Cost
+// Center itself is always resolved silently — never a dropdown.
+// Round #12 — pulled out of wireOrgCascade() so the Upload-from-Excel
+// bulk-add path (importRowsFromExcel() / resolveUploadRow() below) can
+// resolve Section/Position/Cost-Center for a parsed spreadsheet row
+// through the EXACT same lookups the inline editor's dropdowns use,
+// rather than re-implementing any of this logic a second time.
+function sectionsForDepartment(deptId){
+  return ALL_SECTIONS.filter(s=>s.department_id===deptId);
+}
+function positionsForDeptSection(deptId, sectionId){
+  return ALL_POSITIONS.filter(p=>p.department_id===deptId && p.section_id===sectionId);
+}
+function costCenterScopesFor(deptId, sectionId){
+  return ALL_CC_SCOPES.filter(sc=>sc.department_id===deptId && sc.section_id===sectionId);
+}
+// Resolves the Cost Center for a Department+Section(+Specialization),
+// exactly the same "unambiguous -> just use it / ambiguous -> resolve
+// by Specialization" rule the inline editor's applyCostCenterFromScopes()
+// used to implement inline. Returns:
+//   costCenterId   the resolved id, or null if it can't be resolved yet
+//   needsSpecialization  true when this Department+Section genuinely
+//                  branches into more than one Cost Center (i.e. a
+//                  Specialization is required to disambiguate)
+function resolveCostCenterForScope(deptId, sectionId, specializationId){
+  const scopes = (deptId && sectionId) ? costCenterScopesFor(deptId, sectionId) : [];
+  const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+  if(distinctCcIds.length === 1) return { costCenterId: scopes[0].cost_center_id, needsSpecialization: false };
+  if(distinctCcIds.length > 1){
+    const specId = specializationId != null ? Number(specializationId) : null;
+    const scope = scopes.find(sc=>sc.specialization_id === specId) || null;
+    return { costCenterId: scope ? scope.cost_center_id : null, needsSpecialization: true };
+  }
+  return { costCenterId: null, needsSpecialization: false }; // no scope configured at all for this Department+Section
+}
+function wireOrgCascade(row){
   const deptSel = document.getElementById('field_department');
+  const divHidden = document.getElementById('field_division');
+  const divDisplay = document.getElementById('field_division_display');
   const sectionSel = document.getElementById('field_section');
-  const ccSel = document.getElementById('field_cost_center');
+  const specWrap = document.getElementById('wrap_specialization');
+  const specSel = document.getElementById('field_specialization');
+  const positionSel = document.getElementById('field_position');
+  const ccHidden = document.getElementById('field_cost_center');
+  const ccDisplay = document.getElementById('field_cost_center_display');
 
-  function refreshDepartments(){
-    const divId = divisionSel.value ? Number(divisionSel.value) : null;
-    const opts = divId ? ALL_DEPARTMENTS.filter(d=>d.division_id===divId) : [];
-    deptSel.innerHTML = '<option value="">— Choose —</option>';
-    opts.forEach(d=>{ const o=document.createElement('option'); o.value=d.id; o.textContent=d.name; deptSel.appendChild(o); });
-    if(row && row.department_id && opts.some(d=>d.id===row.department_id)) deptSel.value = row.department_id;
+  // BU Head with exactly one covered department: pre-select it and lock
+  // the dropdown (still a real <select> under the hood, just disabled —
+  // its value still reads out fine via JS at save time). Left editable
+  // if the row being edited/duplicated already has a DIFFERENT
+  // department set (e.g. their coverage changed since it was created).
+  if(currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1 && !document.getElementById('chk_department_notinlist').checked){
+    const onlyDeptId = String(MY_BU_DEPARTMENTS[0].id);
+    if(!deptSel.value || deptSel.value === onlyDeptId){
+      deptSel.value = onlyDeptId;
+      deptSel.disabled = true;
+    }
+  } else if(currentUser.role === 'ta_leader' && MY_TA_LEADER_DEPARTMENTS.length === 1 && !document.getElementById('chk_department_notinlist').checked){
+    const onlyDeptId = String(MY_TA_LEADER_DEPARTMENTS[0].id);
+    if(!deptSel.value || deptSel.value === onlyDeptId){
+      deptSel.value = onlyDeptId;
+      deptSel.disabled = true;
+    }
   }
-  function refreshSectionsAndCostCenters(){
-    const deptId = deptSel.value ? Number(deptSel.value) : null;
-    const secOpts = deptId ? ALL_SECTIONS.filter(s=>s.department_id===deptId) : [];
-    const ccOpts = deptId ? ALL_COST_CENTERS.filter(c=>c.department_id===deptId) : [];
+
+  function currentDeptId(){ return deptSel.value ? Number(deptSel.value) : null; }
+  function currentSectionId(){ return sectionSel.value ? Number(sectionSel.value) : null; }
+
+  function refreshDivision(){
+    const deptId = currentDeptId();
+    const dept = ALL_DEPARTMENTS.find(d=>d.id===deptId);
+    let div = dept ? ALL_DIVISIONS.find(d=>d.id===dept.division_id) : null;
+    // No Department chosen/locked in yet (a BU Head or TA Leader who
+    // covers more than one Department has nothing pre-selected here) —
+    // if every Department they cover belongs to the SAME Division, show
+    // that Division right away instead of leaving it blank until they
+    // pick a specific Department; it's already known from their coverage
+    // alone. If their coverage spans more than one Division, there's
+    // genuinely nothing to show yet, so it stays blank as before.
+    if(!div && !dept){
+      const myDepts = currentUser.role === 'bu_head' ? MY_BU_DEPARTMENTS
+        : currentUser.role === 'ta_leader' ? MY_TA_LEADER_DEPARTMENTS : null;
+      if(myDepts && myDepts.length){
+        const divIds = [...new Set(myDepts.map(d=>d.division_id).filter(v=>v!=null))];
+        if(divIds.length === 1) div = ALL_DIVISIONS.find(d=>d.id===divIds[0]) || null;
+      }
+    }
+    divHidden.value = div ? div.id : '';
+    divDisplay.value = div ? div.name : (dept ? 'No division set for this department yet — see Admin Settings' : '');
+  }
+  function refreshSections(){
+    const deptId = currentDeptId();
+    const prevVal = sectionSel.value;
+    const opts = deptId ? sectionsForDepartment(deptId) : [];
     sectionSel.innerHTML = '<option value="">— Choose —</option>';
-    secOpts.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sectionSel.appendChild(o); });
-    if(row && row.section_id && secOpts.some(s=>s.id===row.section_id)) sectionSel.value = row.section_id;
-    ccSel.innerHTML = '<option value="">— Choose —</option>';
-    ccOpts.forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name; ccSel.appendChild(o); });
-    if(row && row.cost_center_id && ccOpts.some(c=>c.id===row.cost_center_id)) ccSel.value = row.cost_center_id;
+    opts.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sectionSel.appendChild(o); });
+    if(row && row.section_id && opts.some(s=>s.id===row.section_id)) sectionSel.value = row.section_id;
+    else if(opts.some(s=>String(s.id)===String(prevVal))) sectionSel.value = prevVal;
   }
-  divisionSel.addEventListener('change', ()=>{ refreshDepartments(); refreshSectionsAndCostCenters(); });
-  deptSel.addEventListener('change', refreshSectionsAndCostCenters);
-  refreshDepartments();
-  refreshSectionsAndCostCenters();
+  function applyCostCenterFromScopes(){
+    const deptId = currentDeptId(), sectionId = currentSectionId();
+    if(!deptId || !sectionId){ ccHidden.value=''; ccDisplay.value=''; return; }
+    const specId = specSel.value ? Number(specSel.value) : null;
+    // Round #12: the actual scope/ambiguity resolution now lives in the
+    // shared top-level resolveCostCenterForScope() so the Upload-from-
+    // Excel bulk-add path can reuse the EXACT same logic instead of
+    // re-implementing it (see importRowsFromExcel() below).
+    const resolved = resolveCostCenterForScope(deptId, sectionId, specId);
+    if(resolved.costCenterId){
+      const cc = ALL_COST_CENTERS.find(c=>c.id===resolved.costCenterId);
+      ccHidden.value = resolved.costCenterId;
+      ccDisplay.value = cc ? (cc.name + (cc.cc_number ? ' (' + cc.cc_number + ')' : '')) : '';
+    } else {
+      ccHidden.value = '';
+      ccDisplay.value = 'Not yet configured for this Department/Track — check "Not in list?" to flag it for HR';
+    }
+  }
+  function refreshSpecialization(){
+    const deptId = currentDeptId(), sectionId = currentSectionId();
+    const scopes = (deptId && sectionId) ? costCenterScopesFor(deptId, sectionId) : [];
+    const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+    const needsSpecialization = distinctCcIds.length > 1; // the one real ambiguous case (change #2)
+    specWrap.style.display = needsSpecialization ? '' : 'none';
+    if(needsSpecialization){
+      const specIds = [...new Set(scopes.map(sc=>sc.specialization_id).filter(v=>v!=null))];
+      const prevVal = specSel.value;
+      specSel.innerHTML = '<option value="">— Choose —</option>';
+      specIds.forEach(id=>{
+        const spec = ALL_SPECIALIZATIONS.find(s=>s.id===id);
+        if(spec){ const o=document.createElement('option'); o.value=spec.id; o.textContent=spec.name; specSel.appendChild(o); }
+      });
+      if(row && row._prefillSpecializationId && specIds.includes(row._prefillSpecializationId)) specSel.value = row._prefillSpecializationId;
+      else if(specIds.some(id=>String(id)===String(prevVal))) specSel.value = prevVal;
+    } else {
+      specSel.value = '';
+    }
+    applyCostCenterFromScopes();
+  }
+  // Item #5 — Position (Title) must never be fillable before its
+  // prerequisite Section is set. Previously, with no Section chosen
+  // yet, this fell back to showing "legacy/global" positions (no
+  // department_id/section_id at all) — which meant Position was
+  // effectively choosable independently of Section. Now: no Section
+  // picked -> the dropdown is disabled and shows only a placeholder,
+  // full stop. Only once a Department+Section are both picked does it
+  // populate with positions filtered to that Department+Section.
+  function refreshPositions(){
+    const deptId = currentDeptId(), sectionId = currentSectionId();
+    if(!deptId || !sectionId){
+      positionSel.innerHTML = '<option value="">— choose a Section first —</option>';
+      positionSel.value = '';
+      positionSel.disabled = true;
+      return;
+    }
+    positionSel.disabled = false;
+    let opts = positionsForDeptSection(deptId, sectionId);
+    if(row && row.position_master_id && !opts.some(p=>p.id===row.position_master_id)){
+      const extra = ALL_POSITIONS.find(p=>p.id===row.position_master_id);
+      if(extra) opts = opts.concat([extra]); // never silently blank out an already-selected position (Edit/Duplicate) just because it predates Department/Track scoping
+    }
+    const prevVal = positionSel.value;
+    positionSel.innerHTML = '<option value="">— Choose —</option>';
+    opts.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.title; positionSel.appendChild(o); });
+    if(row && row.position_master_id && opts.some(p=>p.id===row.position_master_id)) positionSel.value = row.position_master_id;
+    else if(opts.some(p=>String(p.id)===String(prevVal))) positionSel.value = prevVal;
+  }
+
+  // Best-effort reverse lookup so Edit/Duplicate can also re-select the
+  // right Specialization (purely a UI convenience — specialization itself
+  // is never persisted on manpower_plan, only the Cost Center it resolves to).
+  if(row && row.department_id && row.section_id && row.cost_center_id){
+    const matches = costCenterScopesFor(row.department_id, row.section_id).filter(sc=>sc.cost_center_id===row.cost_center_id);
+    if(matches.length === 1) row._prefillSpecializationId = matches[0].specialization_id;
+  }
+
+  deptSel.addEventListener('change', ()=>{ refreshDivision(); refreshSections(); refreshSpecialization(); refreshPositions(); recalcPreview(); });
+  sectionSel.addEventListener('change', ()=>{ refreshSpecialization(); refreshPositions(); recalcPreview(); });
+  specSel.addEventListener('change', ()=>{ applyCostCenterFromScopes(); recalcPreview(); });
+
+  refreshDivision();
+  refreshSections();
+  refreshSpecialization();
+  refreshPositions();
 }
 function wireBusinessNeedToggle(row){
   const sel = document.getElementById('field_business_need_type');
@@ -1013,35 +2582,134 @@ function wireBusinessNeedToggle(row){
   sel.addEventListener('change', apply);
   apply();
 }
+// Item #8 — Internal (default): Cost Center stays auto-resolved from
+// Department+Track(+Specialization) and is the ACTIVE field; Project
+// Name is disabled + dimmed (not hidden — the user should always see
+// both fields exist). Project: the reverse — Project Name becomes the
+// active, required, editable field; Cost Center is disabled + dimmed
+// and its value is cleared/ignored on save (never hidden either). Only
+// one of the two is ever actually saved (see collectPayloadFromForm()).
+function wireInternalOrProjectToggle(row){
+  const sel = document.getElementById('field_internal_or_project');
+  function apply(){
+    const isProject = sel.value === 'Project';
+    const ccWrap = document.getElementById('wrap_cost_center');
+    const projWrap = document.getElementById('wrap_project_name');
+    const ccHidden = document.getElementById('field_cost_center');
+    const ccDisplay = document.getElementById('field_cost_center_display');
+    const ccText = document.getElementById('field_cost_center_text');
+    const ccChk = document.getElementById('chk_cost_center_notinlist');
+    const projInput = document.getElementById('field_project_name');
+    const supportWrap = document.getElementById('wrap_support_allowance');
+    const supportChk = document.getElementById('field_support_allowance_applicable');
+
+    ccWrap.classList.toggle('field-inactive', isProject);
+    projWrap.classList.toggle('field-inactive', !isProject);
+
+    if(isProject){
+      // Cost Center becomes inactive — clear it so a stale value never
+      // gets saved once we've switched to Project, and disable its
+      // "Not in list?" flag (there's nothing to flag once it's inactive).
+      if(ccHidden) ccHidden.value = '';
+      if(ccDisplay) ccDisplay.value = '';
+      if(ccText) ccText.value = '';
+      if(ccChk){ ccChk.checked = false; ccChk.disabled = true; }
+      if(projInput) projInput.disabled = false;
+      if(supportWrap) supportWrap.classList.remove('field-inactive');
+      if(supportChk) supportChk.disabled = false;
+    } else {
+      if(ccChk) ccChk.disabled = false;
+      if(projInput){ projInput.disabled = true; projInput.value = ''; }
+      // Support Allowance Applicable only means anything for Project lines —
+      // dim/disable it and always treat it as false for Internal, same as
+      // the Cost Center/Project Name pattern above.
+      if(supportWrap) supportWrap.classList.add('field-inactive');
+      if(supportChk){ supportChk.checked = false; supportChk.disabled = true; }
+    }
+    recalcPreview();
+  }
+  sel.addEventListener('change', ()=>{ apply(); recalcPreview(); });
+  apply();
+}
+// Product owner change #4 — format the Net Basic Monthly Salary input
+// with thousands separators as the person types; the underlying numeric
+// value (for calc/save) always comes back out through
+// MPCalc.parseMoneyInput(), which strips everything but digits/decimal.
+function wireSalaryInputFormatting(){
+  const el = document.getElementById('field_net_basic_monthly_salary');
+  el.addEventListener('input', ()=>{
+    const raw = MPCalc.parseMoneyInput(el.value);
+    const formatted = raw != null ? MPCalc.formatMoneyInput(raw) : '';
+    if(formatted !== el.value){
+      el.value = formatted;
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+    recalcPreview();
+  });
+}
 function updateCurrencyDisplay(){
   const branchId = document.getElementById('field_branch').value;
   const branch = ALL_BRANCHES.find(b=>String(b.id)===String(branchId));
   const currency = branch ? MPCalc.currencyForCountry(branch.country) : '';
   document.getElementById('field_currency_display').value = currency;
 }
+// Migration 10 (product owner change #9) — policy amounts now resolve
+// via the position's assigned cost_tier_id -> cost_policy_tiers, never
+// read directly off the positions row. No tier assigned -> all-zero.
 function selectedPositionPolicy(){
   const posId = document.getElementById('field_position').value;
   const notInList = document.getElementById('chk_position_notinlist').checked;
-  if(notInList || !posId) return {};
-  return ALL_POSITIONS.find(p=>String(p.id)===String(posId)) || {};
+  if(notInList || !posId) return MPCalc.zeroPolicy();
+  const pos = ALL_POSITIONS.find(p=>String(p.id)===String(posId)) || null;
+  return MPCalc.resolveEffectivePolicy(pos, ALL_COST_POLICY_TIERS);
 }
 function recalcPreview(){
   const branchId = document.getElementById('field_branch').value;
   const branch = ALL_BRANCHES.find(b=>String(b.id)===String(branchId));
-  const net = parseFloat(document.getElementById('field_net_basic_monthly_salary').value);
+  const netEl = document.getElementById('field_net_basic_monthly_salary');
+  const net = netEl ? MPCalc.parseMoneyInput(netEl.value) : null;
   const startDate = document.getElementById('field_position_target_start_date').value;
   const incEl = document.getElementById('field_gross_incentive');
   const grossIncentive = incEl ? parseFloat(incEl.value)||0 : 0;
   const box = document.getElementById('costPreview');
-  if(!branch || isNaN(net) || !startDate){ box.innerHTML = '<p class="hint">Fill in Branch, Net Basic Monthly Salary and Position Target Start Date to see the live cost preview.</p>'; return; }
+  const totalYearEl = document.getElementById('field_total_year_cost_preview');
+  if(!branch || net == null || !startDate){
+    box.innerHTML = '<p class="hint">Fill in Branch, Net Basic Monthly Salary and Position Target Start Date to see the live cost preview.</p>';
+    if(totalYearEl) totalYearEl.value = '';
+    return;
+  }
   const currency = MPCalc.currencyForCountry(branch.country);
   const position = selectedPositionPolicy();
+  // Support Allowance Applicable — product owner change #14: a per-line
+  // override, relevant only for Project lines. We never touch
+  // manpower-plan-calc.js for this; instead we choose what gets passed as
+  // the `position` argument into MPCalc.calculateCost(). For Internal
+  // lines the tier's own has_support_allowance default keeps governing,
+  // exactly as before.
+  const internalOrProjectEl = document.getElementById('field_internal_or_project');
+  const supportChk = document.getElementById('field_support_allowance_applicable');
+  let effectivePosition = position;
+  if(internalOrProjectEl && internalOrProjectEl.value === 'Project'){
+    effectivePosition = Object.assign({}, position, { has_support_allowance: supportChk ? supportChk.checked : false });
+  }
   const calc = MPCalc.calculateCost({
-    currency, netBasicMonthlySalary: net, position, grossIncentive,
-    positionTargetStartDate: startDate, statutoryParams: STATUTORY_EG
+    currency, netBasicMonthlySalary: net, position: effectivePosition, grossIncentive,
+    positionTargetStartDate: startDate, statutoryParams: statutoryParamsForDateStr(startDate)
   });
   window.__LAST_CALC__ = calc; // used at save time
   renderCostPreview(calc);
+  updateAdjacentTotalYearBox(calc);
+}
+// Product owner change #4 — the small Total Year Cost box sits right
+// next to the salary input and ALWAYS shows the number, for every role
+// that can open this editor (BU Head included) — it's not gated by the
+// total-only/full-breakdown cost visibility rule the way the fuller
+// breakdown further down the form is; that rule only governs whether the
+// FULL breakdown table also renders below.
+function updateAdjacentTotalYearBox(calc){
+  const el = document.getElementById('field_total_year_cost_preview');
+  if(!el) return;
+  el.value = calc ? fmtMoney(calc.totalCurrentYearCost, calc.currency) : '';
 }
 function renderCostPreview(calc){
   const level = getCostVisibilityLevel(currentUser.role);
@@ -1061,8 +2729,12 @@ function labelize(key){
   return key.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
 }
 function closeForm(){
-  document.getElementById('positionModal').classList.remove('show');
+  const tr = document.getElementById('inlineEditorRow');
+  if(tr) tr.remove();
+  inlineEditorOpen = false;
   editingRowId = null;
+  duplicatingFromId = null;
+  renderCurrentView(); // safe to re-render now that the inline editor is gone
 }
 
 function collectPayloadFromForm(){
@@ -1080,11 +2752,28 @@ function collectPayloadFromForm(){
   const divisionId = pick('division');
   const departmentId = pick('department');
   const sectionId = pick('section');
-  const costCenterId = pick('cost_center');
   const branchId = document.getElementById('field_branch').value ? Number(document.getElementById('field_branch').value) : null;
   const branch = ALL_BRANCHES.find(b=>b.id===branchId);
   const currency = branch ? MPCalc.currencyForCountry(branch.country) : null;
   const positionTitle = flag.position || (ALL_POSITIONS.find(p=>p.id===positionMasterId)||{}).title || null;
+
+  // Product owner change #6 — Internal keeps the auto-resolved Cost
+  // Center (with its own BR-18 "Not in list?" flag, same as before);
+  // Project clears Cost Center entirely and carries a free-text Project
+  // Name instead. Only one of cost_center_id/project_name is ever set.
+  const internalOrProject = document.getElementById('field_internal_or_project').value || 'Internal';
+  let costCenterId = null;
+  let projectName = null;
+  if(internalOrProject === 'Project'){
+    delete flag.cost_center; // the "not in list" concept doesn't apply once there's no Cost Center to flag
+    const projEl = document.getElementById('field_project_name');
+    projectName = projEl ? projEl.value.trim() : null;
+  } else {
+    costCenterId = pick('cost_center');
+  }
+
+  const netEl = document.getElementById('field_net_basic_monthly_salary');
+  const netSalary = netEl ? MPCalc.parseMoneyInput(netEl.value) : null; // change #4 — strip the comma formatting back to a plain number
 
   const payload = {
     position_master_id: positionMasterId,
@@ -1093,17 +2782,19 @@ function collectPayloadFromForm(){
     department_id: departmentId,
     section_id: sectionId,
     cost_center_id: costCenterId,
+    internal_or_project: internalOrProject,
+    project_name: projectName,
     branch_id: branchId,
     currency,
     master_data_flag: flag,
     employment_type: document.getElementById('field_employment_type').value || null,
-    position_priority: document.getElementById('field_position_priority').value || null,
     position_target_start_date: document.getElementById('field_position_target_start_date').value || null,
     business_need_type: document.getElementById('field_business_need_type').value || null,
     employee_being_replaced: document.getElementById('field_employee_being_replaced') ? document.getElementById('field_employee_being_replaced').value.trim() : null,
     justification: document.getElementById('field_justification') ? document.getElementById('field_justification').value.trim() : null,
     department_utilization: document.getElementById('field_department_utilization').value !== '' ? parseFloat(document.getElementById('field_department_utilization').value) : null,
-    net_basic_monthly_salary: document.getElementById('field_net_basic_monthly_salary').value !== '' ? parseFloat(document.getElementById('field_net_basic_monthly_salary').value) : null,
+    net_basic_monthly_salary: netSalary,
+    support_allowance_applicable: internalOrProject === 'Project' ? (document.getElementById('field_support_allowance_applicable') ? document.getElementById('field_support_allowance_applicable').checked : false) : false,
   };
   const tmSel = document.getElementById('field_top_management_approver_id');
   if(tmSel) payload.top_management_approver_id = tmSel.value || null;
@@ -1125,22 +2816,47 @@ async function logMasterDataExceptions(mpId, flag){
     await sb.from('master_data_exceptions').insert({ manpower_plan_id: mpId, field_name, free_text_value: flag[field_name] });
   }
 }
-document.getElementById('saveFormBtn').addEventListener('click', async ()=> saveForm(false));
-document.getElementById('submitFormBtn').addEventListener('click', async ()=> saveForm(true));
 async function saveForm(submitNow){
   const statusEl = document.getElementById('formStatus');
   statusEl.className = 'status-msg'; statusEl.textContent = '';
-  if(!canCreate() && !editingRowId){ statusEl.textContent='You are not allowed to submit Manpower Plan lines.'; statusEl.className='status-msg err'; return; }
+
+  // Bug fix (round #12): disable BOTH action buttons the instant either
+  // is clicked — before any validation or async work runs — and swap
+  // the clicked one's label to a "…ing" state. Previously nothing
+  // disabled them while the insert/update was in flight, so a fast
+  // double-click could fire two inserts for the same line. They're only
+  // ever re-enabled below, via fail(), on a validation problem or a
+  // save error; on success the whole row is torn down by closeForm(),
+  // so there is nothing left on screen to re-enable.
+  const saveBtn = document.getElementById('saveFormBtn');
+  const submitBtn = document.getElementById('submitFormBtn');
+  const originalSaveText = saveBtn.textContent;
+  const originalSubmitText = submitBtn.textContent;
+  saveBtn.disabled = true;
+  submitBtn.disabled = true;
+  if(submitNow) submitBtn.textContent = 'Submitting…'; else saveBtn.textContent = 'Saving…';
+  function reenableButtons(){
+    saveBtn.disabled = false; submitBtn.disabled = false;
+    saveBtn.textContent = originalSaveText; submitBtn.textContent = originalSubmitText;
+  }
+  function fail(msg){
+    statusEl.textContent = msg; statusEl.className = 'status-msg err';
+    reenableButtons();
+  }
+
+  if(!canCreate() && !editingRowId){ fail('You are not allowed to submit Manpower Plan lines.'); return; }
 
   const payload = collectPayloadFromForm();
-  if(!payload.position_title){ statusEl.textContent='Position is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.division_id && !payload.master_data_flag.division){ statusEl.textContent='Division is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.branch_id){ statusEl.textContent='Branch is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.employment_type){ statusEl.textContent='Employment Type is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.net_basic_monthly_salary){ statusEl.textContent='Net Basic Monthly Salary is required.'; statusEl.className='status-msg err'; return; }
-  if(!payload.position_target_start_date){ statusEl.textContent='Position Target Start Date is required.'; statusEl.className='status-msg err'; return; }
-  if(payload.business_need_type === 'Replacement' && !payload.employee_being_replaced){ statusEl.textContent='Employee Being Replaced is required for a Replacement.'; statusEl.className='status-msg err'; return; }
-  if(payload.business_need_type === 'New Position' && !payload.justification){ statusEl.textContent='Justification is required for a New Position.'; statusEl.className='status-msg err'; return; }
+  if(!payload.position_title){ fail('Position is required.'); return; }
+  if(!payload.division_id && !payload.master_data_flag.division){ fail('Division is required.'); return; }
+  if(!payload.branch_id){ fail('Branch is required.'); return; }
+  if(!payload.employment_type){ fail('Employment Type is required.'); return; }
+  if(!payload.net_basic_monthly_salary){ fail('Net Basic Monthly Salary is required.'); return; }
+  if(!payload.position_target_start_date){ fail('Position Target Start Date is required.'); return; }
+  if(!payload.internal_or_project){ fail('Internal / Project is required.'); return; }
+  if(payload.internal_or_project === 'Project' && !payload.project_name){ fail('Project Name is required when Internal / Project is set to Project.'); return; }
+  if(payload.business_need_type === 'Replacement' && !payload.employee_being_replaced){ fail('Employee Being Replaced is required for a Replacement.'); return; }
+  if(payload.business_need_type === 'New Position' && !payload.justification){ fail('Justification is required for a New Position.'); return; }
 
   let result, mpId;
   if(!editingRowId){
@@ -1152,7 +2868,19 @@ async function saveForm(submitNow){
     payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
     payload.current_step = submitNow ? 0 : -1;
     payload.status = submitNow ? MPCalc.statusLabelForStep(payload.approval_chain, 0) : 'Draft';
-    result = await sb.from('manpower_plan').insert(payload);
+    payload.status_changed_at = new Date().toISOString();
+    // Bug fix (round #24): PostgREST/supabase-js does NOT return the
+    // inserted row by default — without .select() here, result.data was
+    // always null, so mpId below was always undefined. That meant the
+    // notify-new-request email (to Head of HR AND every TA Leader
+    // covering the department) never fired for a BRAND NEW position
+    // submitted straight from the inline editor (the `if(submitNow &&
+    // mpId)` guard a few lines down silently skipped it) — this is
+    // exactly the "TA Team Leader didn't get an email" report. It also
+    // meant a Not-in-list master-data exception (logMasterDataExceptions
+    // below) was silently logged against a null manpower_plan_id for the
+    // same submissions. .select() fixes both.
+    result = await sb.from('manpower_plan').insert(payload).select();
     mpId = result.data && result.data[0] && result.data[0].id;
   } else {
     payload.updated_by = currentUser.id;
@@ -1160,29 +2888,433 @@ async function saveForm(submitNow){
       const row = ALL_ROWS.find(r=>r.id===editingRowId);
       payload.current_step = 0;
       payload.status = MPCalc.statusLabelForStep(row.approval_chain, 0);
+      payload.status_changed_at = new Date().toISOString();
     }
     result = await sb.from('manpower_plan').update(payload).eq('id', editingRowId);
     mpId = editingRowId;
   }
-  if(result.error){ statusEl.textContent = 'Could not save: ' + result.error.message; statusEl.className='status-msg err'; return; }
+  if(result.error){ fail('Could not save: ' + result.error.message); return; }
   if(Object.keys(payload.master_data_flag||{}).length) await logMasterDataExceptions(mpId, payload.master_data_flag);
+  // Only a real Submit (not a Draft save) should notify reviewers — the
+  // notify-new-request function itself also checks that the requester is
+  // a BU Head, so this is safe to call for any submitted line.
+  if(submitNow && mpId) notifyNewPositionRequest(mpId);
   closeForm();
   showToast(submitNow ? 'Submitted for approval.' : 'Saved as Draft.');
   await loadRows();
 }
 
-/* ====================== EXCEL EXPORT (BR-22) ====================== */
+/* ====================== EXCEL EXPORT (BR-22) ======================
+ * Item #3 (round #23) — the export now includes EVERY field on file for
+ * each position (built from the same fieldsForRow() the click-to-view
+ * full-details modal uses — item #2 — so the two can never drift
+ * apart), not just the small subset of columns from before. Round #12's
+ * cost-visibility rule is still respected: a 'total_only' role (e.g. BU
+ * Head) still never gets the finer Total Monthly Cost breakdown column,
+ * same as on screen — fieldsForRow() itself leaves that column out for
+ * them. */
 document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
-  const rows = visibleRows().map(r=>({
-    'Position ID': r.position_code, 'Position': r.position_title, 'Division': r.division, 'Department': r.department,
-    'Status': r.status, 'Net Basic Monthly Salary': r.net_basic_monthly_salary, 'Currency': r.currency,
-    'Total Monthly Cost': r.total_monthly_cost, 'Total Current Year Cost': r.total_current_year_cost,
-    'Submitted By': profileName(r.submitted_by||r.requested_by)
-  }));
+  const level = getCostVisibilityLevel(currentUser.role);
+  const rows = visibleRows().map(r=>{
+    const row = {};
+    // fieldsForRow() now returns [sectionTitle, [[label,value],...]]
+    // sections (round #32, for the Position Details view's headers) —
+    // flatten them back out into one row of columns for the spreadsheet.
+    fieldsForRow(r, level).forEach(([, fields])=>{
+      fields.forEach(([label, value])=>{ row[label] = value; });
+    });
+    return row;
+  });
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Manpower Plan');
   XLSX.writeFile(wb, 'manpower-plan-export.xlsx');
+});
+
+/* ====================== DOWNLOAD TEMPLATE (round #12; reworked per
+ * product owner feedback below) ======================
+ * Generates a .xlsx covering EVERY field the inline editor can collect
+ * for a new line (minus the fields that are auto-derived — Division/
+ * Cost Center/Currency — or system-generated — Status/Position ID/
+ * approval fields — which the template still leaves out, since there's
+ * nothing for the manager to type into them). Product owner change:
+ * previously "Top Management (Approver)", "Department Utilization (%)"
+ * and "Gross Incentive" were left off entirely; now every column the
+ * system's own box can collect is here, and NOTE_TEXT spells out the
+ * exact same mandatory-field rules saveForm()/resolveUploadRow() below
+ * enforce, "as if filling the system box" — including which fields are
+ * only conditionally required. The instructional note is written as the
+ * sheet's literal first row (not a data row after the header) — see the
+ * download handler below, which builds the sheet as a raw
+ * row-by-row array (aoa_to_sheet) instead of json_to_sheet for exactly
+ * this reason. */
+const TEMPLATE_COLUMNS = ['Branch','Department','Section','Specialization','Position','Employment Type',
+  'Business Need','Employee Being Replaced','Justification','Position Target Start Date',
+  'Internal / Project','Project Name','Net Basic Monthly Salary','Support Allowance Applicable',
+  'Top Management (Approver)','Department Utilization (%)','Gross Incentive'];
+const TEMPLATE_NOTE_TEXT = 'NOTE — read before filling in, then delete this row: fill every column exactly as you would fill the matching box in the system — ' +
+  'Branch / Department / Section / Position / Employment Type / Business Need / Internal / Project must match an existing option\'s spelling exactly (case-insensitive). ' +
+  'ALWAYS REQUIRED: Branch, Department, Section, Position, Employment Type, Business Need, Position Target Start Date, Internal / Project, Net Basic Monthly Salary. ' +
+  'CONDITIONALLY REQUIRED: Specialization only if your Department/Section has more than one specialization; Employee Being Replaced only if Business Need is Replacement; ' +
+  'Justification only if Business Need is New Position; Project Name only if Internal / Project is Project; ' +
+  'Top Management (Approver) — full name of a Top Management user — only if you are a Recruiter or Head of HR; Department Utilization (%) only if you are a Recruiter (0-100), otherwise leave blank. ' +
+  'OPTIONAL: Support Allowance Applicable (Yes/No — only ever applies when Internal / Project is Project), Gross Incentive (a number; blank = 0). ' +
+  'Delete the two EXAMPLE rows below before uploading.';
+function buildTemplateRows(){
+  // BU Head covering exactly one Department: lock the example rows to
+  // it (same "single covered department" convenience as the inline
+  // editor's own Department pre-fill/lock) — they couldn't create a
+  // line for any other department anyway (enforced again on upload).
+  const lockedDept = (currentUser.role === 'bu_head' && MY_BU_DEPARTMENTS.length === 1) ? MY_BU_DEPARTMENTS[0] : (currentUser.role === 'ta_leader' && MY_TA_LEADER_DEPARTMENTS.length === 1) ? MY_TA_LEADER_DEPARTMENTS[0] : null;
+  const exampleDept = lockedDept || ALL_DEPARTMENTS[0] || null;
+  const exampleSection = exampleDept ? sectionsForDepartment(exampleDept.id)[0] : null;
+  const exampleBranch = ALL_BRANCHES.find(b=>b.active !== false) || ALL_BRANCHES[0] || null;
+  const isTmOrHr = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
+  const exampleApprover = isTmOrHr ? (ALL_PROFILES.find(p=>p.role==='top_management') || null) : null;
+  const nextMonth = new Date(); nextMonth.setMonth(nextMonth.getMonth()+1); nextMonth.setDate(1);
+  const nextMonthStr = nextMonth.toISOString().slice(0,10);
+
+  const example1 = {
+    'Branch': exampleBranch ? exampleBranch.name : '',
+    'Department': exampleDept ? exampleDept.name : '',
+    'Section': exampleSection ? exampleSection.name : '',
+    'Specialization': '',
+    'Position': 'EXAMPLE — delete this row (Software Engineer)',
+    'Employment Type': EMPLOYMENT_TYPES[0],
+    'Business Need': 'New Position',
+    'Employee Being Replaced': '',
+    'Justification': 'Explain why this new headcount is needed.',
+    'Position Target Start Date': nextMonthStr,
+    'Internal / Project': 'Internal',
+    'Project Name': '',
+    'Net Basic Monthly Salary': '10,000',
+    'Support Allowance Applicable': 'No',
+    'Top Management (Approver)': exampleApprover ? exampleApprover.full_name : '',
+    'Department Utilization (%)': currentUser.role === 'recruiter' ? '80' : '',
+    'Gross Incentive': ''
+  };
+  const example2 = Object.assign({}, example1, {
+    'Position': 'EXAMPLE — delete this row (Technical Engineer)',
+    'Business Need': 'Replacement',
+    'Employee Being Replaced': 'Jane Doe (leaving the company)',
+    'Justification': '',
+    'Net Basic Monthly Salary': '12,500'
+  });
+  return [example1, example2];
+}
+document.getElementById('downloadTemplateBtn').addEventListener('click', ()=>{
+  const rows = buildTemplateRows();
+  // Built as a plain row-by-row array (not json_to_sheet) specifically so
+  // the instructional note can be the sheet's literal first row, with the
+  // real column header as row 2 — product owner change (previously the
+  // note was a data-shaped row AFTER the header, i.e. row 2, not row 1).
+  const dataRows = rows.map(obj => TEMPLATE_COLUMNS.map(col => obj[col] != null ? obj[col] : ''));
+  const aoa = [[TEMPLATE_NOTE_TEXT], TEMPLATE_COLUMNS, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Positions Template');
+  XLSX.writeFile(wb, 'manpower-plan-template.xlsx');
+});
+
+/* ====================== UPLOAD FROM EXCEL — bulk add (round #12) ======================
+ * Parses an uploaded .xlsx client-side with SheetJS, resolves each row
+ * against the SAME master data / ambiguity / validation rules the
+ * inline editor already enforces (reusing sectionsForDepartment(),
+ * positionsForDeptSection(), resolveCostCenterForScope(), the
+ * EMPLOYMENT_TYPES/BUSINESS_NEED_TYPES/INTERNAL_OR_PROJECT_OPTIONS
+ * constants, and MPCalc.buildApprovalChain()/calculateCost()), and
+ * inserts every row that resolves cleanly as a plain Draft — never
+ * auto-submitted, exactly like a manually-typed line starts as a Draft
+ * too. One bad row never blocks the others; every row is attempted and
+ * reported independently. */
+function findByNameCI(list, name, field){
+  field = field || 'name';
+  if(!name) return null;
+  const norm = String(name).trim().toLowerCase();
+  return list.find(x=>String(x[field]||'').trim().toLowerCase() === norm) || null;
+}
+// Accepts a genuine Excel date (SheetJS hands back a JS Date when the
+// source cell is a real date and the sheet uses cellDates), an Excel
+// date SERIAL number (when it isn't), or a parseable date string.
+function parseExcelDateCell(v){
+  if(v == null || v === '') return null;
+  if(v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString().slice(0,10);
+  if(typeof v === 'number'){
+    const ms = Math.round((v - 25569) * 86400 * 1000); // Excel epoch (1899-12-30) -> Unix epoch
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+  }
+  const d = new Date(String(v).trim());
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+}
+// Skips the template's own NOTE row and the two EXAMPLE rows (matched
+// the same way they're marked when the template is generated), and any
+// row that's entirely blank (e.g. a trailing blank line in the sheet).
+function isExampleOrNoteRow(row){
+  const vals = Object.values(row).map(v=>String(v==null?'':v));
+  if(vals.every(v=>v.trim()==='')) return true;
+  return vals.some(v=>/EXAMPLE\s*—\s*delete this row|^\s*NOTE\s*[—:-]/i.test(v));
+}
+// Resolves + validates ONE parsed spreadsheet row into a manpower_plan
+// insert payload. Never throws — every failure is caught and returned
+// as a per-row error string instead, so one bad row can't abort the
+// whole batch. rowNum is 1-based, counting only real data rows (the
+// note/example/blank rows are already excluded by the caller).
+function resolveUploadRow(row, rowNum){
+  function fail(msg){ return { ok:false, error: 'Row ' + rowNum + ': ' + msg }; }
+
+  const branch = findByNameCI(ALL_BRANCHES, row['Branch']);
+  if(!branch) return fail('Branch "' + (row['Branch']||'') + '" not found.');
+
+  const dept = findByNameCI(ALL_DEPARTMENTS, row['Department']);
+  if(!dept) return fail('Department "' + (row['Department']||'') + '" not found.');
+  if(currentUser.role === 'bu_head' && !MY_BU_DEPARTMENTS.some(d=>d.id===dept.id)){
+    return fail('Department "' + dept.name + '" is not one of your covered departments.');
+  }
+  if(currentUser.role === 'ta_leader' && !MY_TA_LEADER_DEPARTMENTS.some(d=>d.id===dept.id)){
+    return fail('Department "' + dept.name + '" is not one of your covered departments.');
+  }
+
+  const sectionsInDept = sectionsForDepartment(dept.id);
+  const section = findByNameCI(sectionsInDept, row['Section']);
+  if(!section) return fail('Section "' + (row['Section']||'') + '" not found in Department "' + dept.name + '".');
+
+  const positionsInScope = positionsForDeptSection(dept.id, section.id);
+  const position = findByNameCI(positionsInScope, row['Position'], 'title');
+  if(!position) return fail('Position "' + (row['Position']||'') + '" not found in Department "' + dept.name + '" / Section "' + section.name + '".');
+
+  const employmentType = String(row['Employment Type']||'').trim();
+  if(!EMPLOYMENT_TYPES.includes(employmentType)) return fail('Employment Type "' + employmentType + '" is not valid. Use one of: ' + EMPLOYMENT_TYPES.join(', ') + '.');
+
+  const businessNeedType = String(row['Business Need']||'').trim();
+  if(!BUSINESS_NEED_TYPES.includes(businessNeedType)) return fail('Business Need "' + businessNeedType + '" is not valid. Use one of: ' + BUSINESS_NEED_TYPES.join(', ') + '.');
+
+  const employeeBeingReplaced = String(row['Employee Being Replaced']||'').trim();
+  if(businessNeedType === 'Replacement' && !employeeBeingReplaced) return fail('Employee Being Replaced is required when Business Need is Replacement.');
+
+  const justification = String(row['Justification']||'').trim();
+  if(businessNeedType === 'New Position' && !justification) return fail('Justification is required when Business Need is New Position.');
+
+  const internalOrProject = String(row['Internal / Project']||'').trim();
+  if(!INTERNAL_OR_PROJECT_OPTIONS.includes(internalOrProject)) return fail('Internal / Project "' + internalOrProject + '" is not valid. Use one of: ' + INTERNAL_OR_PROJECT_OPTIONS.join(', ') + '.');
+
+  const projectName = String(row['Project Name']||'').trim();
+  if(internalOrProject === 'Project' && !projectName) return fail('Project Name is required when Internal / Project is Project.');
+
+  const startDate = parseExcelDateCell(row['Position Target Start Date']);
+  if(!startDate) return fail('Position Target Start Date is missing or not a recognizable date.');
+  // NOTE: the manual inline editor's date input sets min="today" but
+  // saveForm() itself never re-checks that server-side/on save — there
+  // is no "reject a past date" rule actually enforced today, so this
+  // bulk path deliberately does not invent a stricter one either.
+
+  const netSalary = MPCalc.parseMoneyInput(row['Net Basic Monthly Salary']);
+  if(netSalary == null || !(netSalary > 0)) return fail('Net Basic Monthly Salary must be a positive number.');
+
+  // Support Allowance Applicable — product owner change #14: case-
+  // insensitive "Yes"/"Y" -> true, anything else -> false; always false
+  // when Internal/Project is Internal.
+  const supportAllowanceApplicable = internalOrProject === 'Project' && /^y/i.test(String(row['Support Allowance Applicable']||'').trim());
+
+  // Top Management (Approver) — required for Recruiter/Head of HR
+  // uploads, matching the inline editor's own "Top Management (approver) *"
+  // field (isTmOrHrSubmitter); resolved by exact full-name match against
+  // ALL_PROFILES the same way Branch/Department/etc. are resolved.
+  const isTmOrHrSubmitter = currentUser.role === 'recruiter' || currentUser.role === 'head_of_hr';
+  const approverName = String(row['Top Management (Approver)']||'').trim();
+  let topManagementApproverId = null;
+  if(isTmOrHrSubmitter){
+    if(!approverName) return fail('Top Management (Approver) is required when you are submitting as Recruiter or Head of HR.');
+    const approver = findByNameCI(ALL_PROFILES.filter(p=>p.role==='top_management'), approverName, 'full_name');
+    if(!approver) return fail('Top Management (Approver) "' + approverName + '" not found among Top Management users.');
+    topManagementApproverId = approver.id;
+  }
+
+  // Department Utilization (%) — required only for a Recruiter upload
+  // (mirrors the inline editor's field, which is editable only for
+  // currentUser.role === 'recruiter' and disabled/"(set by Recruiter)"
+  // for everyone else — so for every other role this is simply left null,
+  // same as a manually-typed line would leave it for them to set later).
+  const utilRaw = String(row['Department Utilization (%)']||'').trim();
+  let departmentUtilization = null;
+  if(currentUser.role === 'recruiter'){
+    const util = utilRaw === '' ? NaN : parseFloat(utilRaw);
+    if(isNaN(util) || util < 0 || util > 100) return fail('Department Utilization (%) is required (0-100) when you are submitting as Recruiter.');
+    departmentUtilization = util;
+  }
+
+  // Gross Incentive — optional, defaults to 0 if left blank (matches the
+  // inline editor's field, which itself defaults to 0 and is only ever
+  // shown to Recruiter/Head of HR — for other roles it's simply never
+  // collected either way, so an uploaded value from another role is
+  // still honored here rather than silently dropped, since there's no
+  // reason to be stricter on the bulk path than the single-line one).
+  const incRaw = String(row['Gross Incentive']||'').trim();
+  const grossIncentive = incRaw === '' ? 0 : (MPCalc.parseMoneyInput(incRaw) || 0);
+
+  const specializationName = String(row['Specialization']||'').trim();
+  let specializationId = null;
+  let costCenterId = null;
+  if(internalOrProject !== 'Project'){
+    // Item #8's rule, mirrored here: a Project line never carries a
+    // Cost Center — Internal is the only case that needs one resolved.
+    const scopes = costCenterScopesFor(dept.id, section.id);
+    const distinctCcIds = [...new Set(scopes.map(sc=>sc.cost_center_id))];
+    if(distinctCcIds.length > 1){
+      if(!specializationName) return fail('Specialization is required for Department "' + dept.name + '" / Section "' + section.name + '" (more than one specialization exists).');
+      const specOptions = [...new Set(scopes.map(sc=>sc.specialization_id).filter(v=>v!=null))]
+        .map(id=>ALL_SPECIALIZATIONS.find(s=>s.id===id)).filter(Boolean);
+      const spec = findByNameCI(specOptions, specializationName);
+      if(!spec) return fail('Specialization "' + specializationName + '" not found for Department "' + dept.name + '" / Section "' + section.name + '".');
+      specializationId = spec.id;
+    }
+    const resolved = resolveCostCenterForScope(dept.id, section.id, specializationId);
+    if(!resolved.costCenterId) return fail('No Cost Center configured for Department "' + dept.name + '" / Section "' + section.name + '"' + (specializationName ? ' / Specialization "' + specializationName + '"' : '') + '.');
+    costCenterId = resolved.costCenterId;
+  }
+
+  const division = ALL_DIVISIONS.find(d=>d.id===dept.division_id) || null;
+  const currency = MPCalc.currencyForCountry(branch.country);
+
+  const payload = {
+    position_master_id: position.id,
+    position_title: position.title,
+    division_id: division ? division.id : null,
+    department_id: dept.id,
+    section_id: section.id,
+    cost_center_id: costCenterId,
+    internal_or_project: internalOrProject,
+    project_name: internalOrProject === 'Project' ? projectName : null,
+    branch_id: branch.id,
+    currency,
+    master_data_flag: {},
+    employment_type: employmentType,
+    position_target_start_date: startDate,
+    business_need_type: businessNeedType,
+    employee_being_replaced: businessNeedType === 'Replacement' ? employeeBeingReplaced : null,
+    justification: businessNeedType === 'New Position' ? justification : null,
+    department_utilization: departmentUtilization,
+    net_basic_monthly_salary: netSalary,
+    gross_incentive: grossIncentive,
+    support_allowance_applicable: supportAllowanceApplicable
+  };
+  if(isTmOrHrSubmitter) payload.top_management_approver_id = topManagementApproverId;
+
+  // Same cost calculation the inline editor's live preview runs
+  // (recalcPreview() -> MPCalc.calculateCost()), just fed the parsed
+  // row's inputs instead of live form fields. Apply the same
+  // Support Allowance Applicable override pattern as the inline editor's
+  // recalcPreview() so an uploaded Project row's cost actually reflects
+  // the flag instead of silently ignoring it.
+  const policy = MPCalc.resolveEffectivePolicy(position, ALL_COST_POLICY_TIERS);
+  const effectivePolicy = internalOrProject === 'Project'
+    ? Object.assign({}, policy, { has_support_allowance: supportAllowanceApplicable })
+    : policy;
+  const calc = MPCalc.calculateCost({
+    currency, netBasicMonthlySalary: netSalary, position: effectivePolicy, grossIncentive,
+    positionTargetStartDate: startDate, statutoryParams: statutoryParamsForDateStr(startDate)
+  });
+  payload.cost_breakdown = calc;
+  payload.total_monthly_cost = calc.totalMonthlyCost;
+  payload.total_current_year_cost = calc.totalCurrentYearCost;
+  if(calc.onboardingOneTimeCost != null) payload.onboarding_one_time_cost = calc.onboardingOneTimeCost;
+
+  return { ok:true, payload };
+}
+// Runs every row from the parsed sheet through resolveUploadRow(),
+// inserting each one that resolves cleanly as a Draft (current_step -1,
+// status 'Draft') using the SAME requested_by/submitted_by/
+// approval_chain-building logic saveForm() uses for a normal manual
+// insert. Declared as a plain top-level function (reachable as
+// window.importRowsFromExcel) so it can also be exercised directly by
+// tests without needing a real .xlsx file round-trip.
+async function importRowsFromExcel(rawRows){
+  const dataRows = (rawRows||[]).filter(r=>!isExampleOrNoteRow(r));
+  const errors = [];
+  let successCount = 0;
+  for(let i=0;i<dataRows.length;i++){
+    const rowNum = i+1;
+    const resolved = resolveUploadRow(dataRows[i], rowNum);
+    if(!resolved.ok){ errors.push(resolved.error); continue; }
+    const payload = resolved.payload;
+    payload.created_by = currentUser.id;
+    payload.updated_by = currentUser.id;
+    payload.requested_by = currentUser.id;
+    payload.submitted_by = currentUser.id;
+    payload.position_status = 'Requested';
+    payload.approval_chain = MPCalc.buildApprovalChain(currentUser.role);
+    payload.current_step = -1;
+    payload.status = 'Draft';
+    payload.status_changed_at = new Date().toISOString();
+    const result = await sb.from('manpower_plan').insert(payload);
+    if(result.error){ errors.push('Row ' + rowNum + ': could not save — ' + result.error.message); continue; }
+    successCount++;
+  }
+  return { successCount, errorCount: errors.length, errors, totalRows: dataRows.length };
+}
+function showImportResultsPanel(result){
+  const panel = document.getElementById('importResultsPanel');
+  if(!result || !result.errorCount){ panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  panel.style.display = '';
+  panel.innerHTML =
+    '<div style="padding:14px 16px;">' +
+      '<div style="font-weight:700;margin-bottom:6px;color:var(--charcoal);">Upload from Excel — ' + result.successCount + ' created as Draft, ' + result.errorCount + ' failed</div>' +
+      '<ul style="margin:0;padding-left:18px;font-size:12.5px;color:var(--red);">' +
+        result.errors.map(e=>'<li>'+escapeHtml(e)+'</li>').join('') +
+      '</ul>' +
+      '<button class="btn btn-secondary btn-small" id="dismissImportResultsBtn" style="margin-top:10px;">Dismiss</button>' +
+    '</div>';
+  document.getElementById('dismissImportResultsBtn').addEventListener('click', ()=>{ panel.style.display = 'none'; });
+}
+// The template's own NOTE text is now the sheet's literal first row
+// (product owner change — see DOWNLOAD TEMPLATE above), with the real
+// column header as row 2. Rather than hard-coding "header is row 2" (and
+// breaking if someone deletes the note row before uploading, or leaves a
+// stray blank row above it), this finds the header row BY CONTENT: the
+// first row whose cells contain most of TEMPLATE_COLUMNS' exact names.
+// Falls back to treating row 1 as the header if nothing matches well
+// enough (keeps old-format template downloads/uploads working too).
+function looksLikeTemplateHeaderRow(arr){
+  const cells = (arr||[]).map(v=>String(v==null?'':v).trim());
+  const matches = TEMPLATE_COLUMNS.filter(col=>cells.includes(col)).length;
+  return matches >= Math.min(6, TEMPLATE_COLUMNS.length); // most columns present, not just one or two by coincidence
+}
+function rowObjectsFromAoa(aoa){
+  let headerIdx = (aoa||[]).findIndex(looksLikeTemplateHeaderRow);
+  if(headerIdx === -1) headerIdx = 0;
+  const header = (aoa[headerIdx]||[]).map(v=>String(v==null?'':v).trim());
+  return (aoa.slice(headerIdx+1)||[]).map(arr=>{
+    const obj = {};
+    header.forEach((h,i)=>{ if(h) obj[h] = (arr && arr[i] != null) ? arr[i] : ''; });
+    return obj;
+  });
+}
+async function handleExcelUpload(file){
+  let rawRows = [];
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheetName = wb.SheetNames && wb.SheetNames[0];
+    const sheet = sheetName ? wb.Sheets[sheetName] : null;
+    const aoa = sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) : [];
+    rawRows = rowObjectsFromAoa(aoa);
+  } catch(e){
+    showImportResultsPanel({ successCount:0, errorCount:1, errors:['Could not read that file: ' + e.message] });
+    return;
+  }
+  const result = await importRowsFromExcel(rawRows);
+  showImportResultsPanel(result);
+  if(result.successCount){
+    showToast('Created ' + result.successCount + ' position(s) as Draft from the uploaded file.');
+    await loadRows();
+  }
+}
+document.getElementById('uploadExcelBtn').addEventListener('click', ()=> document.getElementById('uploadExcelInput').click());
+document.getElementById('uploadExcelInput').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // reset so re-selecting the same file still fires 'change'
+  if(!file) return;
+  await handleExcelUpload(file);
 });
 
 /* ====================== TOAST ====================== */
@@ -1191,6 +3323,136 @@ function showToast(msg){
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=> t.classList.remove('show'), 2600);
 }
+
+/* ====================== FLOATING HORIZONTAL SCROLLBAR ("All system"
+ * item #1, round #23; fixed round #25; REBUILT round #26) ======================
+ * Round #26 bug report: "I have 2 horizontal scroll bars — the upward
+ * one [the table's own native scrollbar] works, the downward one
+ * [this floating bar] is not working independently — you should make
+ * moving the 1st move the other." In plain terms: the table's own
+ * native scrollbar scrolled fine, but this floating bar — previously
+ * just a plain overflow-x:auto div only 14px tall — could NOT be
+ * dragged on its own; it only ever passively followed the table's
+ * native scrollbar; dragging IT directly did nothing. A 14px native
+ * scrollbar thumb is small and its exact hit-area/behavior varies a lot
+ * across browsers and operating systems, and it evidently wasn't
+ * reliably grabbable for her at all.
+ *
+ * Rebuilt from scratch as a fully custom track + thumb widget (plain
+ * <div>s, driven entirely by our own pointer-event handlers) instead
+ * of relying on the browser's own tiny native scrollbar widget. This
+ * is now something we fully control end to end, so dragging it
+ * definitely scrolls the table — independently, in both directions —
+ * and it stays in sync no matter which of the two bars the person
+ * actually moves.
+ */
+(function setUpFloatingHScrollbar(){
+  const bar = document.createElement('div');
+  bar.id = 'floatingHScrollBar';
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:18px;background:#eceef1;border-top:1px solid #d7d8dc;box-shadow:0 -2px 6px rgba(0,0,0,0.06);z-index:150;display:none;cursor:pointer;touch-action:none;';
+  const thumb = document.createElement('div');
+  thumb.id = 'floatingHScrollBarThumb';
+  thumb.style.cssText = 'position:absolute;top:2px;bottom:2px;left:0;background:var(--gold);border-radius:6px;cursor:grab;min-width:30px;touch-action:none;';
+  bar.appendChild(thumb);
+  document.body.appendChild(bar);
+
+  let activeScroller = null;
+  let dragging = false;
+  let dragStartX = 0, dragStartScrollLeft = 0, dragThumbW = 0, dragTrackW = 0;
+
+  function findActiveScroller(){
+    // Whichever .table-scroll is currently visible (not inside a
+    // display:none view) AND actually overflows horizontally.
+    const scrollers = Array.from(document.querySelectorAll('.table-scroll'));
+    for(const el of scrollers){
+      if(el.offsetParent === null) continue; // hidden view
+      if(el.scrollWidth > el.clientWidth + 2) return el;
+    }
+    return null;
+  }
+
+  // Sizes and positions the thumb to reflect activeScroller's current
+  // scrollLeft and how much of its width is visible at once — this is
+  // the ONLY thing that moves the thumb when the table itself is
+  // scrolled some other way (trackpad, keyboard, its own native bar).
+  function positionThumb(){
+    if(!activeScroller) return;
+    const trackW = bar.clientWidth;
+    const visibleRatio = activeScroller.clientWidth / activeScroller.scrollWidth;
+    const thumbW = Math.max(30, trackW * visibleRatio);
+    const maxScroll = activeScroller.scrollWidth - activeScroller.clientWidth;
+    const scrollRatio = maxScroll > 0 ? activeScroller.scrollLeft / maxScroll : 0;
+    const thumbX = scrollRatio * (trackW - thumbW);
+    thumb.style.width = thumbW + 'px';
+    thumb.style.left = thumbX + 'px';
+  }
+
+  function refresh(){
+    const el = findActiveScroller();
+    if(!el){ activeScroller = null; bar.style.display = 'none'; return; }
+    activeScroller = el;
+    bar.style.display = '';
+    positionThumb();
+  }
+
+  // Dragging the thumb itself — the main, direct way this bar is meant
+  // to be used. Pointer Events (not plain mouse events) so this works
+  // the same with a mouse, a trackpad, or a touchscreen.
+  thumb.addEventListener('pointerdown', (e)=>{
+    if(!activeScroller) return;
+    dragging = true;
+    thumb.setPointerCapture(e.pointerId);
+    thumb.style.cursor = 'grabbing';
+    dragStartX = e.clientX;
+    dragStartScrollLeft = activeScroller.scrollLeft;
+    dragTrackW = bar.clientWidth;
+    dragThumbW = thumb.offsetWidth;
+    e.preventDefault();
+  });
+  thumb.addEventListener('pointermove', (e)=>{
+    if(!dragging || !activeScroller) return;
+    const deltaX = e.clientX - dragStartX;
+    const maxScroll = activeScroller.scrollWidth - activeScroller.clientWidth;
+    const maxThumbTravel = dragTrackW - dragThumbW;
+    const scrollDelta = maxThumbTravel > 0 ? (deltaX / maxThumbTravel) * maxScroll : 0;
+    activeScroller.scrollLeft = Math.max(0, Math.min(maxScroll, dragStartScrollLeft + scrollDelta));
+  });
+  function endDrag(e){
+    if(!dragging) return;
+    dragging = false;
+    thumb.style.cursor = 'grab';
+    try{ thumb.releasePointerCapture(e.pointerId); }catch(_e){}
+  }
+  thumb.addEventListener('pointerup', endDrag);
+  thumb.addEventListener('pointercancel', endDrag);
+
+  // Clicking the track itself (not the thumb) jumps straight to that
+  // position — standard scrollbar-track behavior.
+  bar.addEventListener('pointerdown', (e)=>{
+    if(e.target === thumb || !activeScroller) return;
+    const trackW = bar.clientWidth;
+    const thumbW = thumb.offsetWidth;
+    const maxScroll = activeScroller.scrollWidth - activeScroller.clientWidth;
+    const clickRatio = Math.max(0, Math.min(1, (e.clientX - thumbW/2) / (trackW - thumbW)));
+    activeScroller.scrollLeft = clickRatio * maxScroll;
+  });
+
+  // Keep the thumb in sync if the person scrolls the table itself
+  // (trackpad, keyboard, or its own native scrollbar) instead of
+  // dragging this floating thumb — this is the "1st bar moves the
+  // 2nd" direction, which already worked; the fix above is what makes
+  // the reverse direction (dragging this bar) actually work too.
+  document.addEventListener('scroll', (e)=>{
+    if(e.target === activeScroller && !dragging) positionThumb();
+  }, true);
+  window.addEventListener('resize', refresh);
+  window.addEventListener('scroll', refresh, true);
+  // Table contents re-render often (filters, actions, loadRows) without
+  // a single call site to hook into — a light poll catches width/view
+  // changes cheaply enough for a table this size.
+  setInterval(refresh, 700);
+  refresh();
+})();
 
 init();
 </script>

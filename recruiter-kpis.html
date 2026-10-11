@@ -319,6 +319,12 @@ async function loadCurrentUserAndApp(){
     return;
   }
   currentUser = profile;
+  // Round #39 — BU Head (and Top Management) shouldn't see Recruitment
+  // Insights at all, including by typing the page address directly.
+  if(['bu_head','top_management'].includes(currentUser.role)){
+    window.location.replace('index.html');
+    return;
+  }
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('whoName').textContent = currentUser.full_name;
